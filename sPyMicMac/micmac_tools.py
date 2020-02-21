@@ -1,7 +1,6 @@
 """
 sPyMicMac.micmac_tools is a collection of tools for interfacing with MicMac
 """
-from __future__ import print_function, division
 import os
 import numpy as np
 import gdal

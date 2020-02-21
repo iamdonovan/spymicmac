@@ -1,7 +1,6 @@
 """
 sPyMicMac is a collection of tools for working with KH-9 Hexagon imagery.
 """
-from __future__ import print_function, division
 import os
 from glob import glob
 import cv2
