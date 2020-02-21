@@ -12,5 +12,6 @@ setup(name='sPyMicMac',
                         'shapely', 'opencv-python', 'pandas', 'geopandas',
                         'scikit-image', 'gdal', 'h5py', 'pyproj', 'llc', 'numba', 'descartes',
                         'sphinx-argparse'],
-      scripts=['bin/combine_auto_measures.py', 'bin/get_autogcp_locations.sh'],
+      scripts=['bin/combine_auto_measures.py', 'bin/get_autogcp_locations.sh', 'bin/find_reseau_shifts.py',
+               'bin/join_balance_images.py', 'bin/join_hexagon_halves.py', 'bin/remove_crosses.py'],
       zip_safe=False)
