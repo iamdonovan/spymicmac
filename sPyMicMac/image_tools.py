@@ -1,5 +1,5 @@
 """
-sPyMicMac is a collection of tools for working with KH-9 Hexagon imagery.
+sPyMicMac.image_tools is a collection of tools for working with KH-9 Hexagon imagery.
 """
 import os
 from glob import glob
@@ -159,8 +159,8 @@ def get_footprint_mask(shpfile, geoimg, filelist, fprint_out=False):
         return maskout
 
 
-def get_initial_transformation(img1, img2, landmask=None, footmask=None, imlist=None):
-    im2_lowres = reshape_geoimg(img2, 800, 800)
+def get_initial_transformation(img1, img2, pRes=800, landmask=None, footmask=None, imlist=None):
+    im2_lowres = reshape_geoimg(img2, pRes, pRes)
 
     im2_eq = match_hist(im2_lowres.img, np.array(img1))
     im1_mask = 255 * np.ones(img1.shape, dtype=np.uint8)
