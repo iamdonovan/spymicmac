@@ -299,8 +299,11 @@ def main():
     best = best[inliers_fin]
 
     gcp_list = []
-    for i, row in best.iterrows():
-        gcp_list.append(gdal.GCP(row.geometry.x, row.geometry.y, row.elevation, row.match_j, row.match_i))
+    outname = os.path.splitext(os.path.basename(args.slave))[0]
+    with open('{}_gcps.txt'.format(outname), 'w') as f:
+        for i, row in best.iterrows():
+            gcp_list.append(gdal.GCP(row.geometry.x, row.geometry.y, row.elevation, row.match_j, row.match_i))
+            print(row.geometry.x, row.geometry.y, row.elevation, row.match_j, row.match_i, file=f)
 
     shutil.copy(args.slave, 'tmp.tif')
     in_ds = gdal.Open('tmp.tif', gdal.GA_Update)
