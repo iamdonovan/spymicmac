@@ -18,24 +18,41 @@ from pybob.GeoImg import GeoImg
 import sPyMicMac.image_tools as imtools
 
 
-def splitter(img, nblocks):
-    split1 = np.array_split(img, nblocks[0], axis=0)
-    split2 = [np.array_split(im, nblocks[1], axis=1) for im in split1]
-    olist = [np.copy(a) for a in list(chain.from_iterable(split2))]
-    return olist
+def sliding_window_filter(img_shape, pts_df, winsize, stepsize=None, mindist=2000):
+    if stepsize is None:
+        stepsize = winsize / 2
 
+    out_inds = []
+    out_pts = []
 
-def get_subimg_offsets(split, shape):
-    ims_x = np.array([s.shape[1] for s in split])
-    ims_y = np.array([s.shape[0] for s in split])
+    for x_ind in np.arange(stepsize, img_shape[1], winsize):
+        for y_ind in np.arange(stepsize, img_shape[0], winsize):
+            min_x = x_ind - winsize / 2
+            max_x = x_ind + winsize / 2
+            min_y = y_ind - winsize / 2
+            max_y = y_ind + winsize / 2
+            samp_ = pts_df.loc[np.logical_and.reduce([pts_df.match_j > min_x,
+                                                      pts_df.match_j < max_x,
+                                                      pts_df.match_i > min_y,
+                                                      pts_df.match_i < max_y])].copy()
+            if samp_.shape[0] == 0:
+                continue
+            samp_.sort_values('z_corr', ascending=True, inplace=True)
+            if len(out_inds) == 0:
+                best_ind = samp_.index[0]
+                best_pt = Point(samp_.loc[best_ind, ['match_j', 'match_i']].values)
 
-    rel_x = np.cumsum(ims_x.reshape(shape), axis=1)
-    rel_y = np.cumsum(ims_y.reshape(shape), axis=0)
+                out_inds.append(best_ind)
+                out_pts.append(best_pt)
+            else:
+                for ind, row in samp_.iterrows():
+                    this_pt = Point(row[['match_j', 'match_i']].values)
+                    this_min_dist = np.array([this_pt.distance(pt) for pt in out_pts]).min()
+                    if this_min_dist > mindist:
+                        out_inds.append(ind)
+                        out_pts.append(this_pt)
 
-    rel_x = np.concatenate((np.zeros((shape[0], 1)), rel_x[:, :-1]), axis=1)
-    rel_y = np.concatenate((np.zeros((1, shape[1])), rel_y[:-1, :]), axis=0)
-
-    return rel_x.astype(int), rel_y.astype(int)
+    return np.array(out_inds)
 
 
 def get_dense_keypoints(img, mask, npix=200, return_des=False):
@@ -47,10 +64,10 @@ def get_dense_keypoints(img, mask, npix=200, return_des=False):
     x_tiles = np.floor(img.shape[1] / npix).astype(int)
     y_tiles = np.floor(img.shape[0] / npix).astype(int)
 
-    split_img = splitter(img, (y_tiles, x_tiles))
-    split_msk = splitter(mask, (y_tiles, x_tiles))
+    split_img = imtools.splitter(img, (y_tiles, x_tiles))
+    split_msk = imtools.splitter(mask, (y_tiles, x_tiles))
 
-    rel_x, rel_y = get_subimg_offsets(split_img, (y_tiles, x_tiles))
+    rel_x, rel_y = imtools.get_subimg_offsets(split_img, (y_tiles, x_tiles))
 
     for i, img_ in enumerate(split_img):
         iy, ix = np.unravel_index(i, (y_tiles, x_tiles))
@@ -73,9 +90,11 @@ def get_dense_keypoints(img, mask, npix=200, return_des=False):
         return keypts
 
 
-def get_initial_transformation(mst, slv, landmask=None):
-    mst_lowres = mst.resample(400, method=gdal.GRA_NearestNeighbour)
+def get_rough_geotransformation(mst, slv, landmask=None):
+    # mst_lowres = mst.resample(400, method=gdal.GRA_NearestNeighbour)
     slv_lowres = slv.resample(400, method=gdal.GRA_NearestNeighbour)
+
+    mst_lowres = mst.reproject(slv_lowres)
 
     slv_lowres_hp = imtools.highpass_filter(slv_lowres.img)
     mst_lowres_hp = imtools.highpass_filter(mst_lowres.img)
@@ -151,7 +170,7 @@ def get_initial_transformation(mst, slv, landmask=None):
     src_scale = (mst_lowres.dx / mst.dx)
 
     Minit, inliers = ransac((dst_scale * dst_pts, src_scale * src_pts), EuclideanTransform, min_samples=5,
-                            residual_threshold=3, max_trials=1000)
+                            residual_threshold=5, max_trials=1000)
     print('{} points used to find initial transformation'.format(np.count_nonzero(inliers)))
 
     return Minit
@@ -207,7 +226,9 @@ def main():
     mst_fullres = GeoImg(args.master)
     slv_fullres = GeoImg(args.slave)
 
-    Minit = get_initial_transformation(mst_fullres, slv_fullres, landmask=args.landmask)
+    Minit = get_rough_geotransformation(mst_fullres, slv_fullres, landmask=args.landmask)
+
+    mst_fullres = mst_fullres.reproject(slv_fullres)
 
     rough_tfm = warp(mst_fullres.img, Minit, output_shape=slv_fullres.img.shape, preserve_range=True)
     rough_tfm[np.isnan(rough_tfm)] = 0
@@ -237,7 +258,7 @@ def main():
 
         try:
             testchip, _, _ = imtools.make_template(rough_tfm, (pt[1], pt[0]), 40)
-            dst_chip, _, _ = imtools.make_template(slv_fullres.img, (pt[1], pt[0]), 80)
+            dst_chip, _, _ = imtools.make_template(slv_fullres.img, (pt[1], pt[0]), 100)
             dst_chip[np.isnan(dst_chip)] = 0
 
             test = np.ma.masked_values(imtools.highpass_filter(testchip), 0)
@@ -255,7 +276,7 @@ def main():
             z_corr = max(this_z_corrs)
 
             # if the correlation peak is very high, or very unique, add it as a match
-            out_i, out_j = this_i - 80 + pt[1], this_j - 80 + pt[0]
+            out_i, out_j = this_i - 100 + pt[1], this_j - 100 + pt[0]
             z_corrs.append(z_corr)
             peak_corrs.append(peak_corr)
             match_pts.append([out_j, out_i])
@@ -292,11 +313,15 @@ def main():
         for i, row in gcps.to_crs(crs=dem.proj4).iterrows():
             gcps.loc[i, 'elevation'] = dem.raster_points([(row.geometry.x, row.geometry.y)], nsize=9, mode='cubic')
 
-    best = gcps[np.logical_and(gcps.pk_corr > 0.2, gcps.z_corr > 8)]
+    best = gcps[gcps.z_corr > gcps.z_corr.quantile(0.5)]
 
     Mfin, inliers_fin = ransac((best[['match_j', 'match_i']].values, best[['src_j', 'src_i']].values), AffineTransform,
-                               min_samples=10, residual_threshold=1, max_trials=1000)
+                               min_samples=10, residual_threshold=10, max_trials=1000)
     best = best[inliers_fin]
+
+    out_inds = sliding_window_filter([slv_fullres.img.shape[1], slv_fullres.img.shape[0]], best, 200, mindist=100)
+
+    best = best.loc[out_inds]
 
     gcp_list = []
     outname = os.path.splitext(os.path.basename(args.slave))[0]
@@ -305,20 +330,34 @@ def main():
             gcp_list.append(gdal.GCP(row.geometry.x, row.geometry.y, row.elevation, row.match_j, row.match_i))
             print(row.geometry.x, row.geometry.y, row.elevation, row.match_j, row.match_i, file=f)
 
-    shutil.copy(args.slave, 'tmp.tif')
+    # shutil.copy(args.slave, 'tmp.tif')
+    slv_fullres.write('tmp.tif')
     in_ds = gdal.Open('tmp.tif', gdal.GA_Update)
+
+    # unset the geotransform based on
+    # For now only the GTiff drivers understands full-zero as a hint
+    # to unset the geotransform
+    if in_ds.GetDriver().ShortName == 'GTiff':
+        in_ds.SetGeoTransform([0, 0, 0, 0, 0, 0])
+    else:
+        in_ds.SetGeoTransform([0, 1, 0, 0, 0, 1])
+
     gcp_wkt = mst_fullres.proj_wkt
     in_ds.SetGCPs(gcp_list, gcp_wkt)
+
+    # del in_ds  # close the dataset, write to disk
+    # in_ds = gdal.Open('tmp.tif')
 
     print('warping image to new geometry')
     mkdir_p('warped')
     gdal.Warp(os.path.join('warped', os.path.basename(args.slave)),
-              in_ds,
+              in_ds, dstSRS=gcp_wkt,
               xRes=slv_fullres.dx,
               yRes=slv_fullres.dy,
               resampleAlg=gdal.GRA_Bilinear)
 
     print('cleaning up.')
+
     os.remove('tmp.tif')
 
 
