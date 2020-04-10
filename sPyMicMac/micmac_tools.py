@@ -7,6 +7,8 @@ import gdal
 import pandas as pd
 import lxml.etree as etree
 import lxml.builder as builder
+import difflib
+import xml.etree.ElementTree as ET
 
 
 ######################################################################################################################
@@ -102,3 +104,62 @@ def generate_measures_files(joined=False):
             print('GCP_{}_{}'.format(row, col), file=f)
 
 
+def get_match_pattern(imlist):
+    matches = []
+    for i, this_im in enumerate(imlist[:-1]):
+        for im in imlist[i + 1:]:
+            matches.extend(list(difflib.SequenceMatcher(None, this_im, im).get_matching_blocks()))
+
+    good_matches = set([m for m in matches if m.size > 0 and m.a == m.b])
+    start_inds = set([m.a for m in good_matches])
+    ind_lengths = [(ind, min([m.size for m in good_matches if m.a == ind])) for ind in start_inds]
+    ind_lengths.sort()
+
+    first, last = ind_lengths[0][1], ind_lengths[1][0]
+    return imlist[0][:first] + '(' + '|'.join([im[first:last] for im in imlist]) + ')' + imlist[0][last:]
+
+
+def write_auto_mesures(gcp_df, subscript, out_dir):
+    with open(os.path.join(out_dir, 'AutoMeasures{}.txt'.format(subscript)), 'w') as f:
+        for i, row in gcp_df.iterrows():
+            print('{} {} {}'.format(row.rel_x, row.rel_y, row.el_rel), file=f)
+
+
+def write_auto_gcps(gcp_df, subscript, out_dir, utm_zone):
+    with open(os.path.join(out_dir, 'AutoGCPs{}.txt'.format(subscript)), 'w') as f:
+        # print('#F= N X Y Z Ix Iy Iz', file=f)
+        print('#F= N X Y Z', file=f)
+        print('#Here the coordinates are in UTM {} X=Easting Y=Northing Z=Altitude'.format(utm_zone), file=f)
+        for i, row in gcp_df.iterrows():
+            # print('{} {} {} {} {} {} {}'.format(row.id, row.geometry.x, row.geometry.y, row.elevation,
+            #                                        5/row.z_corr, 5/row.z_corr, 1), file=f)
+            print('{} {} {} {}'.format(row.id, row.geometry.x, row.geometry.y, row.elevation), file=f)
+
+
+def get_bascule_residuals(fn_basc, gcp_df):
+    root = ET.parse(fn_basc).getroot()
+    gcp_res = root.findall('Residus')
+    gcp_names = np.array([res.find('Name').text for res in gcp_res])
+    # residuals = np.array([float(res.find('Dist').text) for res in gcp_res])
+    x_res = np.array([float(res.find('Offset').text.split()[0]) for res in gcp_res])
+    y_res = np.array([float(res.find('Offset').text.split()[1]) for res in gcp_res])
+    for data_ in zip(gcp_names, x_res):
+        gcp_df.loc[gcp_df.id == data_[0], 'xres'] = data_[1]
+
+    for data_ in zip(gcp_names, y_res):
+        gcp_df.loc[gcp_df.id == data_[0], 'yres'] = data_[1]
+
+    gcp_df['residual'] = np.sqrt(gcp_df['xres'].values**2 + gcp_df['yres'].values**2)
+
+    return gcp_df
+
+
+def get_campari_residuals(fn_resids, gcp_df):
+    camp_root = ET.parse(fn_resids).getroot()
+    camp_gcp_names = [a.find('Name').text for a in camp_root.findall('Iters')[-1].findall('OneAppui')]
+    err_max = [float(a.find('EcartImMax').text) for a in camp_root.findall('Iters')[-1].findall('OneAppui')]
+
+    for data_ in zip(camp_gcp_names, err_max):
+        gcp_df.loc[gcp_df.id == data_[0], 'camp_res'] = data_[1]
+
+    return gcp_df

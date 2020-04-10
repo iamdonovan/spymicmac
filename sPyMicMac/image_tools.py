@@ -4,6 +4,8 @@ sPyMicMac.image_tools is a collection of tools for working with KH-9 Hexagon ima
 import os
 from glob import glob
 import cv2
+from itertools import chain
+import gdal
 from skimage.morphology import disk
 from skimage.filters import rank
 from skimage import exposure
@@ -129,9 +131,65 @@ def highpass_filter(img):
     return tmphi
 
 
+def splitter(img, nblocks, overlap=0):
+    split1 = np.array_split(img, nblocks[0], axis=0)
+    split2 = [np.array_split(im, nblocks[1], axis=1) for im in split1]
+    olist = [np.copy(a) for a in list(chain.from_iterable(split2))]
+    return olist
+
+
+def get_subimg_offsets(split, shape):
+    ims_x = np.array([s.shape[1] for s in split])
+    ims_y = np.array([s.shape[0] for s in split])
+
+    rel_x = np.cumsum(ims_x.reshape(shape), axis=1)
+    rel_y = np.cumsum(ims_y.reshape(shape), axis=0)
+
+    rel_x = np.concatenate((np.zeros((shape[0], 1)), rel_x[:, :-1]), axis=1)
+    rel_y = np.concatenate((np.zeros((1, shape[1])), rel_y[:-1, :]), axis=0)
+
+    return rel_x.astype(int), rel_y.astype(int)
+
+
 ######################################################################################################################
 # GCP matching tools
 ######################################################################################################################
+def get_dense_keypoints(img, mask, npix=200, return_des=False):
+    orb = cv2.ORB_create()
+    keypts = []
+    if return_des:
+        descriptors = []
+
+    x_tiles = np.floor(img.shape[1] / npix).astype(int)
+    y_tiles = np.floor(img.shape[0] / npix).astype(int)
+
+    split_img = splitter(img, (y_tiles, x_tiles))
+    split_msk = splitter(mask, (y_tiles, x_tiles))
+
+    rel_x, rel_y = get_subimg_offsets(split_img, (y_tiles, x_tiles))
+
+    for i, img_ in enumerate(split_img):
+        iy, ix = np.unravel_index(i, (y_tiles, x_tiles))
+
+        ox = rel_x[iy, ix]
+        oy = rel_y[iy, ix]
+
+        kp, des = orb.detectAndCompute(img_, mask=split_msk[i])
+        if return_des:
+            if des is not None:
+                for ds in des:
+                    descriptors.append(ds)
+
+        for p in kp:
+            p.pt = p.pt[0] + ox, p.pt[1] + oy
+            keypts.append(p)
+
+    if return_des:
+        return keypts, descriptors
+    else:
+        return keypts
+
+
 def get_footprint_mask(shpfile, geoimg, filelist, fprint_out=False):
     imlist = [im.split('OIS-Reech_')[-1].split('.tif')[0] for im in filelist]
     footprints_shp = gpd.read_file(shpfile)
@@ -157,6 +215,33 @@ def get_footprint_mask(shpfile, geoimg, filelist, fprint_out=False):
         return maskout, fprint
     else:
         return maskout
+
+
+def get_rough_geotransform(img1, img2, pRes=800, landmask=None):
+    img2_lowres = img2.resample(pRes, method=gdal.GRA_NearestNeighbour)
+
+    img2_eq = (255 * exposure.equalize_adapthist(img2_lowres.img.astype(np.uint16), clip_limit=0.03)).astype(np.uint8)
+    img1_mask = 255 * np.ones(img1.shape, dtype=np.uint8)
+    img1_mask[img1 == 0] = 0
+
+    img2_mask = 255 * np.ones(img2_eq.shape, dtype=np.uint8)
+    img2_mask[np.isnan(img2_lowres.img)] = 0
+
+    if landmask is not None:
+        lm = create_mask_from_shapefile(img2_lowres, landmask)
+        img2_mask[~lm] = 0
+
+    kp, des, matches = get_matches(img1, img2_eq, mask1=img1_mask, mask2=img2_mask)
+    src_pts = np.array([kp[0][m.queryIdx].pt for m in matches])
+    dst_pts = np.array([kp[1][m.trainIdx].pt for m in matches])
+
+    Minit, inliers = ransac((dst_pts, src_pts), EuclideanTransform,
+                            min_samples=5, residual_threshold=2, max_trials=1000)
+    print('{} matches used for initial transformation'.format(np.count_nonzero(inliers)))
+
+    img1_tfm = warp(img1, Minit, output_shape=img2_eq.shape, preserve_range=True)
+
+    return img1_tfm, Minit, (dst_pts, src_pts, inliers)
 
 
 def get_initial_transformation(img1, img2, pRes=800, landmask=None, footmask=None, imlist=None):

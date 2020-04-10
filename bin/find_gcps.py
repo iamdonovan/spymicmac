@@ -32,38 +32,6 @@ import sPyMicMac.micmac_tools as mmt
 from pymmaster.mmaster_tools import orient_footprint
 
 
-def get_match_pattern(imlist):
-    matches = []
-    for i, this_im in enumerate(imlist[:-1]):
-        for im in imlist[i + 1:]:
-            matches.extend(list(difflib.SequenceMatcher(None, this_im, im).get_matching_blocks()))
-
-    good_matches = set([m for m in matches if m.size > 0 and m.a == m.b])
-    start_inds = set([m.a for m in good_matches])
-    ind_lengths = [(ind, min([m.size for m in good_matches if m.a == ind])) for ind in start_inds]
-    ind_lengths.sort()
-
-    first, last = ind_lengths[0][1], ind_lengths[1][0]
-    return imlist[0][:first] + '(' + '|'.join([im[first:last] for im in imlist]) + ')' + imlist[0][last:]
-
-
-def write_auto_mesures(gcp_df, subscript, out_dir):
-    with open(os.path.join(out_dir, 'AutoMeasures{}.txt'.format(subscript)), 'w') as f:
-        for i, row in gcp_df.iterrows():
-            print('{} {} {}'.format(row.rel_x, row.rel_y, row.el_rel), file=f)
-
-
-def write_auto_gcps(gcp_df, subscript, out_dir, utm_zone):
-    with open(os.path.join(out_dir, 'AutoGCPs{}.txt'.format(subscript)), 'w') as f:
-        # print('#F= N X Y Z Ix Iy Iz', file=f)
-        print('#F= N X Y Z', file=f)
-        print('#Here the coordinates are in UTM {} X=Easting Y=Northing Z=Altitude'.format(utm_zone), file=f)
-        for i, row in gcp_df.iterrows():
-            # print('{} {} {} {} {} {} {}'.format(row.id, row.geometry.x, row.geometry.y, row.elevation,
-            #                                        5/row.z_corr, 5/row.z_corr, 1), file=f)
-            print('{} {} {} {}'.format(row.id, row.geometry.x, row.geometry.y, row.elevation), file=f)
-
-
 def get_matches_mask(matches):
     matchesMask = [[0,0] for ii in range(len(matches))]
     for i, p in enumerate(matches):
@@ -74,55 +42,6 @@ def get_matches_mask(matches):
         except:
             continue
     return matchesMask
-
-
-def splitter(img, nblocks, overlap=0):
-    split1 = np.array_split(img, nblocks[0], axis=0)
-    split2 = [np.array_split(im, nblocks[1], axis=1) for im in split1]
-    olist = [np.copy(a) for a in list(chain.from_iterable(split2))]
-    return olist
-
-
-def get_subimg_offsets(split, shape):
-    ims_x = np.array([s.shape[1] for s in split])
-    ims_y = np.array([s.shape[0] for s in split])
-
-    rel_x = np.cumsum(ims_x.reshape(shape), axis=1)
-    rel_y = np.cumsum(ims_y.reshape(shape), axis=0)
-
-    rel_x = np.concatenate((np.zeros((shape[0], 1)), rel_x[:, :-1]), axis=1)
-    rel_y = np.concatenate((np.zeros((1, shape[1])), rel_y[:-1, :]), axis=0)
-
-    return rel_x.astype(int), rel_y.astype(int)
-
-
-def get_bascule_residuals(fn_basc, gcp_df):
-    root = ET.parse(fn_basc).getroot()
-    gcp_res = root.findall('Residus')
-    gcp_names = np.array([res.find('Name').text for res in gcp_res])
-    # residuals = np.array([float(res.find('Dist').text) for res in gcp_res])
-    x_res = np.array([float(res.find('Offset').text.split()[0]) for res in gcp_res])
-    y_res = np.array([float(res.find('Offset').text.split()[1]) for res in gcp_res])
-    for data_ in zip(gcp_names, x_res):
-        gcp_df.loc[gcp_df.id == data_[0], 'xres'] = data_[1]
-
-    for data_ in zip(gcp_names, y_res):
-        gcp_df.loc[gcp_df.id == data_[0], 'yres'] = data_[1]
-
-    gcp_df['residual'] = np.sqrt(gcp_df['xres'].values**2 + gcp_df['yres'].values**2)
-
-    return gcp_df
-
-
-def get_campari_residuals(fn_resids, gcp_df):
-    camp_root = ET.parse(fn_resids).getroot()
-    camp_gcp_names = [a.find('Name').text for a in camp_root.findall('Iters')[-1].findall('OneAppui')]
-    err_max = [float(a.find('EcartImMax').text) for a in camp_root.findall('Iters')[-1].findall('OneAppui')]
-
-    for data_ in zip(camp_gcp_names, err_max):
-        gcp_df.loc[gcp_df.id == data_[0], 'camp_res'] = data_[1]
-
-    return gcp_df
 
 
 def check_mask(pts, M, mask):
