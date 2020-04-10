@@ -14,5 +14,5 @@ setup(name='sPyMicMac',
                         'sphinx-argparse', 'earthengine-api', 'pyasn1'],
       scripts=['bin/combine_auto_measures.py', 'bin/get_autogcp_locations.sh', 'bin/find_reseau_shifts.py',
                'bin/join_balance_images.py', 'bin/join_hexagon_halves.py', 'bin/remove_crosses.py',
-	       'bin/register_landsat.py'],
+	       'bin/register_landsat.py', 'bin/register_ortho.py'],
       zip_safe=False)
