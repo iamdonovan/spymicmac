@@ -427,7 +427,7 @@ subprocess.Popen(['mm3d', 'Campari', mmtools.get_match_pattern(imlist),
                   'SH=Homol', 'AllFree=1']).wait()
 
 gcps = mmtools.get_bascule_residuals(os.path.join('Ori-TerrainRelAuto{}'.format(subscript), 'Result-GCP-Bascule.xml'), gcps)
-gcps = mmtools.get_campari_residuals('Ori-TerrainFinal_block0/Residus.xml', gcps)
+gcps = mmtools.get_campari_residuals('Ori-TerrainFinal{}/Residus.xml'.format(subscript), gcps)
 gcp_names = gcps.id
 
 out = np.abs(gcps.camp_res) > 5 * nmad(gcps.camp_res)
