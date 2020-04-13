@@ -16,7 +16,7 @@ from scipy import ndimage
 import numpy as np
 from shapely.ops import cascaded_union
 import geopandas as gpd
-import pyvips
+# import pyvips
 from llc import jit_filter_function
 from pybob.image_tools import match_hist, reshape_geoimg, create_mask_from_shapefile
 
