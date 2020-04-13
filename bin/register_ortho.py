@@ -13,6 +13,7 @@ import geopandas as gpd
 from PIL import Image
 import lxml.etree as etree
 import lxml.builder as builder
+import xml.etree.ElementTree as ET
 from glob import glob
 from shapely.geometry.point import Point
 from skimage.io import imread
@@ -21,6 +22,7 @@ from skimage.feature import peak_local_max
 from skimage.measure import ransac
 from skimage.transform import EuclideanTransform, AffineTransform, warp
 from pybob.bob_tools import mkdir_p
+from pybob.ddem_tools import nmad
 from pybob.image_tools import create_mask_from_shapefile
 from pybob.GeoImg import GeoImg
 import sPyMicMac.image_tools as imtools
@@ -31,8 +33,8 @@ def sliding_window_filter(img_shape, pts_df, winsize, stepsize=None, mindist=200
     if stepsize is None:
         stepsize = winsize / 2
 
-    out_inds = []
-    out_pts = []
+    _out_inds = []
+    _out_pts = []
 
     for x_ind in np.arange(stepsize, img_shape[1], winsize):
         for y_ind in np.arange(stepsize, img_shape[0], winsize):
@@ -40,28 +42,31 @@ def sliding_window_filter(img_shape, pts_df, winsize, stepsize=None, mindist=200
             max_x = x_ind + winsize / 2
             min_y = y_ind - winsize / 2
             max_y = y_ind + winsize / 2
-            samp_ = pts_df.loc[np.logical_and.reduce([pts_df.i > min_x,
-                                                      pts_df.i < max_x,
-                                                      pts_df.j > min_y,
-                                                      pts_df.j < max_y])].copy()
+            samp_ = pts_df.loc[np.logical_and.reduce([pts_df.orig_i > min_x,
+                                                      pts_df.orig_i < max_x,
+                                                      pts_df.orig_j > min_y,
+                                                      pts_df.orig_j < max_y])].copy()
             if samp_.shape[0] == 0:
                 continue
+            # only take the above-average z_corr values
+            samp_ = samp_[samp_.z_corr >= samp_.z_corr.quantile(0.5)]
+            # make sure we get the best residual
             samp_.sort_values('residual', ascending=True, inplace=True)
-            if len(out_inds) == 0:
+            if len(_out_inds) == 0:
                 best_ind = samp_.index[0]
-                best_pt = Point(samp_.loc[best_ind, ['j', 'i']].values)
+                best_pt = Point(samp_.loc[best_ind, ['orig_j', 'orig_i']].values)
 
-                out_inds.append(best_ind)
-                out_pts.append(best_pt)
+                _out_inds.append(best_ind)
+                _out_pts.append(best_pt)
             else:
-                for ind, row in samp_.iterrows():
-                    this_pt = Point(row[['j', 'i']].values)
-                    this_min_dist = np.array([this_pt.distance(pt) for pt in out_pts]).min()
+                for _ind, _row in samp_.iterrows():
+                    this_pt = Point(_row[['orig_j', 'orig_i']].values)
+                    this_min_dist = np.array([this_pt.distance(pt) for pt in _out_pts]).min()
                     if this_min_dist > mindist:
-                        out_inds.append(ind)
-                        out_pts.append(this_pt)
+                        _out_inds.append(_ind)
+                        _out_pts.append(this_pt)
 
-    return np.array(out_inds)
+    return np.array(_out_inds)
 
 
 def _argparser():
@@ -91,6 +96,8 @@ def _argparser():
                          help='half-size of reference search window [50 pixels]')
     _parser.add_argument('-tsize', action='store', type=int, default=600,
                          help='half-size of search window [600 pixels]')
+    _parser.add_argument('-ori', action='store', type=str, default='Relative',
+                         help='name of orientation directory (after Ori-) [Relative]')
     return _parser
 
 
@@ -228,7 +235,7 @@ _src = np.dot(Minit_full.params, np.hstack([search_pts,
                                             np.ones(search_pts[:, 0].shape).reshape(-1, 1)]).T).T[:, :2]
 _dst = np.array(match_pts)
 
-xy = np.array([mst.ij2xy((pt[1], pt[0])) for pt in _src]).reshape(-1, 2)
+xy = np.array([mst.ij2xy((pt[1], pt[0])) for pt in _dst]).reshape(-1, 2)
 
 fn_tfw = args.ortho.replace('.tif', '.tfw')
 with open(fn_tfw, 'r') as f:
@@ -257,7 +264,9 @@ gcps.dropna(inplace=True)
 # residual_threshold is 10 pixels to allow for some local distortions, but get rid of the big blunders
 Mfin, inliers_fin = ransac((gcps[['match_j', 'match_i']].values, gcps[['search_j', 'search_i']].values),
                            AffineTransform,
-                           min_samples=10, residual_threshold=10, max_trials=1000)
+                           min_samples=10, residual_threshold=20, max_trials=1000)
+gcps_orig = gcps.copy()
+
 gcps = gcps[inliers_fin]
 
 print('loading dems')
@@ -291,7 +300,7 @@ print('writing AutoMeasures.txt')
 mmtools.write_auto_mesures(gcps, subscript, out_dir)
 
 print('running get_autogcp_locations.sh to get rough image locations for each point')
-subprocess.Popen(['get_autogcp_locations.sh', 'Ori-Relative',
+subprocess.Popen(['get_autogcp_locations.sh', 'Ori-{}'.format(args.ori),
                   os.path.join(out_dir, 'AutoMeasures{}.txt'.format(subscript))] + imlist).wait()
 
 print('searching for points in non-orthorectified images')
@@ -346,100 +355,133 @@ tree.write(os.path.join(out_dir, 'AutoMeasures{}-S2D.xml'.format(subscript)),
 
 print('running mm3d GCPBascule to estimate terrain errors')
 subprocess.Popen(
-    ['mm3d', 'GCPBascule', mmtools.get_match_pattern(imlist), 'Relative', 'TerrainRelAuto{}'.format(subscript),
+    ['mm3d', 'GCPBascule', mmtools.get_match_pattern(imlist), args.ori, 'TerrainRelAuto{}'.format(subscript),
      os.path.join(out_dir, 'AutoGCPs{}.xml'.format(subscript)),
      os.path.join(out_dir, 'AutoMeasures{}-S2D.xml'.format(subscript))]).wait()
 
 gcps = mmtools.get_bascule_residuals(os.path.join('Ori-TerrainRelAuto{}'.format(subscript), 'Result-GCP-Bascule.xml'),
                                      gcps)
 
-# inds = gcps.residual < 5 * nmad(gcps.residual)
-# gcps = gcps.loc[inds]
+inds = gcps.residual < 5 * nmad(gcps.residual)
+gcps = gcps.loc[inds]
 
-# gcps.to_file(os.path.join(out_dir, 'AutoGCPs{}.shp'.format(subscript)))
-# write_auto_gcps(gcps, subscript, out_dir, utm_str)
-# subprocess.Popen(['mm3d', 'GCPConvert', 'AppInFile',
-#                   os.path.join(out_dir, 'AutoGCPs{}.txt'.format(subscript))]).wait()
-#
-# auto_root = ET.parse(os.path.join(out_dir, 'AutoMeasures{}-S2D.xml'.format(subscript))).getroot()
-# for im in auto_root.findall('MesureAppuiFlottant1Im'):
-#     for pt in im.findall('OneMesureAF1I'):
-#         if pt.find('NamePt').text not in gcps.id.values:
-#             im.remove(pt)
-# # # # save AutoMeasures
-# out_xml = ET.ElementTree(auto_root)
-# out_xml.write(os.path.join(out_dir, 'AutoMeasures{}-S2D.xml'.format(subscript)),
-#               encoding="utf-8", xml_declaration=True)
-#
-# subprocess.Popen(['mm3d', 'GCPBascule', get_match_pattern(imlist), 'Relative',
-#                   'TerrainRelAuto{}'.format(subscript),
-#                   os.path.join(out_dir, 'AutoGCPs{}.xml'.format(subscript)),
-#                   os.path.join(out_dir, 'AutoMeasures{}-S2D.xml'.format(subscript))]).wait()
-#
-# gcps = get_bascule_residuals(os.path.join('Ori-TerrainRelAuto{}'.format(subscript), 'Result-GCP-Bascule.xml'), gcps)
-#
-# out_inds = sliding_window_filter([ortho.shape[1], ortho.shape[0]], gcps, 1500, mindist=800)
+gcps.to_file(os.path.join(out_dir, 'AutoGCPs{}.shp'.format(subscript)))
+mmtools.write_auto_gcps(gcps, subscript, out_dir, utm_str)
+subprocess.Popen(['mm3d', 'GCPConvert', 'AppInFile',
+                  os.path.join(out_dir, 'AutoGCPs{}.txt'.format(subscript))]).wait()
+
+auto_root = ET.parse(os.path.join(out_dir, 'AutoMeasures{}-S2D.xml'.format(subscript))).getroot()
+for im in auto_root.findall('MesureAppuiFlottant1Im'):
+    for pt in im.findall('OneMesureAF1I'):
+        if pt.find('NamePt').text not in gcps.id.values:
+            im.remove(pt)
+# save AutoMeasures
+out_xml = ET.ElementTree(auto_root)
+out_xml.write(os.path.join(out_dir, 'AutoMeasures{}-S2D.xml'.format(subscript)),
+              encoding="utf-8", xml_declaration=True)
+
+subprocess.Popen(['mm3d', 'GCPBascule', mmtools.get_match_pattern(imlist), args.ori,  # careful with hard-coding names!
+                  'TerrainRelAuto{}'.format(subscript),
+                  os.path.join(out_dir, 'AutoGCPs{}.xml'.format(subscript)),
+                  os.path.join(out_dir, 'AutoMeasures{}-S2D.xml'.format(subscript))]).wait()
+
+gcps = mmtools.get_bascule_residuals(os.path.join('Ori-TerrainRelAuto{}'.format(subscript), 'Result-GCP-Bascule.xml'), gcps)
+
+# out_inds = sliding_window_filter([ortho.shape[1], ortho.shape[0]], gcps, 800, mindist=400)
 # gcps = gcps.loc[out_inds]
 # residuals = gcps.residual
-# gcp_names = gcps.id
-# #
-# # out = np.abs(gcps.residual) > 5 * nmad(gcps.residual)
-# # gcps = gcps[gcps.id.isin(gcp_names)]
-# # out_list = gcp_names[out]
-# #
-# # gcps.loc[gcps.id.isin(out_list), 'z_corr'] = np.nan
-# # gcps.dropna(inplace=True)
-# #
-# gcps.to_file(os.path.join(out_dir, 'AutoGCPs{}.shp'.format(subscript)))
-# write_auto_gcps(gcps, subscript, out_dir, utm_str)
-# subprocess.Popen(['mm3d', 'GCPConvert', 'AppInFile',
-#                   os.path.join(out_dir, 'AutoGCPs{}.txt'.format(subscript))]).wait()
-#
-# auto_root = ET.parse(os.path.join(out_dir, 'AutoMeasures{}-S2D.xml'.format(subscript))).getroot()
-# for im in auto_root.findall('MesureAppuiFlottant1Im'):
-#     for pt in im.findall('OneMesureAF1I'):
-#         if pt.find('NamePt').text not in gcps.id.values:
-#             im.remove(pt)
-# # # save AutoMeasures
-# out_xml = ET.ElementTree(auto_root)
-# out_xml.write(os.path.join(out_dir, 'AutoMeasures{}-S2D.xml'.format(subscript)),
-#               encoding="utf-8", xml_declaration=True)
-#
-# subprocess.Popen(['mm3d', 'GCPBascule', get_match_pattern(imlist), 'Relative',
-#                   'TerrainRelAuto{}'.format(subscript),
-#                   os.path.join(out_dir, 'AutoGCPs{}.xml'.format(subscript)),
-#                   os.path.join(out_dir, 'AutoMeasures{}-S2D.xml'.format(subscript))]).wait()
-#
-# subprocess.Popen(['mm3d', 'Campari', get_match_pattern(imlist),
-#                   'TerrainRelAuto{}'.format(subscript),
-#                   'TerrainFinal{}'.format(subscript),
-#                   'GCP=[{},5,{},2]'.format(os.path.join(out_dir, 'AutoGCPs{}.xml'.format(subscript)),
-#                                            os.path.join(out_dir, 'AutoMeasures{}-S2D.xml'.format(subscript))),
-#                   'SH=Homol', 'AllFree=1']).wait()
-#
-# gcps = get_bascule_residuals(os.path.join('Ori-TerrainRelAuto{}'.format(subscript), 'Result-GCP-Bascule.xml'), gcps)
-# gcps = get_campari_residuals('Ori-TerrainFinal_block0/Residus.xml', gcps)
-#
-# # gcps = gcps[gcps.camp_res < 5*nmad(gcps.camp_res)]
-#
-# fig1 = plt.figure(figsize=(7, 5))
-# plt.imshow(ortho[::5, ::5], cmap='gray', extent=[0, ortho.shape[1], ortho.shape[0], 0])
-# plt.plot(gcps.j, gcps.i, 'r+')
-# plt.quiver(gcps.j, gcps.i, gcps.xres, gcps.yres, color='r', scale=1000)
-#
-# plt.savefig(os.path.join(out_dir, 'relative_gcps{}.png'.format(subscript)), bbox_inches='tight', dpi=200)
-# plt.close(fig1)
-#
-# fig2 = lsat_fullres.display(sfact=10, fig=plt.figure(figsize=(7,5)))
-# plt.plot(gcps.geometry.x, gcps.geometry.y, 'r+')
-# plt.savefig(os.path.join(out_dir, 'world_gcps{}.png'.format(subscript)), bbox_inches='tight', dpi=200)
-# plt.close(fig2)
-#
-# print('cleaning up.')
-# # remove Auto-im.tif.txt, NoDist-im.tif.txt, etc. Ori-Relative-NoDist
-# shutil.rmtree('Ori-Relative-NoDist/')
-#
-# for txtfile in glob('Auto-OIS*.tif.txt') + \
-#                glob('NoDist-OIS*.tif.txt'):
-#     os.remove(txtfile)
+gcp_names = gcps.id
+
+out = np.abs(gcps.residual) > 5 * nmad(gcps.residual)
+gcps = gcps[gcps.id.isin(gcp_names)]
+out_list = gcp_names[out]
+
+gcps.loc[gcps.id.isin(out_list), 'z_corr'] = np.nan
+gcps.dropna(inplace=True)
+
+gcps.to_file(os.path.join(out_dir, 'AutoGCPs{}.shp'.format(subscript)))
+mmtools.write_auto_gcps(gcps, subscript, out_dir, utm_str)
+subprocess.Popen(['mm3d', 'GCPConvert', 'AppInFile',
+                  os.path.join(out_dir, 'AutoGCPs{}.txt'.format(subscript))]).wait()
+
+auto_root = ET.parse(os.path.join(out_dir, 'AutoMeasures{}-S2D.xml'.format(subscript))).getroot()
+for im in auto_root.findall('MesureAppuiFlottant1Im'):
+    for pt in im.findall('OneMesureAF1I'):
+        if pt.find('NamePt').text not in gcps.id.values:
+            im.remove(pt)
+# # save AutoMeasures
+out_xml = ET.ElementTree(auto_root)
+out_xml.write(os.path.join(out_dir, 'AutoMeasures{}-S2D.xml'.format(subscript)),
+              encoding="utf-8", xml_declaration=True)
+
+subprocess.Popen(['mm3d', 'GCPBascule', mmtools.get_match_pattern(imlist), args.ori,
+                  'TerrainRelAuto{}'.format(subscript),
+                  os.path.join(out_dir, 'AutoGCPs{}.xml'.format(subscript)),
+                  os.path.join(out_dir, 'AutoMeasures{}-S2D.xml'.format(subscript))]).wait()
+
+subprocess.Popen(['mm3d', 'Campari', mmtools.get_match_pattern(imlist),
+                  'TerrainRelAuto{}'.format(subscript),
+                  'TerrainFinal{}'.format(subscript),
+                  'GCP=[{},5,{},2]'.format(os.path.join(out_dir, 'AutoGCPs{}.xml'.format(subscript)),
+                                           os.path.join(out_dir, 'AutoMeasures{}-S2D.xml'.format(subscript))),
+                  'SH=Homol', 'AllFree=1']).wait()
+
+gcps = mmtools.get_bascule_residuals(os.path.join('Ori-TerrainRelAuto{}'.format(subscript), 'Result-GCP-Bascule.xml'), gcps)
+gcps = mmtools.get_campari_residuals('Ori-TerrainFinal_block0/Residus.xml', gcps)
+gcp_names = gcps.id
+
+out = np.abs(gcps.camp_res) > 5 * nmad(gcps.camp_res)
+gcps = gcps[gcps.id.isin(gcp_names)]
+out_list = gcp_names[out]
+
+gcps.loc[gcps.id.isin(out_list), 'z_corr'] = np.nan
+gcps.dropna(inplace=True)
+
+gcps.to_file(os.path.join(out_dir, 'AutoGCPs{}.shp'.format(subscript)))
+mmtools.write_auto_gcps(gcps, subscript, out_dir, utm_str)
+subprocess.Popen(['mm3d', 'GCPConvert', 'AppInFile',
+                  os.path.join(out_dir, 'AutoGCPs{}.txt'.format(subscript))]).wait()
+
+auto_root = ET.parse(os.path.join(out_dir, 'AutoMeasures{}-S2D.xml'.format(subscript))).getroot()
+for im in auto_root.findall('MesureAppuiFlottant1Im'):
+    for pt in im.findall('OneMesureAF1I'):
+        if pt.find('NamePt').text not in gcps.id.values:
+            im.remove(pt)
+# # save AutoMeasures
+out_xml = ET.ElementTree(auto_root)
+out_xml.write(os.path.join(out_dir, 'AutoMeasures{}-S2D.xml'.format(subscript)),
+              encoding="utf-8", xml_declaration=True)
+
+subprocess.Popen(['mm3d', 'GCPBascule', mmtools.get_match_pattern(imlist), args.ori,
+                  'TerrainRelAuto{}'.format(subscript),
+                  os.path.join(out_dir, 'AutoGCPs{}.xml'.format(subscript)),
+                  os.path.join(out_dir, 'AutoMeasures{}-S2D.xml'.format(subscript))]).wait()
+
+subprocess.Popen(['mm3d', 'Campari', mmtools.get_match_pattern(imlist),
+                  'TerrainRelAuto{}'.format(subscript),
+                  'TerrainFinal{}'.format(subscript),
+                  'GCP=[{},5,{},2]'.format(os.path.join(out_dir, 'AutoGCPs{}.xml'.format(subscript)),
+                                           os.path.join(out_dir, 'AutoMeasures{}-S2D.xml'.format(subscript))),
+                  'SH=Homol', 'AllFree=1']).wait()
+
+fig1 = plt.figure(figsize=(7, 5))
+plt.imshow(ortho[::5, ::5], cmap='gray', extent=[0, ortho.shape[1], ortho.shape[0], 0])
+plt.plot(gcps.orig_j, gcps.orig_i, 'r+')
+plt.quiver(gcps.orig_j, gcps.orig_i, gcps.xres, gcps.yres, color='r', scale=1000)
+
+plt.savefig(os.path.join(out_dir, 'relative_gcps{}.png'.format(subscript)), bbox_inches='tight', dpi=200)
+plt.close(fig1)
+
+fig2 = mst.display(sfact=10, fig=plt.figure(figsize=(7,5)))
+plt.plot(gcps.geometry.x, gcps.geometry.y, 'r+')
+plt.savefig(os.path.join(out_dir, 'world_gcps{}.png'.format(subscript)), bbox_inches='tight', dpi=200)
+plt.close(fig2)
+
+print('cleaning up.')
+# remove Auto-im.tif.txt, NoDist-im.tif.txt, etc. Ori-Relative-NoDist
+shutil.rmtree('Ori-Relative-NoDist/')
+
+for txtfile in glob('Auto-OIS*.tif.txt') + \
+               glob('NoDist-OIS*.tif.txt'):
+    os.remove(txtfile)
 print('end.')
