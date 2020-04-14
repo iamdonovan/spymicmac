@@ -106,7 +106,7 @@ def get_rough_geotransformation(mst, slv, landmask=None):
     if landmask is not None:
         lmask = create_mask_from_shapefile(mst_lowres, landmask)
 
-    mst_rescale = (256 * (mst_lowres.img - np.nanmin(mst_lowres.img) /
+    mst_rescale = (255 * (mst_lowres.img - np.nanmin(mst_lowres.img) /
                           (np.nanmax(mst_lowres.img) - np.nanmin(mst_lowres.img))))
 
     _mask = 255 * np.ones(mst_lowres.img.shape, dtype=np.uint8)
@@ -161,7 +161,7 @@ def get_rough_geotransformation(mst, slv, landmask=None):
     lowres_gcps['src_j'] = src_[:, 0]
     lowres_gcps['src_i'] = src_[:, 1]
 
-    best_lowres = lowres_gcps[lowres_gcps['pk_corr'] > lowres_gcps['pk_corr'].quantile(0.75)]
+    best_lowres = lowres_gcps[lowres_gcps.z_corr > lowres_gcps.z_corr.quantile(0.75)]
 
     dst_pts = best_lowres[['match_j', 'match_i']].values
     src_pts = best_lowres[['src_j', 'src_i']].values
@@ -226,9 +226,9 @@ def main():
     mst_fullres = GeoImg(args.master)
     slv_fullres = GeoImg(args.slave)
 
-    Minit = get_rough_geotransformation(mst_fullres, slv_fullres, landmask=args.landmask)
-
     mst_fullres = mst_fullres.reproject(slv_fullres)
+
+    Minit = get_rough_geotransformation(mst_fullres, slv_fullres, landmask=args.landmask)
 
     rough_tfm = warp(mst_fullres.img, Minit, output_shape=slv_fullres.img.shape, preserve_range=True)
     rough_tfm[np.isnan(rough_tfm)] = 0
