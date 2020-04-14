@@ -285,10 +285,12 @@ def get_initial_transformation(img1, img2, pRes=800, landmask=None, footmask=Non
 
 
 def get_matches(img1, img2, mask1=None, mask2=None):
-    orb = cv2.ORB_create()
+    # orb = cv2.ORB_create()
 
-    kp1, des1 = orb.detectAndCompute(img1.astype(np.uint8), mask=mask1)
-    kp2, des2 = orb.detectAndCompute(img2.astype(np.uint8), mask=mask2)
+    kp1, des1 = get_dense_keypoints(img1.astype(np.uint8), mask1, return_des=True)
+    kp2, des2 = get_dense_keypoints(img2.astype(np.uint8), mask2, return_des=True)
+    # kp1, des1 = orb.detectAndCompute(img1.astype(np.uint8), mask=mask1)
+    # kp2, des2 = orb.detectAndCompute(img2.astype(np.uint8), mask=mask2)
 
     flann_idx = 6
     index_params = dict(algorithm=flann_idx, table_number=6, key_size=12, multi_probe_level=1)
@@ -318,45 +320,45 @@ def find_gcp_match(img, template, method=cv2.TM_CCORR_NORMED):
 ######################################################################################################################
 # image writing
 ######################################################################################################################
-def join_halves(img, overlap, indir='.', outdir='.', color_balance=True):
-    """
-    Join scanned halves of KH-9 image into one, given a common overlap point.
-    
-    :param img: KH-9 image name (i.e., DZB1215-500454L001001) to join. The function will look for open image halves
-        img_a.tif and img_b.tif, assuming 'a' is the left-hand image and 'b' is the right-hand image.
-    :param overlap: Image coordinates for a common overlap point, in the form [x1, y1, x2, y2]. Best results tend to be
-        overlaps toward the middle of the y range. YMMV.
-    :param indir: Directory containing images to join ['.']
-    :param outdir: Directory to write joined image to ['.']
-    :param color_balance: Attempt to color balance the two image halves before joining [True].
-
-    :type img: str
-    :type overlap: array-like
-    :type indir: str
-    :type outdir: str
-    :type color_balance: bool
-    """
-
-    left = pyvips.Image.new_from_file(os.path.sep.join([indir, '{}_a.tif'.format(img)]), memory=True)
-    right = pyvips.Image.new_from_file(os.path.sep.join([indir, '{}_b.tif'.format(img)]), memory=True)
-    outfile = os.path.sep.join([outdir, '{}.tif'.format(img)])
-
-    if len(overlap) < 4:
-        x1, y1 = overlap
-        if x1 < 0:
-            join = left.merge(right, 'horizontal', x1, y1)
-        else:
-            join = right.merge(left, 'horizontal', x1, y1)
-
-        join.write_to_file(outfile)
-    else:
-        x1, y1, x2, y2 = overlap
-
-        join = left.mosaic(right, 'horizontal', x1, y1, x2, y2, mblend=0)
-        if color_balance:
-            balance = join.globalbalance(int_output=True)
-            balance.write_to_file(outfile)
-        else:
-            join.write_to_file(outfile)
-
-    return
+# def join_halves(img, overlap, indir='.', outdir='.', color_balance=True):
+#     """
+#     Join scanned halves of KH-9 image into one, given a common overlap point.
+#
+#     :param img: KH-9 image name (i.e., DZB1215-500454L001001) to join. The function will look for open image halves
+#         img_a.tif and img_b.tif, assuming 'a' is the left-hand image and 'b' is the right-hand image.
+#     :param overlap: Image coordinates for a common overlap point, in the form [x1, y1, x2, y2]. Best results tend to be
+#         overlaps toward the middle of the y range. YMMV.
+#     :param indir: Directory containing images to join ['.']
+#     :param outdir: Directory to write joined image to ['.']
+#     :param color_balance: Attempt to color balance the two image halves before joining [True].
+#
+#     :type img: str
+#     :type overlap: array-like
+#     :type indir: str
+#     :type outdir: str
+#     :type color_balance: bool
+#     """
+#
+#     left = pyvips.Image.new_from_file(os.path.sep.join([indir, '{}_a.tif'.format(img)]), memory=True)
+#     right = pyvips.Image.new_from_file(os.path.sep.join([indir, '{}_b.tif'.format(img)]), memory=True)
+#     outfile = os.path.sep.join([outdir, '{}.tif'.format(img)])
+#
+#     if len(overlap) < 4:
+#         x1, y1 = overlap
+#         if x1 < 0:
+#             join = left.merge(right, 'horizontal', x1, y1)
+#         else:
+#             join = right.merge(left, 'horizontal', x1, y1)
+#
+#         join.write_to_file(outfile)
+#     else:
+#         x1, y1, x2, y2 = overlap
+#
+#         join = left.mosaic(right, 'horizontal', x1, y1, x2, y2, mblend=0)
+#         if color_balance:
+#             balance = join.globalbalance(int_output=True)
+#             balance.write_to_file(outfile)
+#         else:
+#             join.write_to_file(outfile)
+#
+#     return
