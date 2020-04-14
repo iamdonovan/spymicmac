@@ -6,7 +6,7 @@ from skimage.io import imread, imsave
 from skimage.measure import ransac
 from skimage.transform import AffineTransform, EuclideanTransform, warp
 import gdal
-import pyvips
+# import pyvips
 import numpy as np
 import sPyMicMac.image_tools as imtools
 
