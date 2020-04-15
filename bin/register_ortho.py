@@ -161,13 +161,15 @@ Minit_full, _ = ransac((dst_tfm, 50 * src_grd), AffineTransform, min_samples=3,
 rough_tfm = warp(ortho, Minit_full, output_shape=mst.img.shape, preserve_range=True)
 
 mask = 255 * np.ones(mst.img.shape, dtype=np.uint8)
-lm = create_mask_from_shapefile(mst, args.landmask, buffer=200)
-gm = create_mask_from_shapefile(mst, args.glacmask, buffer=200)
+if args.landmask is not None:
+    lm = create_mask_from_shapefile(mst, args.landmask, buffer=200)
+    mask[~lm] = 0
+if args.glacmask is not None:
+    gm = create_mask_from_shapefile(mst, args.glacmask, buffer=200)
+    mask[gm] = 0
 
 mask[np.isnan(mst.img)] = 0
 mask[rough_tfm == 0] = 0
-mask[~lm] = 0
-mask[gm] = 0
 
 # for each of these pairs (src, dst), find the precise subpixel match (or not...)
 match_pts = []
