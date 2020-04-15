@@ -106,8 +106,8 @@ def get_rough_geotransformation(mst, slv, landmask=None):
     if landmask is not None:
         lmask = create_mask_from_shapefile(mst_lowres, landmask)
 
-    mst_rescale = (255 * (mst_lowres.img - np.nanmin(mst_lowres.img) /
-                          (np.nanmax(mst_lowres.img) - np.nanmin(mst_lowres.img))))
+    mst_rescale = 255 * ((mst_lowres.img - np.nanmin(mst_lowres.img)) /
+                          (np.nanmax(mst_lowres.img) - np.nanmin(mst_lowres.img)))
 
     _mask = 255 * np.ones(mst_lowres.img.shape, dtype=np.uint8)
 
