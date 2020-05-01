@@ -1,30 +1,46 @@
 #!/usr/bin/env python
-from __future__ import print_function, division
 import os
-import errno
 import argparse
 import cv2
 import multiprocessing as mp
 from functools import partial
 from scipy.ndimage.filters import median_filter
-# from skimage.io import imsave
-from skimage.morphology import disk
-from skimage.filters import rank
-from scipy.interpolate import RectBivariateSpline as RBS
-# import skimage.transform as tf
-from scipy import ndimage
+from skimage.feature import peak_local_max
+from scipy.interpolate import griddata
 import numpy as np
 import matplotlib.pyplot as plt
 import gdal
 # import pyvips
-from numba import jit
-from llc import jit_filter_function
 import pandas as pd
 import lxml.etree as etree
 import lxml.builder as builder
 from pybob.bob_tools import mkdir_p
+from pybob.ddem_tools import nmad
 import sPyMicMac.image_tools as imtools
 import sPyMicMac.micmac_tools as mmt
+
+
+def lsq_fit(x, y, z):
+    tmp_A = []
+    tmp_b = []
+
+    for kk in range(z.size):
+        _ind = np.unravel_index(kk, z.shape)
+        tmp_A.append([x[_ind], y[_ind], 1])
+        tmp_b.append(z[_ind])
+
+    A = np.matrix(tmp_A)
+    b = np.matrix(tmp_b).T
+
+    A = A[np.isfinite(z.reshape(-1, 1)).any(axis=1)]
+    b = b[np.isfinite(b)]
+
+    fit = (A.T * A).I * A.T * b.T
+    out_lsq = np.zeros(z.shape)
+    for kk in range(z.size):
+        _ind = np.unravel_index(kk, z.shape)
+        out_lsq[_ind] = fit[0] * x[_ind] + fit[1] * y[_ind] + fit[2]
+    return out_lsq
 
 
 def get_im_meas(gcps, E):
@@ -75,195 +91,243 @@ def _argparser():
     return parser
 
 
-def main():
-    np.seterr(divide='ignore', invalid='ignore')
-    parser = _argparser()
-    args = parser.parse_args()
+# def main():
+np.seterr(divide='ignore', invalid='ignore')
+parser = _argparser()
+args = parser.parse_args()
 
-    # outname = os.path.splitext(args.left_img)[0].split('_')[0] + '_shift' + os.path.splitext(args.left_img)[-1]
+# outname = os.path.splitext(args.left_img)[0].split('_')[0] + '_shift' + os.path.splitext(args.left_img)[-1]
 
-    print('Reading {}'.format(args.img))
+print('Reading {}'.format(args.img))
 
-    gd = gdal.Open(args.img)
-    metadata = gd.GetMetadata_Dict()
-    img = gd.ReadAsArray()
-    print('Image read.')
+gd = gdal.Open(args.img)
+metadata = gd.GetMetadata_Dict()
+img = gd.ReadAsArray()
+print('Image read.')
 
-    if args.orig is None:
-        raise ValueError('Origin must be provided for image.')
+if args.orig is None:
+    raise ValueError('Origin must be provided for image.')
 
-    tmp_cross = imtools.cross_template(args.csize, width=3)
-    # cross = np.random.randint(0, 255, size=(361, 361)).astype(np.uint8)
-    cross = np.ones((args.csize, args.csize)).astype(np.uint8)
-    cross[tmp_cross == 1] = 255
+tmp_cross = imtools.cross_template(args.csize, width=3)
+# cross = np.random.randint(0, 255, size=(361, 361)).astype(np.uint8)
+cross = np.ones((args.csize, args.csize)).astype(np.uint8)
+cross[tmp_cross == 1] = 255
 
-    orig_y, orig_x = args.orig
-    subimg, _, _ = imtools.make_template(img, args.orig, args.tsize)
-    # find the origin in the given image
-    res, orig_i, orig_j = imtools.find_match(subimg, cross)
+orig_y, orig_x = args.orig
+subimg, _, _ = imtools.make_template(img, args.orig, args.tsize)
+# find the origin in the given image
+z_corrs = []
+dz_corrs = []
+
+res, orig_i, orig_j = imtools.find_match(subimg, cross)
+maxj, maxi = cv2.minMaxLoc(res)[2]  # 'peak' is actually the minimum location, remember.
+inv_res = res.max() - res
+
+pks = peak_local_max(inv_res, min_distance=5, num_peaks=2)
+this_z_corrs = []
+for pk in pks:
+    max_ = inv_res[pk[0], pk[1]]
+    this_z_corrs.append((max_ - inv_res.mean()) / inv_res.std())
+dz_corrs.append(max(this_z_corrs) / min(this_z_corrs))
+z_corrs.append(max(this_z_corrs))
+if max(this_z_corrs) > 5 and max(this_z_corrs)/min(this_z_corrs) > 1.15:
     oi, oj = orig_i-args.tsize+orig_y, orig_j-args.tsize+orig_x
-
-    this_res_list = [res]
-
     print('Found origin location: {}, {}'.format(oi, oj))
-    if args.save_outputs:
-        mkdir_p('gcp_imgs')
-        plt.figure(figsize=(8,8))
-        plt.imshow(subimg, cmap='gray')
-        plt.plot(orig_j, orig_i, 'r+', ms=8, linewidth=2)
-        plt.savefig('gcp_imgs/{}_match_0_0.png'.format(os.path.splitext(args.img)[0]), bbox_inches='tight', dpi=200)
-        plt.close()
+else:
+    print('Failed to find valid origin. Falling back to the one provided.')
+    oi, oj = orig_y, orig_x
 
-    if args.scanres is None:
-        npix_x = np.float(metadata['TIFFTAG_XRESOLUTION'])
-        npix_y = np.float(metadata['TIFFTAG_YRESOLUTION'])
+this_res_list = [res]
+
+if args.save_outputs:
+    mkdir_p('gcp_imgs')
+    plt.figure(figsize=(8,8))
+    plt.imshow(subimg, cmap='gray')
+    plt.plot(orig_j, orig_i, 'r+', ms=8, linewidth=2)
+    plt.savefig('gcp_imgs/{}_match_0_0.png'.format(os.path.splitext(args.img)[0]), bbox_inches='tight', dpi=200)
+    plt.close()
+
+if args.scanres is None:
+    npix_x = np.float(metadata['TIFFTAG_XRESOLUTION'])
+    npix_y = np.float(metadata['TIFFTAG_YRESOLUTION'])
+else:
+    npix_x = args.scanres
+    if args.scanres_y is None:
+        npix_y = args.scanres
     else:
-        npix_x = args.scanres
-        if args.scanres_y is None:
-            npix_y = args.scanres
-        else:
-            npix_y = args.scanres_y
+        npix_y = args.scanres_y
 
-    # now, go every 10mm in x, y direction until we cover the image.
-    # should have 47 marks across, 23 up
-    i_list = -npix_y * np.arange(22, -1, -1) + oi
-    # make j variable based on origin location, size of image
-    # if img.shape[1] > 40000:
-    #    j_list = npix * np.arange(0, 47) + oj
-    # else:
-    if not args.joined:
-        full_j = 23 * npix_x + oj < img.shape[1]
+# now, go every 10mm in x, y direction until we cover the image.
+# should have 47 marks across, 23 up
+i_list = -npix_y * np.arange(22, -1, -1) + oi
+# make j variable based on origin location, size of image
+# if img.shape[1] > 40000:
+#    j_list = npix * np.arange(0, 47) + oj
+# else:
+if not args.joined:
+    full_j = 23 * npix_x + oj < img.shape[1]
 
-        if full_j:
-            j_list = npix_x * np.arange(0, 24) + oj
-        else:
-            j_list = npix_x * np.arange(0, 23) + oj
+    if full_j:
+        j_list = npix_x * np.arange(0, 24) + oj
     else:
-        j_list = npix_x * np.arange(0,47) + oj
+        j_list = npix_x * np.arange(0, 23) + oj
+else:
+    j_list = npix_x * np.arange(0,47) + oj
 
-    nj = j_list.size
+nj = j_list.size
 
-    J, I = np.meshgrid(np.arange(0, j_list.size), np.arange(0, i_list.size))
-    gcp_names = list(zip(I[0, :], J[0, :]))
-    for i in range(1, i_list.size):
-        gcp_names.extend(list(zip(I[i, :], J[i, :])))
+J, I = np.meshgrid(np.arange(0, j_list.size), np.arange(0, i_list.size))
+gcp_names = list(zip(I[0, :], J[0, :]))
+for i in range(1, i_list.size):
+    gcp_names.extend(list(zip(I[i, :], J[i, :])))
 
-    JJ, II = np.meshgrid(np.round(j_list).astype(int), np.round(i_list).astype(int))
-    ij = list(zip(II[-1, :], JJ[-1, :]))
-    for i in range(21, -1, -1):
-        ij.extend(list(zip(II[i, :], JJ[i, :])))
+JJ, II = np.meshgrid(np.round(j_list).astype(int), np.round(i_list).astype(int))
+ij = list(zip(II[-1, :], JJ[-1, :]))
+for i in range(21, -1, -1):
+    ij.extend(list(zip(II[i, :], JJ[i, :])))
 
-    print('Finding grid points in image...')
-    # now that we have a list of coordinates, we can loop through and find the real grid locations
-    warped_ij = [(oi, oj)] # using oi, oj to preserve float values
-    if args.nproc > 1:
-        subimgs = []
-        for loc in ij[1:]:
-            subimg, _, _ = imtools.make_template(img, loc, args.tsize)
-            subimgs.append(subimg)
-        pool = mp.Pool(args.nproc)
-        outputs = pool.map(partial(imtools.find_match, template=cross), subimgs)
-        pool.close()
-        # have to map outputs to warped_ij
-        for n, output in enumerate(outputs):
-            res, this_i, this_j = output
+print('Finding grid points in image...')
+# now that we have a list of coordinates, we can loop through and find the real grid locations
+warped_ij = [(oi, oj)] # using oi, oj to preserve float values
+if args.nproc > 1:
+    subimgs = []
+    for loc in ij[1:]:
+        subimg, _, _ = imtools.make_template(img, loc, args.tsize)
+        subimgs.append(subimg)
+    pool = mp.Pool(args.nproc)
+    outputs = pool.map(partial(imtools.find_match, template=cross), subimgs)
+    pool.close()
+    # have to map outputs to warped_ij
+    for n, output in enumerate(outputs):
+        res, this_i, this_j = output
+        maxj, maxi = cv2.minMaxLoc(res)[2]  # 'peak' is actually the minimum location, remember.
+        inv_res = res.max() - res
+
+        pks = peak_local_max(inv_res, min_distance=5, num_peaks=2)
+        this_z_corrs = []
+        for pk in pks:
+            max_ = inv_res[pk[0], pk[1]]
+            this_z_corrs.append((max_ - inv_res.mean()) / inv_res.std())
+        dz_corrs.append(max(this_z_corrs) / min(this_z_corrs))
+        z_corrs.append(max(this_z_corrs))
+
+        if max(this_z_corrs) > 5 and max(this_z_corrs)/min(this_z_corrs) > 1.15:
             this_res_list.append(res)
             rel_i = this_i - args.tsize
             rel_j = this_j - args.tsize
             i, j = ij[n+1]
             warped_ij.append((rel_i+i, rel_j+j))
-            if args.save_outputs:
-                plt.figure(figsize=(8,8))
-                plt.imshow(subimgs[n], cmap='gray')
-                plt.plot(this_j, this_i, 'r+', ms=8, linewidth=2)
-                plt.savefig('gcp_imgs/{}_match_{}_{}.png'.format(os.path.splitext(args.img)[0], gcp_names[n+1][0],
-                                                                 gcp_names[n+1][1]), bbox_inches='tight', dpi=200)
-                plt.close()
-    else:
-        for loc in ij[1:]:
-            i, j = loc
-            subimg, _, _ = imtools.make_template(img, loc, args.tsize)
-            # img_eq = rank.equalize(subimg, selem=selem)
-            res, this_i, this_j = imtools.find_match(subimg, cross)
-            warped_ij.append((this_i+i, this_j+j))
+        else:
+            this_res_list.append(res)
+            warped_ij.append((np.nan, np.nan))
 
-    # res_list.append(this_res_list)
-    ij = np.array(ij)
-    warped_ij = np.array(warped_ij)
-    warp = warped_ij - ij
+        if args.save_outputs:
+            plt.figure(figsize=(8,8))
+            plt.imshow(subimgs[n], cmap='gray')
+            plt.plot(this_j, this_i, 'r+', ms=8, linewidth=2)
+            plt.savefig('gcp_imgs/{}_match_{}_{}.png'.format(os.path.splitext(args.img)[0], gcp_names[n+1][0],
+                                                             gcp_names[n+1][1]), bbox_inches='tight', dpi=200)
+            plt.close()
+else:
+    for loc in ij[1:]:
+        i, j = loc
+        subimg, _, _ = imtools.make_template(img, loc, args.tsize)
+        # img_eq = rank.equalize(subimg, selem=selem)
+        res, this_i, this_j = imtools.find_match(subimg, cross)
+        warped_ij.append((this_i+i, this_j+j))
 
-    ux = np.reshape(warp[:,1], (23, nj))
-    uy = np.reshape(warp[:,0], (23, nj))
+# res_list.append(this_res_list)
+ij = np.array(ij)
+warped_ij = np.array(warped_ij)
+warp = warped_ij - ij
 
-    if args.filt_size > 0:
-        ux_ = median_filter(ux, size=args.filt_size, mode='nearest')
-        uy_ = median_filter(uy, size=args.filt_size, mode='nearest')
-        # see how much the vectors changed after the median filter
-        dx_ = ux - ux_
-        dy_ = uy - uy_
-        # unless there are huge deflections, keep the original values
-        ux_[np.abs(dx_) < 5] = ux[np.abs(dx_) < 5]
-        uy_[np.abs(dy_) < 5] = uy[np.abs(dy_) < 5]
-    else:
-        ux_ = ux
-        uy_ = uy
+ux = np.reshape(warp[:,1], (23, nj))
+uy = np.reshape(warp[:,0], (23, nj))
 
-    map_x = ij[:,1]
-    map_y = ij[:,0]
-    image_x = map_x + ux_.reshape(-1)
-    image_y = map_y + uy_.reshape(-1)
-    # image_x = warped_ij[:,1]
-    # image_y = warped_ij[:,0]
+ux_lsq = lsq_fit(JJ, II, ux)
+uy_lsq = lsq_fit(JJ, II, uy)
 
-    # make sure that the first point is the same - no shift for the origin point.
-    image_x[0] = map_x[0]
-    image_y[0] = map_y[0]
+ux_detrend = ux - ux_lsq
+uy_detrend = uy - uy_lsq
 
-    # warp_list.append(warp)
-    # ij_list.append(ij)
-    # img_xy_list.append(np.column_stack((image_x,image_y)))
+ux[np.abs(ux_detrend) > 5 * nmad(ux_detrend)] = np.nan
+uy[np.abs(uy_detrend) > 5 * nmad(uy_detrend)] = np.nan
 
-    print('Grid points found.')
-    # print('Warping {} left image.'.format(name_list[ind]))
-    # generate a transform using the reseau field
-    # t = tf.PolynomialTransform()
-    # t.estimate(warped_ij, ij)
+ux[np.isnan(ux)] = ux_lsq[np.isnan(ux)]
+uy[np.isnan(uy)] = uy_lsq[np.isnan(uy)]
 
-    # apply the transformation with bicubic resampling
-    # warped_img = tf.warp(img_list[0], t, order=3)
+# if args.filt_size > 0:
+#     ux_ = median_filter(ux, size=args.filt_size, mode='nearest')
+#     uy_ = median_filter(uy, size=args.filt_size, mode='nearest')
+#     # see how much the vectors changed after the median filter
+#     dx_ = ux - ux_
+#     dy_ = uy - uy_
+#     # unless there are huge deflections, keep the original values
+#     ux_[np.abs(dx_) < 5] = ux[np.abs(dx_) < 5]
+#     uy_[np.abs(dy_) < 5] = uy[np.abs(dy_) < 5]
+# else:
+#     ux_ = ux
+#     uy_ = uy
 
-    # warped_list.append(warped_img)
-    # save a results image so we can see if there's anything suspicious
-    plt.figure(figsize=(12,12))
-    plt.imshow(img[::10, ::10], extent=[0, img.shape[1], img.shape[0], 0], cmap='gray')
-    plt.quiver(image_x, image_y, -ux_.reshape(-1), -uy_.reshape(-1), color='r')
-    # plt.quiver(map_x, map_y, warp[:,1], warp[:,0], color='r')
-    #
-    this_out = os.path.splitext(args.img)[0]
-    plt.savefig(this_out + '_matches.png', bbox_inches='tight', dpi=200)
-    plt.close()
-    #
-    # gcp_list = []
-    gcp_df = pd.DataFrame()
-    for i, ind in enumerate(gcp_names):
-        row, col = ind
-        gcp_df.loc[i, 'gcp'] = 'GCP_{}_{}'.format(row, col)
-        gcp_df.loc[i, 'im_row'] = image_y[i]
-        gcp_df.loc[i, 'im_col'] = image_x[i]
+# ux_interp = griddata((J[np.isfinite(ux_)], I[np.isfinite(ux_)]), ux_[np.isfinite(ux_)], (J, I))
+# uy_interp = griddata((J[np.isfinite(uy_)], I[np.isfinite(uy_)]), uy_[np.isfinite(uy_)], (J, I))
 
-    E = builder.ElementMaker()
-    ImMes = E.MesureAppuiFlottant1Im(E.NameIm(args.img))
+map_x = ij[:,1]
+map_y = ij[:,0]
+image_x = map_x + ux.reshape(-1)
+image_y = map_y + uy.reshape(-1)
+# image_x = warped_ij[:,1]
+# image_y = warped_ij[:,0]
 
-    pt_els = mmt.get_im_meas(gcp_df, E)
-    for p in pt_els:
-        ImMes.append(p)
-    mkdir_p('Ori-InterneScan')
+# make sure that the first point is the same - no shift for the origin point.
+image_x[0] = map_x[0]
+image_y[0] = map_y[0]
 
-    outxml = E.SetOfMesureAppuisFlottants(ImMes)
-    tree = etree.ElementTree(outxml)
-    tree.write('Ori-InterneScan/MeasuresIm-' + args.img + '.xml', pretty_print=True,
-               xml_declaration=True, encoding="utf-8")
+# warp_list.append(warp)
+# ij_list.append(ij)
+# img_xy_list.append(np.column_stack((image_x,image_y)))
+
+print('Grid points found.')
+# print('Warping {} left image.'.format(name_list[ind]))
+# generate a transform using the reseau field
+# t = tf.PolynomialTransform()
+# t.estimate(warped_ij, ij)
+
+# apply the transformation with bicubic resampling
+# warped_img = tf.warp(img_list[0], t, order=3)
+
+# warped_list.append(warped_img)
+# save a results image so we can see if there's anything suspicious
+plt.figure(figsize=(12,12))
+plt.imshow(img[::10, ::10], extent=[0, img.shape[1], img.shape[0], 0], cmap='gray')
+plt.quiver(image_x, image_y, -ux.reshape(-1), -uy.reshape(-1), color='r')
+# plt.quiver(map_x, map_y, warp[:,1], warp[:,0], color='r')
+#
+this_out = os.path.splitext(args.img)[0]
+plt.savefig(this_out + '_matches.png', bbox_inches='tight', dpi=200)
+plt.close()
+#
+# gcp_list = []
+gcp_df = pd.DataFrame()
+for i, ind in enumerate(gcp_names):
+    row, col = ind
+    gcp_df.loc[i, 'gcp'] = 'GCP_{}_{}'.format(row, col)
+    gcp_df.loc[i, 'im_row'] = image_y[i]
+    gcp_df.loc[i, 'im_col'] = image_x[i]
+
+E = builder.ElementMaker()
+ImMes = E.MesureAppuiFlottant1Im(E.NameIm(args.img))
+
+pt_els = mmt.get_im_meas(gcp_df, E)
+for p in pt_els:
+    ImMes.append(p)
+mkdir_p('Ori-InterneScan')
+
+outxml = E.SetOfMesureAppuisFlottants(ImMes)
+tree = etree.ElementTree(outxml)
+tree.write('Ori-InterneScan/MeasuresIm-' + args.img + '.xml', pretty_print=True,
+           xml_declaration=True, encoding="utf-8")
 
 
-if __name__ == "__main__":
-    main()
+# if __name__ == "__main__":
+#     main()
