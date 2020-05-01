@@ -4,7 +4,7 @@ import os
 from glob import glob
 from skimage.io import imread, imsave
 from skimage.measure import ransac
-from skimage.transform import AffineTransform, EuclideanTransform, warp
+from skimage.transform import ProjectiveTransform, AffineTransform, EuclideanTransform, warp
 import gdal
 # import pyvips
 import numpy as np
@@ -58,13 +58,13 @@ for im in imlist:
         except:
             continue
 
-    M, inliers = ransac((np.array(src_pts), np.array(dst_pts)), EuclideanTransform,
+    M, inliers = ransac((np.array(src_pts), np.array(dst_pts)), ProjectiveTransform,
                         min_samples=25, residual_threshold=1, max_trials=1000)
     print('{} tie points found'.format(np.count_nonzero(inliers)))
 
     out_shape = (left.shape[0], left.shape[1] + right.shape[1])
 
-    combined_right = warp(right, M, output_shape=out_shape, preserve_range=True, order=3)
+    combined_right = warp(right, M, output_shape=out_shape, preserve_range=True, order=5)
 
     combined_left = np.zeros(out_shape)
     combined_left[:, :left.shape[1]] = left
