@@ -119,14 +119,14 @@ def get_match_pattern(imlist):
     return imlist[0][:first] + '(' + '|'.join([im[first:last] for im in imlist]) + ')' + imlist[0][last:]
 
 
-def write_auto_mesures(gcp_df, subscript, out_dir):
-    with open(os.path.join(out_dir, 'AutoMeasures{}.txt'.format(subscript)), 'w') as f:
+def write_auto_mesures(gcp_df, subscript, out_dir, outname='AutoMeasures'):
+    with open(os.path.join(out_dir, '{}{}.txt'.format(outname, subscript)), 'w') as f:
         for i, row in gcp_df.iterrows():
             print('{} {} {}'.format(row.rel_x, row.rel_y, row.el_rel), file=f)
 
 
-def write_auto_gcps(gcp_df, subscript, out_dir, utm_zone):
-    with open(os.path.join(out_dir, 'AutoGCPs{}.txt'.format(subscript)), 'w') as f:
+def write_auto_gcps(gcp_df, subscript, out_dir, utm_zone, outname='AutoGCPs'):
+    with open(os.path.join(out_dir, '{}{}.txt'.format(outname, subscript)), 'w') as f:
         # print('#F= N X Y Z Ix Iy Iz', file=f)
         print('#F= N X Y Z', file=f)
         print('#Here the coordinates are in UTM {} X=Easting Y=Northing Z=Altitude'.format(utm_zone), file=f)
@@ -143,13 +143,21 @@ def get_bascule_residuals(fn_basc, gcp_df):
     # residuals = np.array([float(res.find('Dist').text) for res in gcp_res])
     x_res = np.array([float(res.find('Offset').text.split()[0]) for res in gcp_res])
     y_res = np.array([float(res.find('Offset').text.split()[1]) for res in gcp_res])
+    z_res = np.array([float(res.find('Offset').text.split()[2]) for res in gcp_res])
+    dist = np.array([float(res.find('Dist').text) for res in gcp_res])
+
     for data_ in zip(gcp_names, x_res):
         gcp_df.loc[gcp_df.id == data_[0], 'xres'] = data_[1]
 
     for data_ in zip(gcp_names, y_res):
         gcp_df.loc[gcp_df.id == data_[0], 'yres'] = data_[1]
 
-    gcp_df['residual'] = np.sqrt(gcp_df['xres'].values**2 + gcp_df['yres'].values**2)
+    for data_ in zip(gcp_names, z_res):
+        gcp_df.loc[gcp_df.id == data_[0], 'zres'] = data_[1]
+
+    for data_ in zip(gcp_names, dist):
+        gcp_df.loc[gcp_df.id == data_[0], 'residual'] = data_[1]
+    # gcp_df['residual'] = np.sqrt(gcp_df['xres'].values**2 + gcp_df['yres'].values**2)
 
     return gcp_df
 
@@ -158,8 +166,19 @@ def get_campari_residuals(fn_resids, gcp_df):
     camp_root = ET.parse(fn_resids).getroot()
     camp_gcp_names = [a.find('Name').text for a in camp_root.findall('Iters')[-1].findall('OneAppui')]
     err_max = [float(a.find('EcartImMax').text) for a in camp_root.findall('Iters')[-1].findall('OneAppui')]
+    camp_x = [float(a.find('EcartFaiscTerrain').text.split()[0])
+              for a in camp_root.findall('Iters')[-1].findall('OneAppui')]
+    camp_y = [float(a.find('EcartFaiscTerrain').text.split()[1])
+              for a in camp_root.findall('Iters')[-1].findall('OneAppui')]
 
     for data_ in zip(camp_gcp_names, err_max):
         gcp_df.loc[gcp_df.id == data_[0], 'camp_res'] = data_[1]
+
+    for data_ in zip(camp_gcp_names, camp_x):
+        gcp_df.loc[gcp_df.id == data_[0], 'camp_xres'] = data_[1]
+
+    for data_ in zip(camp_gcp_names, camp_y):
+        gcp_df.loc[gcp_df.id == data_[0], 'camp_yres'] = data_[1]
+
 
     return gcp_df
