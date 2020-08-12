@@ -2,6 +2,7 @@
 sPyMicMac.micmac_tools is a collection of tools for interfacing with MicMac
 """
 import os
+import shutil
 import numpy as np
 import gdal
 import pandas as pd
@@ -10,11 +11,45 @@ import lxml.builder as builder
 import difflib
 import xml.etree.ElementTree as ET
 from skimage.io import imread
+from sPyMicMac.usgs_tools import get_usgs_footprints
 
 
 ######################################################################################################################
 # MicMac interfaces - write xml files for MicMac to read
 ######################################################################################################################
+def write_neighbour_images(imlist, fprints=None, nameField='ID', prefix='OIS-Reech_', fileExt='.tif', **kwargs):
+    E = builder.ElementMaker()
+    NamedRel = E.SauvegardeNamedRel()
+
+    if fprints is None:
+        if 'dataset' not in kwargs:
+            dset = 'AERIAL_COMBIN'
+        else:
+            dset = kwargs['dataset']
+        fprints = get_usgs_footprints(imlist, dataset=dset)
+    else:
+        fprints = fprints[fprints[nameField].isin(imlist)]
+
+    s = STRtree([f for f in fprints['geometry'].values])
+
+    for i, row in fprints.iterrows():
+        fn = row[nameField]
+        fp = row['geometry']
+
+        res = s.query(fp)
+        intersects = [c for c in res if fp.intersection(c).area > 0]
+        fnames = [fprints[nameField][fprints['geometry'] == c].values[0] for c in intersects]
+        fnames.remove(fn)
+
+        for f in fnames:
+            this_pair = E.Cple(' '.join([prefix + fn + fileExt,
+                                         prefix + f + fileExt]))
+            NamedRel.append(this_pair)
+
+    tree = etree.ElementTree(NamedRel)
+    tree.write('FileImagesNeighbour.xml', pretty_print=True, xml_declaration=True, encoding="utf-8")
+
+
 def get_gcp_meas(im_name, meas_name, in_dir, E, nodist=None, gcp_name='GCP'):
     im = gdal.Open(os.path.sep.join([in_dir, im_name]))
     maxj = im.RasterXSize
@@ -91,6 +126,7 @@ def generate_measures_files(joined=False):
 
     tree = etree.ElementTree(SpGlob)
     tree.write('Tmp-SL-Glob.xml', pretty_print=True, xml_declaration=True, encoding="utf-8")
+
     pt_els = get_im_meas(gcp_df, E)
     for p in pt_els:
         ImMes.append(p)
@@ -243,3 +279,25 @@ def get_campari_residuals(fn_resids, gcp_df):
         gcp_df.loc[gcp_df.id == data_[0], 'camp_zres'] = data_[1]
 
     return gcp_df
+
+
+def move_bad_tapas(ori):
+    root = ET.parse(os.path.join(ori, 'Residus.xml')).getroot()
+    res_df = pd.DataFrame()
+
+    nimgs = [len(a.findall('OneIm')) for a in root.findall('Iters')]
+
+    nmax = max(nimgs)
+
+    ind = np.where(np.array(nimgs) == nmax)[0].min()
+
+    res_df['name'] = [a.find('Name').text for a in root.findall('Iters')[ind].findall('OneIm')]
+    res_df['residual'] = [float(a.find('Residual').text) for a in root.findall('Iters')[ind].findall('OneIm')]
+    res_df['pct_ok'] = [float(a.find('PercOk').text) for a in root.findall('Iters')[ind].findall('OneIm')]
+    res_df['npts'] = [float(a.find('NbPts').text) for a in root.findall('Iters')[ind].findall('OneIm')]
+
+    mkdir_p('bad')
+    for im in res_df['name'][np.isnan(res_df.residual)]:
+        print('{} -> bad/{}'.format(im, im))
+        shutil.move(im, 'bad')
+
