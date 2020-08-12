@@ -403,7 +403,11 @@ def find_gcp_match(img, template, method=cv2.TM_CCORR_NORMED):
     j_off = (img.shape[1] - res.shape[1]) / 2
     _, maxval, _, maxloc = cv2.minMaxLoc(res)
     maxj, maxi = maxloc
-    sp_delx, sp_dely = get_subpixel(res, how='max')
+    try:
+        sp_delx, sp_dely = get_subpixel(res, how='max')
+    except ValueError as e:
+        sp_delx = 0
+        sp_dely = 0
 
     return res, maxi + i_off + sp_dely, maxj + j_off + sp_delx
 
