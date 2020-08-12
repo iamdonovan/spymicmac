@@ -9,6 +9,7 @@ import lxml.etree as etree
 import lxml.builder as builder
 import difflib
 import xml.etree.ElementTree as ET
+from skimage.io import imread
 
 
 ######################################################################################################################
@@ -125,6 +126,46 @@ def write_auto_mesures(gcp_df, subscript, out_dir, outname='AutoMeasures'):
             print('{} {} {}'.format(row.rel_x, row.rel_y, row.el_rel), file=f)
 
 
+def get_valid_image_points(shape, pts, pts_nodist):
+    maxi, maxj = shape
+
+    in_im = np.logical_and.reduce((0 < pts.j, pts.j < maxj,
+                                   0 < pts.i, pts.i < maxi))
+    in_nd = np.logical_and.reduce((-200 < pts_nodist.j, pts_nodist.j < maxj + 200,
+                                   -200 < pts_nodist.i, pts_nodist.i < maxi + 200))
+
+    return np.logical_and(in_im, in_nd)
+
+
+def write_image_mesures(imlist, out_dir='.', subscript=''):
+    E = builder.ElementMaker()
+    MesureSet = E.SetOfMesureAppuisFlottants()
+
+    for im in imlist:
+        print(im)
+        img = imread(im)
+        impts = pd.read_csv('Auto-{}.txt'.format(im), sep=' ', names=['j', 'i'])
+        impts_nodist = pd.read_csv('NoDist-{}.txt'.format(im), sep=' ', names=['j', 'i'])
+
+        valid_pts = get_valid_image_points(img.shape, impts, impts_nodist)
+
+        if np.count_nonzero(valid_pts) == 0:
+            continue
+
+        this_im_mes = E.MesureAppuiFlottant1Im(E.NameIm(im))
+
+        for i, (ind, row) in enumerate(impts[valid_pts].iterrows()):
+            this_mes = E.OneMesureAF1I(E.NamePt('GCP{}'.format(ind)),
+                                       E.PtIm('{} {}'.format(row.j, row.i)))
+            this_im_mes.append(this_mes)
+
+        MesureSet.append(this_im_mes)
+
+    tree = etree.ElementTree(MesureSet)
+    tree.write(os.path.join(out_dir, 'AutoMeasures{}-S2D.xml'.format(subscript)),
+               pretty_print=True, xml_declaration=True, encoding="utf-8")
+
+
 def write_auto_gcps(gcp_df, subscript, out_dir, utm_zone, outname='AutoGCPs'):
     with open(os.path.join(out_dir, '{}{}.txt'.format(outname, subscript)), 'w') as f:
         # print('#F= N X Y Z Ix Iy Iz', file=f)
@@ -164,12 +205,30 @@ def get_bascule_residuals(fn_basc, gcp_df):
 
 def get_campari_residuals(fn_resids, gcp_df):
     camp_root = ET.parse(fn_resids).getroot()
-    camp_gcp_names = [a.find('Name').text for a in camp_root.findall('Iters')[-1].findall('OneAppui')]
-    err_max = [float(a.find('EcartImMax').text) for a in camp_root.findall('Iters')[-1].findall('OneAppui')]
-    camp_x = [float(a.find('EcartFaiscTerrain').text.split()[0])
-              for a in camp_root.findall('Iters')[-1].findall('OneAppui')]
-    camp_y = [float(a.find('EcartFaiscTerrain').text.split()[1])
-              for a in camp_root.findall('Iters')[-1].findall('OneAppui')]
+
+    last_iter = camp_root.findall('Iters')[-1].findall('OneAppui')
+    camp_gcp_names = [a.find('Name').text for a in last_iter]
+
+    err_max = []
+    for a in last_iter:
+        try:
+            err_max.append(float(a.find('EcartImMax').text))
+        except AttributeError:
+            err_max.append(np.nan)
+
+    camp_x = []
+    camp_y = []
+    camp_z = []
+
+    for a in last_iter:
+        try:
+            camp_x.append(float(a.find('EcartFaiscTerrain').text.split()[0]))
+            camp_y.append(float(a.find('EcartFaiscTerrain').text.split()[1]))
+            camp_z.append(float(a.find('EcartFaiscTerrain').text.split()[2]))
+        except AttributeError:
+            camp_x.append(np.nan)
+            camp_y.append(np.nan)
+            camp_z.append(np.nan)
 
     for data_ in zip(camp_gcp_names, err_max):
         gcp_df.loc[gcp_df.id == data_[0], 'camp_res'] = data_[1]
@@ -180,5 +239,7 @@ def get_campari_residuals(fn_resids, gcp_df):
     for data_ in zip(camp_gcp_names, camp_y):
         gcp_df.loc[gcp_df.id == data_[0], 'camp_yres'] = data_[1]
 
+    for data_ in zip(camp_gcp_names, camp_z):
+        gcp_df.loc[gcp_df.id == data_[0], 'camp_zres'] = data_[1]
 
     return gcp_df
