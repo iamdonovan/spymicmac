@@ -50,7 +50,7 @@ def parse_im_meas(fn_meas):
 def _argparser():
     parser = argparse.ArgumentParser(description="Remove Reseau marks from KH-9 image(s).",
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument('img', action='store', type=str, nargs='+', help='Image(s) to warp.')
+    parser.add_argument('img', action='store', type=str, nargs='+', help='Image(s) to remove crosses from.')
     return parser
 
 
