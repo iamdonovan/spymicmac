@@ -15,13 +15,15 @@ def _argparser():
     parser = argparse.ArgumentParser(description="", formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('-o', '--overlap', action='store', type=int, default=2000,
                         help='overlap search width between two images [2000]')
+    parser.add_argument('-p', '--pattern', action='store', type=str, default='DZB',
+                       help='Match pattern for images [DZB]')
     return parser
 
 
 parser = _argparser()
 args = parser.parse_args()
 
-imlist = [f.split('_a.tif')[0] for f in glob('DZB*a.tif')]
+imlist = [f.split('_a.tif')[0] for f in glob('{}*a.tif'.format(args.pattern))]
 for im in imlist:
     print(im)
 
@@ -31,13 +33,13 @@ for im in imlist:
     left_gd = gdal.Open('{}_a.tif'.format(im))
     right_gd = gdal.Open('{}_b.tif'.format(im))
 
-    left_meta = left_gd.GetMetadata_Dict()
-    right_meta = right_gd.GetMetadata_Dict()
+    # left_meta = left_gd.GetMetadata_Dict()
+    # right_meta = right_gd.GetMetadata_Dict()
 
-    xres = np.mean(np.array([left_meta['TIFFTAG_XRESOLUTION'],
-                             right_meta['TIFFTAG_XRESOLUTION']]).astype(np.float32))
-    yres = np.mean(np.array([left_meta['TIFFTAG_YRESOLUTION'],
-                             right_meta['TIFFTAG_YRESOLUTION']]).astype(np.float32))
+    # xres = np.mean(np.array([left_meta['TIFFTAG_XRESOLUTION'],
+    #                          right_meta['TIFFTAG_XRESOLUTION']]).astype(np.float32))
+    # yres = np.mean(np.array([left_meta['TIFFTAG_YRESOLUTION'],
+    #                          right_meta['TIFFTAG_YRESOLUTION']]).astype(np.float32))
 
     src_pts = []
     dst_pts = []
@@ -58,13 +60,13 @@ for im in imlist:
         except:
             continue
 
-    M, inliers = ransac((np.array(src_pts), np.array(dst_pts)), ProjectiveTransform,
+    M, inliers = ransac((np.array(src_pts), np.array(dst_pts)), EuclideanTransform,
                         min_samples=25, residual_threshold=1, max_trials=1000)
     print('{} tie points found'.format(np.count_nonzero(inliers)))
 
     out_shape = (left.shape[0], left.shape[1] + right.shape[1])
 
-    combined_right = warp(right, M, output_shape=out_shape, preserve_range=True, order=5)
+    combined_right = warp(right, M, output_shape=out_shape, preserve_range=True, order=3)
 
     combined_left = np.zeros(out_shape)
     combined_left[:, :left.shape[1]] = left
@@ -90,13 +92,13 @@ for im in imlist:
 
     imsave('{}.tif'.format(im), combined.astype(np.uint8))
 
-    out_gd = gdal.Open('{}.tif'.format(im), gdal.GA_Update)
-    out_meta = out_gd.GetMetadata_Dict()
+    # out_gd = gdal.Open('{}.tif'.format(im), gdal.GA_Update)
+    # out_meta = out_gd.GetMetadata_Dict()
 
-    out_meta['TIFFTAG_XRESOLUTION'] = str(xres)
-    out_meta['TIFFTAG_YRESOLUTION'] = str(yres)
+    # out_meta['TIFFTAG_XRESOLUTION'] = str(xres)
+    # out_meta['TIFFTAG_YRESOLUTION'] = str(yres)
 
-    out_gd.SetMetadata(out_meta)
+    # out_gd.SetMetadata(out_meta)
 
     # img = pyvips.Image.new_from_file('tmp.tif', memory=True)
     # img_bal = img.hist_equal()
