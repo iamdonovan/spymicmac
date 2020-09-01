@@ -10,7 +10,9 @@ import lxml.etree as etree
 import lxml.builder as builder
 import difflib
 import xml.etree.ElementTree as ET
+from shapely.strtree import STRtree
 from skimage.io import imread
+from pybob.bob_tools import mkdir_p
 from sPyMicMac.usgs_tools import get_usgs_footprints
 
 
