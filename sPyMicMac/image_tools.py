@@ -215,7 +215,7 @@ def keypoint_grid(img, spacing=25, size=10):
     return [cv2.KeyPoint(pt[0], pt[1], size) for pt in _grid]
 
 
-def get_dense_keypoints(img, mask, npix=200, nblocks=None, return_des=False):
+def get_dense_keypoints(img, mask, npix=100, nblocks=None, return_des=False):
     orb = cv2.ORB_create()
     keypts = []
     if return_des:
@@ -263,9 +263,11 @@ def get_footprint_overlap(fprints):
     for poly in fprints['geometry']:
         merged = cascaded_union([fprints.loc[pos, 'geometry'] for pos in idx.intersection(poly.bounds) if fprints.loc[pos, 'geometry'] != poly])
         intersections.append(poly.intersection(merged))
+
     intersection = cascaded_union(intersections)
 
-    return intersection.minimum_rotated_rectangle
+    # return intersection.minimum_rotated_rectangle
+    return intersection
 
 
 def get_footprint_mask(shpfile, geoimg, filelist, fprint_out=False):
@@ -372,7 +374,7 @@ def get_initial_transformation(img1, img2, pRes=800, landmask=None, footmask=Non
 def get_matches(img1, img2, mask1=None, mask2=None, dense=False):
 
     if dense:
-        if np.any(np.array(img1.shape) < 200) or np.any(np.array(img2.shape) < 200):
+        if np.any(np.array(img1.shape) < 100) or np.any(np.array(img2.shape) < 100):
             kp1, des1 = get_dense_keypoints(img1.astype(np.uint8), mask1, nblocks=2, return_des=True)
             kp2, des2 = get_dense_keypoints(img2.astype(np.uint8), mask2, nblocks=2, return_des=True)
         else:
@@ -417,8 +419,8 @@ def find_grid_matches(tfm_img, refgeo, mask, initM=None, spacing=200, srcwin=40,
     peak_corrs = []
     res_imgs = []
 
-    jj = np.arange(0, tfm_img.shape[1], spacing)
-    ii = np.arange(0, tfm_img.shape[0], spacing)
+    jj = np.arange(spacing, refgeo.img.shape[1]-spacing+1, spacing)
+    ii = np.arange(spacing, refgeo.img.shape[0]-spacing+1, spacing)
 
     search_pts = []
 
@@ -434,8 +436,8 @@ def find_grid_matches(tfm_img, refgeo, mask, initM=None, spacing=200, srcwin=40,
                 res_imgs.append(np.nan)
                 continue
             try:
-                testchip, _, _ = make_template(tfm_img, (_i, _j), srcwin)
-                dst_chip, _, _ = make_template(refgeo.img, (_i, _j), dstwin)
+                testchip, _, _ = make_template(refgeo.img, (_i, _j), srcwin)
+                dst_chip, _, _ = make_template(tfm_img, (_i, _j), dstwin)
 
                 dst_chip[np.isnan(dst_chip)] = 0
 
@@ -471,14 +473,14 @@ def find_grid_matches(tfm_img, refgeo, mask, initM=None, spacing=200, srcwin=40,
     gcps = gpd.GeoDataFrame()
     gcps['pk_corr'] = peak_corrs
     gcps['z_corr'] = z_corrs
-    gcps['match_j'] = _dst[:, 0]  # points matched in master image
+    gcps['match_j'] = _dst[:, 0]  # points matched in transformed image
     gcps['match_i'] = _dst[:, 1]
 
     if initM is not None:
-        # have to find the initial, which means back-transforming search_pts with Minit_full
-        _src = np.dot(initM.params, np.hstack([search_pts,
-                                               np.ones(search_pts[:, 0].shape).reshape(-1, 1)]).T).T[:, :2]
-        gcps['orig_j'] = _src[:, 0]  # this should be the back-transformed search_pts
+        # have to find the initial, which means back-transforming match_pts with Minit_full
+        # _src = np.dot(initM.params, np.hstack([_dst, np.ones(_dst[:, 0].shape).reshape(-1, 1)]).T).T[:, :2]
+        _src = initM(_dst)
+        gcps['orig_j'] = _src[:, 0]  # this should be the back-transformed match_pts
         gcps['orig_i'] = _src[:, 1]
 
     gcps['search_j'] = search_pts[:, 0]
