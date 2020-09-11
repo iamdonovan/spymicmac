@@ -10,6 +10,7 @@ import lxml.etree as etree
 import lxml.builder as builder
 import difflib
 import xml.etree.ElementTree as ET
+from shapely.strtree import STRtree
 from sPyMicMac.usgs_tools import get_usgs_footprints
 
 
