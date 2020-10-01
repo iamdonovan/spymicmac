@@ -254,6 +254,9 @@ def get_dense_keypoints(img, mask, npix=100, nblocks=None, return_des=False):
 
 
 def get_footprint_overlap(fprints):
+    if fprints.shape[0] == 1:
+        return fprints.geometry[0]
+
     idx = index.Index()
 
     for pos, row in fprints.iterrows():
@@ -419,8 +422,8 @@ def find_grid_matches(tfm_img, refgeo, mask, initM=None, spacing=200, srcwin=40,
     peak_corrs = []
     res_imgs = []
 
-    jj = np.arange(spacing, refgeo.img.shape[1]-spacing+1, spacing)
-    ii = np.arange(spacing, refgeo.img.shape[0]-spacing+1, spacing)
+    jj = np.arange(dstwin, refgeo.img.shape[1]-dstwin+1, spacing)
+    ii = np.arange(dstwin, refgeo.img.shape[0]-dstwin+1, spacing)
 
     search_pts = []
 
