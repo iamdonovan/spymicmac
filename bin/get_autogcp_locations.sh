@@ -2,9 +2,9 @@
 
 ori=$1
 meas_file=$2
-shift 2
+shift 3
 
-cp -r $ori $ori-NoDist
+cp -rv $ori $ori-NoDist
 tmp_autocal=$(ls $ori-NoDist/AutoCal*)
 new_autocal=$(echo $tmp_autocal | sed 's_/_\\/_g')
 
