@@ -41,7 +41,10 @@ def write_neighbour_images(imlist, fprints=None, nameField='ID', prefix='OIS-Ree
         res = s.query(fp)
         intersects = [c for c in res if fp.intersection(c).area > 0]
         fnames = [fprints[nameField][fprints['geometry'] == c].values[0] for c in intersects]
-        fnames.remove(fn)
+        try:
+            fnames.remove(fn)
+        except ValueError:
+            pass
 
         for f in fnames:
             this_pair = E.Cple(' '.join([prefix + fn + fileExt,
