@@ -26,6 +26,7 @@ def read_coords(result):
 
 
 def get_usgs_footprints(imglist, dataset='DECLASSII'):
+    # air photos: 'AERIAL_COMBIN'
     creds = get_login_creds()
 
     gdf = gpd.GeoDataFrame()
