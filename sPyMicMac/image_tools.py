@@ -10,6 +10,7 @@ from rtree import index
 from skimage import morphology
 from skimage.filters import rank
 from skimage import exposure, transform
+from skimage.morphology import binary_dilation, disk
 from skimage.measure import ransac
 from skimage.feature import peak_local_max
 from skimage.transform import match_histograms, warp, AffineTransform, EuclideanTransform
@@ -179,9 +180,13 @@ def get_subimg_offsets(split, shape, overlap=0):
     return rel_x.astype(int), rel_y.astype(int)
 
 
-def stretch_image(img, scale=(0,1), mult=255, outtype=np.uint8):
-    maxval = np.nanquantile(img, max(scale))
-    minval = np.nanquantile(img, min(scale))
+def stretch_image(img, scale=(0,1), mult=255, outtype=np.uint8, mask=None):
+    if mask is None:
+        maxval = np.nanquantile(img, max(scale))
+        minval = np.nanquantile(img, min(scale))
+    else:
+        maxval = np.nanquantile(img[mask], max(scale))
+        minval = np.nanquantile(img[mask], min(scale))
 
     img[img > maxval] = maxval
     img[img < minval] = minval
@@ -422,8 +427,8 @@ def find_grid_matches(tfm_img, refgeo, mask, initM=None, spacing=200, srcwin=40,
     peak_corrs = []
     res_imgs = []
 
-    jj = np.arange(dstwin, refgeo.img.shape[1]-dstwin+1, spacing)
-    ii = np.arange(dstwin, refgeo.img.shape[0]-dstwin+1, spacing)
+    jj = np.arange(srcwin, spacing * np.ceil((refgeo.img.shape[1]-srcwin) / spacing) + 1, spacing).astype(int)
+    ii = np.arange(srcwin, spacing * np.ceil((refgeo.img.shape[0]-srcwin) / spacing) + 1, spacing).astype(int)
 
     search_pts = []
 
@@ -432,7 +437,8 @@ def find_grid_matches(tfm_img, refgeo, mask, initM=None, spacing=200, srcwin=40,
             search_pts.append((_j, _i))
             # for pt in search_pts:
             # if mask[pt[1], pt[0]] == 0:
-            if mask[_i, _j] == 0:
+            submask, _, _ = make_template(mask, (_i, _j), srcwin)
+            if np.count_nonzero(submask) / submask.size < 0.05:
                 match_pts.append((-1, -1))
                 z_corrs.append(np.nan)
                 peak_corrs.append(np.nan)
@@ -442,10 +448,17 @@ def find_grid_matches(tfm_img, refgeo, mask, initM=None, spacing=200, srcwin=40,
                 testchip, _, _ = make_template(refgeo.img, (_i, _j), srcwin)
                 dst_chip, _, _ = make_template(tfm_img, (_i, _j), dstwin)
 
+                testchip[np.isnan(testchip)] = 0
                 dst_chip[np.isnan(dst_chip)] = 0
 
-                test = np.ma.masked_values(highpass_filter(testchip), 0)
-                dest = np.ma.masked_values(highpass_filter(dst_chip), 0)
+                test = highpass_filter(testchip)
+                dest = highpass_filter(dst_chip)
+
+                testmask = binary_dilation(testchip == 0, selem=disk(8))
+                destmask = binary_dilation(dst_chip == 0, selem=disk(8))
+
+                test[testmask] = np.random.rand(test.shape[0], test.shape[1])[testmask]
+                dest[destmask] = np.random.rand(dest.shape[0], dest.shape[1])[destmask]
 
                 corr_res, this_i, this_j = find_gcp_match(dest.astype(np.float32), test.astype(np.float32))
                 peak_corr = cv2.minMaxLoc(corr_res)[1]

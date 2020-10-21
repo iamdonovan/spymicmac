@@ -192,8 +192,7 @@ lowres_ = int(args.init_res / args.ortho_res)
 
 ortho_lowres = np.array(ortho_.resize((np.array(ortho_.size) / lowres_).astype(int), Image.LANCZOS))
 
-mst_lowres = mst.resample(args.init_res, method=gdal.GRA_Lanczos)
-mst_eq = imtools.stretch_image(mst_lowres.img, scale=(0.05, 0.95))
+mst_lowres = mst.resample(args.init_res)
 
 if args.footprints is not None:
     fmask, fprint = imtools.get_footprint_mask(args.footprints, mst_lowres, imlist, fprint_out=True)
@@ -202,6 +201,9 @@ else:
     print('Attempting to get image footprints from USGS EarthExplorer.')
     _fprints = get_usgs_footprints(clean_imlist, dataset=args.imgsource)
     fmask, fprint = imtools.get_footprint_mask(_fprints, mst_lowres, imlist, fprint_out=True)
+
+mst_eq = imtools.stretch_image(mst_lowres.img.copy(), scale=(0.05, 0.95), mask=fmask)
+mst_lowres = mst_lowres.copy(new_raster=mst_eq)
 
 lowres_mask = imtools.make_binary_mask(mst_lowres.img, erode=3, mask_value=np.nan)
 if args.landmask is not None:
@@ -230,22 +232,32 @@ else:
     dst_pts = np.array([kp[1][m.trainIdx].pt for m in matches])
 
     M, inliers = ransac((dst_pts, src_pts), EuclideanTransform,
-                        min_samples=10, residual_threshold=25, max_trials=10000)
+                        min_samples=10, residual_threshold=10, max_trials=10000)
+    resids = M.residuals(dst_pts, src_pts)[inliers]
     print('{} matches used for initial transformation'.format(np.count_nonzero(inliers)))
 
 rough_tfm = warp(ortho_lowres, M, output_shape=mst_lowres.img.shape, preserve_range=True)
 
-lowres_mask[gmask] = 255
+if args.glacmask is not None:
+    lowres_mask[gmask] = 255
 
-rough_gcps = imtools.find_grid_matches(rough_tfm, mst_lowres, lowres_mask, M, spacing=10, srcwin=25, dstwin=200)
+rough_gcps = imtools.find_grid_matches(rough_tfm, mst_lowres, lowres_mask, M, spacing=10, srcwin=40, dstwin=100)
+max_d = 100 - 40
+rough_gcps = rough_gcps[np.logical_and(rough_gcps.di.abs() < max_d, rough_gcps.dj.abs() < max_d)]
 
-best = np.logical_and.reduce((rough_gcps.pk_corr > rough_gcps.pk_corr.quantile(0.75),
-                              rough_gcps.z_corr > rough_gcps.z_corr.quantile(0.5),
-                              rough_tfm[rough_gcps.search_i, rough_gcps.search_j] > 0))
+# best = np.logical_and.reduce((rough_gcps.pk_corr > rough_gcps.pk_corr.quantile(0.25),
+#                               rough_gcps.z_corr > rough_gcps.z_corr.quantile(0.25)))
 
-Minit, inliers = ransac((rough_gcps.loc[best, ['search_j', 'search_i']].values,
-                         rough_gcps.loc[best, ['orig_j', 'orig_i']].values),
-                        AffineTransform, min_samples=10, residual_threshold=10, max_trials=5000)
+# Minit, inliers = ransac((rough_gcps.loc[best, ['search_j', 'search_i']].values,
+#                          rough_gcps.loc[best, ['orig_j', 'orig_i']].values),
+#                         AffineTransform, min_samples=10, residual_threshold=25, max_trials=5000)
+Minit, inliers = ransac((rough_gcps[['search_j', 'search_i']].values,
+                         rough_gcps[['orig_j', 'orig_i']].values),
+                        EuclideanTransform, min_samples=10, residual_threshold=25, max_trials=5000)
+
+rough_gcps['residuals'] = Minit.residuals(rough_gcps[['search_j', 'search_i']].values,
+                                          rough_gcps[['orig_j', 'orig_i']].values)
+# inliers = rough_gcps.residuals < min(10 * nmad(rough_gcps.residuals), 25)
 print('{} valid matches used for initial transformation'.format(np.count_nonzero(inliers)))
 
 ortho_tfm = warp(ortho_lowres, Minit, output_shape=mst_lowres.img.shape, preserve_range=True, order=5)
@@ -272,6 +284,9 @@ dst_tfm = np.array(dst_tfm).reshape(-1, 2)
 
 Minit_full, _ = ransac((dst_tfm, lowres_ * src_grd), AffineTransform, min_samples=3,
                        residual_threshold=1, max_trials=1000)
+# Minit_full = AffineTransform()
+# Minit_full.estimate((dst_tfm, lowres_ * src_grd))
+
 rough_tfm = warp(ortho, Minit_full, output_shape=mst.img.shape, preserve_range=True)
 
 mask_full = imtools.make_binary_mask(mst.img, mask_value=np.nan)
@@ -284,7 +299,7 @@ if args.glacmask is not None:
 mask_full[rough_tfm == 0] = 0
 
 # for each of these pairs (src, dst), find the precise subpixel match (or not...)
-gcps = imtools.find_grid_matches(rough_tfm, mst, mask_full, Minit_full, spacing=args.density, dstwin=400)
+gcps = imtools.find_grid_matches(rough_tfm, mst, mask_full, Minit_full, spacing=args.density, dstwin=600)
 
 xy = np.array([mst.ij2xy((pt[1], pt[0])) for pt in gcps[['search_j', 'search_i']].values]).reshape(-1, 2)
 gcps['geometry'] = [Point(pt) for pt in xy]
@@ -306,7 +321,7 @@ print('loading dems')
 dem = GeoImg(args.dem, dtype=np.float32)
 rel_dem = GeoImg(args.rel_dem)
 
-gcps.crs = {'init': 'epsg:{}'.format(mst.epsg)}
+# gcps.crs = {'init': 'epsg:{}'.format(mst.epsg)}
 for i, row in gcps.to_crs(crs=dem.proj4).iterrows():
     gcps.loc[i, 'elevation'] = dem.raster_points([(row.geometry.x, row.geometry.y)], nsize=3, mode='linear')
     gcps.loc[i, 'el_rel'] = rel_dem.raster_points([(row.rel_x, row.rel_y)], nsize=3, mode='linear')
@@ -352,7 +367,7 @@ print('running get_autogcp_locations.sh to get rough image locations for each po
 subprocess.Popen(['get_autogcp_locations.sh', 'Ori-{}'.format(args.ori),
                   os.path.join(out_dir, 'AutoMeasures{}.txt'.format(subscript))] + imlist).wait()
 
-# print('searching for points in non-orthorectified images')
+# print('searching for points in orthorectified images')
 print('finding image measures')
 mmtools.write_image_mesures(imlist, out_dir, subscript)
 
@@ -370,6 +385,8 @@ save_gcps(gcps, out_dir, utm_str, subscript)
 gcps = run_bascule(gcps, out_dir, match_pattern, subscript, args.ori)
 gcps['res_dist'] = np.sqrt(gcps.xres**2 + gcps.yres**2)
 
+gcps = gcps[gcps.res_dist < 5 * nmad(gcps.res_dist)]
+
 gcps = run_campari(gcps, out_dir, match_pattern, subscript, mst.dx, args.ortho_res)
 gcps['camp_dist'] = np.sqrt(gcps.camp_xres**2 + gcps.camp_yres**2)
 
@@ -379,7 +396,7 @@ gcps['camp_dist'] = np.sqrt(gcps.camp_xres**2 + gcps.camp_yres**2)
 niter = 0
 while all([np.any(gcps.camp_res > 5 * nmad(gcps.camp_res)),
            np.any(gcps.camp_dist > 5 * nmad(gcps.camp_dist)),
-           gcps.camp_res.max() > 2]) and niter < 3:
+           gcps.camp_res.max() > 2]) and niter < 5:
     gcps = gcps[np.logical_and.reduce((gcps.camp_res < 5 * nmad(gcps.camp_res),
                                        gcps.camp_res < gcps.camp_res.max(),
                                        gcps.z_corr > gcps.z_corr.min()))]
