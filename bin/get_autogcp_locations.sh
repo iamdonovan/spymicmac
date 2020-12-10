@@ -2,7 +2,7 @@
 
 ori=$1
 meas_file=$2
-shift 3
+shift 2
 
 cp -rv $ori $ori-NoDist
 tmp_autocal=$(ls $ori-NoDist/AutoCal*)
