@@ -175,7 +175,8 @@ if args.im_subset is None:
     match_pattern = 'OIS.*.tif'
 else:
     imlist = args.im_subset
-    match_pattern = mmtools.get_match_pattern(imlist)
+    # match_pattern = mmtools.get_match_pattern(imlist)
+    match_pattern = '|'.join(imlist)
 
 mst = GeoImg(args.master)
 
@@ -202,8 +203,20 @@ else:
     _fprints = get_usgs_footprints(clean_imlist, dataset=args.imgsource)
     fmask, fprint = imtools.get_footprint_mask(_fprints, mst_lowres, imlist, fprint_out=True)
 
-mst_eq = imtools.stretch_image(mst_lowres.img.copy(), scale=(0.05, 0.95), mask=fmask)
-mst_lowres = mst_lowres.copy(new_raster=mst_eq)
+fmask_geo = mst_lowres.copy(new_raster=fmask)
+
+xmin, ymin, xmax, ymax = fprint.bounds
+mst = mst.crop_to_extent([xmin, xmax, ymin, ymax], pixel_size=mst.dx)
+
+if isinstance(mst_lowres.img, np.ma.masked_array):
+    mst_eq = imtools.stretch_image(mst_lowres.img.data.copy(), scale=(0.02, 0.98), mask=fmask)
+else:
+    mst_eq = imtools.stretch_image(mst_lowres.img.copy(), scale=(0.02, 0.98), mask=fmask)
+
+mst_lowres = mst_lowres.copy(new_raster=mst_eq, datatype=gdal.GDT_Byte)
+
+mst_lowres = mst_lowres.crop_to_extent([xmin, xmax, ymin, ymax], pixel_size=args.init_res)
+fmask = fmask_geo.crop_to_extent([xmin, xmax, ymin, ymax], pixel_size=args.init_res).img == 1
 
 lowres_mask = imtools.make_binary_mask(mst_lowres.img, erode=3, mask_value=np.nan)
 if args.landmask is not None:
@@ -222,7 +235,7 @@ else:
     ortho_mask[ortho_lowres == 0] = 0
 
     kp, des, matches = imtools.get_matches(ortho_lowres.astype(np.uint8),
-                                           mst_eq.astype(np.uint8),
+                                           mst_lowres.img.astype(np.uint8),
                                            mask1=ortho_mask,
                                            mask2=lowres_mask,
                                            dense=True)
@@ -232,7 +245,7 @@ else:
     dst_pts = np.array([kp[1][m.trainIdx].pt for m in matches])
 
     M, inliers = ransac((dst_pts, src_pts), EuclideanTransform,
-                        min_samples=10, residual_threshold=10, max_trials=10000)
+                        min_samples=10, residual_threshold=20, max_trials=10000)
     resids = M.residuals(dst_pts, src_pts)[inliers]
     print('{} matches used for initial transformation'.format(np.count_nonzero(inliers)))
 
@@ -240,10 +253,14 @@ rough_tfm = warp(ortho_lowres, M, output_shape=mst_lowres.img.shape, preserve_ra
 
 if args.glacmask is not None:
     lowres_mask[gmask] = 255
+    lowres_mask[~fmask] = 0
 
-rough_gcps = imtools.find_grid_matches(rough_tfm, mst_lowres, lowres_mask, M, spacing=10, srcwin=40, dstwin=100)
+rough_gcps = imtools.find_grid_matches(rough_tfm, mst_lowres, lowres_mask, M, spacing=20, srcwin=40, dstwin=100)
 max_d = 100 - 40
-rough_gcps = rough_gcps[np.logical_and(rough_gcps.di.abs() < max_d, rough_gcps.dj.abs() < max_d)]
+rough_gcps = rough_gcps[np.logical_and.reduce([rough_gcps.di.abs() < max_d,
+                                               rough_gcps.di.abs() < 2 * nmad(rough_gcps.di),
+                                               rough_gcps.dj.abs() < max_d,
+                                               rough_gcps.dj.abs() < 2 * nmad(rough_gcps.dj)])]
 
 # best = np.logical_and.reduce((rough_gcps.pk_corr > rough_gcps.pk_corr.quantile(0.25),
 #                               rough_gcps.z_corr > rough_gcps.z_corr.quantile(0.25)))
@@ -266,7 +283,7 @@ dst_scale = mst_lowres.dx / mst.dx
 
 fig, ax = plt.subplots(1, 2, figsize=(7, 5))
 ax[0].imshow(ortho_tfm, cmap='gray')
-ax[1].imshow(mst_eq, cmap='gray')
+ax[1].imshow(mst_lowres.img, cmap='gray')
 
 plt.savefig('initial_transformation.png', dpi=200, bbox_inches='tight')
 
@@ -299,19 +316,21 @@ if args.glacmask is not None:
 mask_full[rough_tfm == 0] = 0
 
 # for each of these pairs (src, dst), find the precise subpixel match (or not...)
-gcps = imtools.find_grid_matches(rough_tfm, mst, mask_full, Minit_full, spacing=args.density, dstwin=600)
+gcps = imtools.find_grid_matches(rough_tfm, mst, mask_full, Minit_full, spacing=args.density, dstwin=400)
 
 xy = np.array([mst.ij2xy((pt[1], pt[0])) for pt in gcps[['search_j', 'search_i']].values]).reshape(-1, 2)
 gcps['geometry'] = [Point(pt) for pt in xy]
 
 # gcps = gcps[gcps.z_corr > gcps.z_corr.quantile(0.5)]
 
-fn_tfw = args.ortho.replace('.tif', '.tfw')
-with open(fn_tfw, 'r') as f:
-    gt = [float(l.strip()) for l in f.readlines()]
+if os.path.exists(args.ortho.replace('.tif', '.tfw')):
+    fn_tfw = args.ortho.replace('.tif', '.tfw')
+    with open(fn_tfw, 'r') as f:
+        gt = [float(l.strip()) for l in f.readlines()]
 
-gcps['rel_x'] = gt[4] + gcps['orig_j'].values * gt[0]  # need the original image coordinates
-gcps['rel_y'] = gt[5] + gcps['orig_i'].values * gt[3]
+    gcps['rel_x'] = gt[4] + gcps['orig_j'].values * gt[0]  # need the original image coordinates
+    gcps['rel_y'] = gt[5] + gcps['orig_i'].values * gt[3]
+
 gcps['elevation'] = 0
 gcps.crs = mst.proj4
 
@@ -324,7 +343,8 @@ rel_dem = GeoImg(args.rel_dem)
 # gcps.crs = {'init': 'epsg:{}'.format(mst.epsg)}
 for i, row in gcps.to_crs(crs=dem.proj4).iterrows():
     gcps.loc[i, 'elevation'] = dem.raster_points([(row.geometry.x, row.geometry.y)], nsize=3, mode='linear')
-    gcps.loc[i, 'el_rel'] = rel_dem.raster_points([(row.rel_x, row.rel_y)], nsize=3, mode='linear')
+    if os.path.exists(args.ortho.replace('.tif', '.tfw')):
+        gcps.loc[i, 'el_rel'] = rel_dem.raster_points([(row.rel_x, row.rel_y)], nsize=3, mode='linear')
 
 # drop any gcps where we don't have a DEM value or a valid match
 gcps.dropna(inplace=True)
