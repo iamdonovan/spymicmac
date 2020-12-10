@@ -205,7 +205,8 @@ else:
 
 fmask_geo = mst_lowres.copy(new_raster=fmask)
 
-xmin, ymin, xmax, ymax = fprint.bounds
+xmin, ymin, xmax, ymax = fprint.buffer(2000).bounds
+
 mst = mst.crop_to_extent([xmin, xmax, ymin, ymax], pixel_size=mst.dx)
 
 if isinstance(mst_lowres.img, np.ma.masked_array):
