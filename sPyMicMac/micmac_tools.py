@@ -2,6 +2,7 @@
 sPyMicMac.micmac_tools is a collection of tools for interfacing with MicMac
 """
 import os
+import subprocess
 import shutil
 import numpy as np
 import gdal
@@ -305,4 +306,48 @@ def move_bad_tapas(ori):
     for im in res_df['name'][np.isnan(res_df.residual)]:
         print('{} -> bad/{}'.format(im, im))
         shutil.move(im, 'bad')
+
+
+def run_bascule(in_gcps, outdir, img_pattern, sub, ori):
+    subprocess.Popen(['mm3d', 'GCPBascule', img_pattern, ori,
+                      'TerrainRelAuto{}'.format(sub),
+                      os.path.join(outdir, 'AutoGCPs{}.xml'.format(sub)),
+                      os.path.join(outdir, 'AutoMeasures{}-S2D.xml'.format(sub))]).wait()
+
+    out_gcps = get_bascule_residuals(os.path.join('Ori-TerrainRelAuto{}'.format(sub),
+                                                  'Result-GCP-Bascule.xml'), in_gcps)
+    return out_gcps
+
+
+def run_campari(in_gcps, outdir, img_pattern, sub, dx, ortho_res):
+    subprocess.Popen(['mm3d', 'Campari', img_pattern,
+                      'TerrainRelAuto{}'.format(sub),
+                      'TerrainFirstPass{}'.format(sub),
+                      'GCP=[{},{},{},{}]'.format(os.path.join(outdir, 'AutoGCPs{}.xml'.format(sub)),
+                                                 np.abs(dx),
+                                                 os.path.join(outdir, 'AutoMeasures{}-S2D.xml'.format(sub)),
+                                                 np.abs(dx / ortho_res)),
+                      'SH=Homol', 'AllFree=1']).wait()
+
+    out_gcps = get_campari_residuals('Ori-TerrainFirstPass{}/Residus.xml'.format(sub), in_gcps)
+    out_gcps.dropna(inplace=True)  # sometimes, campari can return no information for a gcp
+    return out_gcps
+
+
+def save_gcps(in_gcps, outdir, utmstr, sub):
+    in_gcps.to_file(os.path.join(outdir, 'AutoGCPs{}.shp'.format(sub)))
+    write_auto_gcps(in_gcps, sub, outdir, utmstr)
+    subprocess.Popen(['mm3d', 'GCPConvert', 'AppInFile',
+                      os.path.join(outdir, 'AutoGCPs{}.txt'.format(sub))]).wait()
+
+    auto_root = ET.parse(os.path.join(outdir, 'AutoMeasures{}-S2D.xml'.format(sub))).getroot()
+    for im in auto_root.findall('MesureAppuiFlottant1Im'):
+        for pt in im.findall('OneMesureAF1I'):
+            if pt.find('NamePt').text not in in_gcps.id.values:
+                im.remove(pt)
+
+    # save AutoMeasures
+    out_xml = ET.ElementTree(auto_root)
+    out_xml.write(os.path.join(outdir, 'AutoMeasures{}-S2D.xml'.format(sub)),
+                  encoding="utf-8", xml_declaration=True)
 
