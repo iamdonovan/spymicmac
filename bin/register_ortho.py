@@ -47,7 +47,7 @@ def main():
                    footprints=args.footprints,
                    im_subset=args.im_subset,
                    corr_thresh=args.corr_thresh,
-                   tfm_points=args.tfm_points,
+                   tfm_points=args.tfm_pts,
                    block_num=args.block,
                    ori=args.ori,
                    init_res=args.init_res,
