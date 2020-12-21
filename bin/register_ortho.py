@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 import argparse
 import os
+import re
 import subprocess
 import shutil
 from itertools import chain
@@ -174,9 +175,13 @@ if args.im_subset is None:
     imlist = glob('OIS*.tif')
     match_pattern = 'OIS.*.tif'
 else:
-    imlist = args.im_subset
-    # match_pattern = mmtools.get_match_pattern(imlist)
-    match_pattern = '|'.join(imlist)
+    if len(args.im_subset) > 1:
+        imlist = args.im_subset
+        # match_pattern = mmtools.get_match_pattern(imlist)
+        match_pattern = '|'.join(imlist)
+    else:
+        match_pattern = args.im_subset[0] + '.*tif'
+        imlist = [f for f in glob('OIS*.tif') if re.search(match_pattern, f)]
 
 mst = GeoImg(args.master)
 
