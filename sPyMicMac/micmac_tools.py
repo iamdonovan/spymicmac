@@ -309,10 +309,11 @@ def move_bad_tapas(ori):
 
 
 def run_bascule(in_gcps, outdir, img_pattern, sub, ori):
-    subprocess.Popen(['mm3d', 'GCPBascule', img_pattern, ori,
-                      'TerrainRelAuto{}'.format(sub),
-                      os.path.join(outdir, 'AutoGCPs{}.xml'.format(sub)),
-                      os.path.join(outdir, 'AutoMeasures{}-S2D.xml'.format(sub))]).wait()
+    p = subprocess.Popen(['mm3d', 'GCPBascule', img_pattern, ori,
+                          'TerrainRelAuto{}'.format(sub),
+                          os.path.join(outdir, 'AutoGCPs{}.xml'.format(sub)),
+                          os.path.join(outdir, 'AutoMeasures{}-S2D.xml'.format(sub))]).wait()
+    p.communicate(input='\n')
 
     out_gcps = get_bascule_residuals(os.path.join('Ori-TerrainRelAuto{}'.format(sub),
                                                   'Result-GCP-Bascule.xml'), in_gcps)
@@ -320,14 +321,15 @@ def run_bascule(in_gcps, outdir, img_pattern, sub, ori):
 
 
 def run_campari(in_gcps, outdir, img_pattern, sub, dx, ortho_res):
-    subprocess.Popen(['mm3d', 'Campari', img_pattern,
-                      'TerrainRelAuto{}'.format(sub),
-                      'TerrainFirstPass{}'.format(sub),
-                      'GCP=[{},{},{},{}]'.format(os.path.join(outdir, 'AutoGCPs{}.xml'.format(sub)),
-                                                 np.abs(dx),
-                                                 os.path.join(outdir, 'AutoMeasures{}-S2D.xml'.format(sub)),
-                                                 np.abs(dx / ortho_res)),
-                      'SH=Homol', 'AllFree=1']).wait()
+    p = subprocess.Popen(['mm3d', 'Campari', img_pattern,
+                          'TerrainRelAuto{}'.format(sub),
+                          'TerrainFirstPass{}'.format(sub),
+                          'GCP=[{},{},{},{}]'.format(os.path.join(outdir, 'AutoGCPs{}.xml'.format(sub)),
+                                                     np.abs(dx),
+                                                     os.path.join(outdir, 'AutoMeasures{}-S2D.xml'.format(sub)),
+                                                     np.abs(dx / ortho_res)),
+                          'SH=Homol', 'AllFree=1']).wait()
+    p.communicate(input='\n')
 
     out_gcps = get_campari_residuals('Ori-TerrainFirstPass{}/Residus.xml'.format(sub), in_gcps)
     out_gcps.dropna(inplace=True)  # sometimes, campari can return no information for a gcp
@@ -337,8 +339,9 @@ def run_campari(in_gcps, outdir, img_pattern, sub, dx, ortho_res):
 def save_gcps(in_gcps, outdir, utmstr, sub):
     in_gcps.to_file(os.path.join(outdir, 'AutoGCPs{}.shp'.format(sub)))
     write_auto_gcps(in_gcps, sub, outdir, utmstr)
-    subprocess.Popen(['mm3d', 'GCPConvert', 'AppInFile',
-                      os.path.join(outdir, 'AutoGCPs{}.txt'.format(sub))]).wait()
+    p = subprocess.Popen(['mm3d', 'GCPConvert', 'AppInFile',
+                          os.path.join(outdir, 'AutoGCPs{}.txt'.format(sub))]).wait()
+    p.communicate(input='\n')
 
     auto_root = ET.parse(os.path.join(outdir, 'AutoMeasures{}-S2D.xml'.format(sub))).getroot()
     for im in auto_root.findall('MesureAppuiFlottant1Im'):
