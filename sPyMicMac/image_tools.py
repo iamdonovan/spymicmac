@@ -260,7 +260,7 @@ def get_dense_keypoints(img, mask, npix=100, nblocks=None, return_des=False):
 
 def get_footprint_overlap(fprints):
     if fprints.shape[0] == 1:
-        return fprints.geometry[0]
+        return fprints.geometry.values[0]
 
     idx = index.Index()
 
@@ -383,8 +383,8 @@ def get_matches(img1, img2, mask1=None, mask2=None, dense=False):
 
     if dense:
         if np.any(np.array(img1.shape) < 100) or np.any(np.array(img2.shape) < 100):
-            kp1, des1 = get_dense_keypoints(img1.astype(np.uint8), mask1, nblocks=2, return_des=True)
-            kp2, des2 = get_dense_keypoints(img2.astype(np.uint8), mask2, nblocks=2, return_des=True)
+            kp1, des1 = get_dense_keypoints(img1.astype(np.uint8), mask1, nblocks=1, return_des=True)
+            kp2, des2 = get_dense_keypoints(img2.astype(np.uint8), mask2, nblocks=1, return_des=True)
         else:
             kp1, des1 = get_dense_keypoints(img1.astype(np.uint8), mask1, return_des=True)
             kp2, des2 = get_dense_keypoints(img2.astype(np.uint8), mask2, return_des=True)
@@ -421,7 +421,8 @@ def find_gcp_match(img, template, method=cv2.TM_CCORR_NORMED):
 
     return res, maxi + i_off + sp_dely, maxj + j_off + sp_delx
 
-def find_grid_matches(tfm_img, refgeo, mask, initM=None, spacing=200, srcwin=40, dstwin=600):
+
+def find_grid_matches(tfm_img, refgeo, mask, initM=None, spacing=200, srcwin=60, dstwin=600):
     match_pts = []
     z_corrs = []
     peak_corrs = []
