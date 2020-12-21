@@ -221,6 +221,7 @@ def register_ortho(fn_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, landmask=
     ax[1].imshow(ref_lowres.img, cmap='gray')
 
     plt.savefig('initial_transformation{}.png'.format(subscript), dpi=200, bbox_inches='tight')
+    plt.close(fig)
 
     i_ = np.arange(0, ortho_lowres.shape[0], 10)
     j_ = np.arange(0, ortho_lowres.shape[1], 10)
