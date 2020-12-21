@@ -41,7 +41,7 @@ def main():
     parser = _argparser()
     args = parser.parse_args()
 
-    register_ortho(args.fn_ortho, args.fn_ref, args.fn_reldem, args.fn_reldm,
+    register_ortho(args.fn_ortho, args.fn_ref, args.fn_reldem, args.fn_dem,
                    glacmask=args.glacmask,
                    landmask=args.landmask,
                    footprints=args.footprints,
