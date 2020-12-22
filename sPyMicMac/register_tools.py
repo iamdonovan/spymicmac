@@ -15,6 +15,8 @@ from glob import glob
 from shapely.geometry.point import Point
 from skimage.io import imread
 from skimage.measure import ransac
+from skimage.filters import median
+from skimage.morphology import disk
 from skimage.transform import EuclideanTransform, AffineTransform, warp
 from pybob.bob_tools import mkdir_p
 from pybob.ddem_tools import nmad
@@ -146,6 +148,8 @@ def register_ortho(fn_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, landmask=
     utm_str = get_utm_str(ref_img)
 
     ortho = imread(fn_ortho)
+    ortho = median(ortho, selem=disk(1))
+
     ortho_ = Image.fromarray(ortho)
 
     lowres_ = int(init_res / ortho_res)
@@ -254,6 +258,8 @@ def register_ortho(fn_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, landmask=
     # for each of these pairs (src, dst), find the precise subpixel match (or not...)
     gcps = imtools.find_grid_matches(rough_tfm, ref_img, mask_full, Minit_full, spacing=density, dstwin=400)
 
+    gcps = gcps[mask_full[gcps.search_i, gcps.search_j] == 255]
+
     max_d = 400 - 60
 
     gcps = gcps[np.logical_and.reduce([gcps.di.abs() < max_d,
@@ -357,7 +363,7 @@ def register_ortho(fn_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, landmask=
     niter = 0
     while any([np.any(gcps.camp_res > 5 * nmad(gcps.camp_res)),
                np.any(gcps.camp_dist > 5 * nmad(gcps.camp_dist)),
-               gcps.camp_res.max() > 2]) and niter < 5:
+               gcps.camp_res.max() > 2]) and niter <= 5:
         gcps = gcps[np.logical_and.reduce((gcps.camp_res < 5 * nmad(gcps.camp_res),
                                            gcps.camp_res < gcps.camp_res.max(),
                                            gcps.z_corr > gcps.z_corr.min()))]
