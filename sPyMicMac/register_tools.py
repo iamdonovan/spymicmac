@@ -190,13 +190,13 @@ def register_ortho(fn_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, landmask=
 
     M = get_lowres_transform(ortho_lowres, ref_lowres, fprint, lowres_mask, imgsource=imgsource)
 
-    rough_tfm = warp(ortho_lowres, M, output_shape=ref_lowres.img.shape, preserve_range=True)
+    init_tfm = warp(ortho_lowres, M, output_shape=ref_lowres.img.shape, preserve_range=True)
 
     if glacmask is not None:
         lowres_mask[gmask] = 255
         lowres_mask[~fmask] = 0
 
-    rough_gcps = imtools.find_grid_matches(rough_tfm, ref_lowres, lowres_mask, M, spacing=20, srcwin=40, dstwin=100)
+    rough_gcps = imtools.find_grid_matches(init_tfm, ref_lowres, lowres_mask, M, spacing=20, srcwin=40, dstwin=100)
     max_d = 100 - 40
     rough_gcps = rough_gcps[np.logical_and.reduce([rough_gcps.di.abs() < max_d,
                                                    rough_gcps.di.abs() < 2 * nmad(rough_gcps.di),
@@ -254,6 +254,13 @@ def register_ortho(fn_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, landmask=
     # for each of these pairs (src, dst), find the precise subpixel match (or not...)
     gcps = imtools.find_grid_matches(rough_tfm, ref_img, mask_full, Minit_full, spacing=density, dstwin=400)
 
+    max_d = 400 - 60
+
+    gcps = gcps[np.logical_and.reduce([gcps.di.abs() < max_d,
+                                       gcps.di.abs() < 2 * nmad(gcps.di),
+                                       gcps.dj.abs() < max_d,
+                                       gcps.dj.abs() < 2 * nmad(gcps.dj)])]
+
     xy = np.array([ref_img.ij2xy((pt[1], pt[0])) for pt in gcps[['search_j', 'search_i']].values]).reshape(-1, 2)
     gcps['geometry'] = [Point(pt) for pt in xy]
 
@@ -290,18 +297,20 @@ def register_ortho(fn_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, landmask=
     Mref, inliers_ref = ransac((gcps[['search_j', 'search_i']].values, gcps[['match_j', 'match_i']].values),
                                AffineTransform, min_samples=6, residual_threshold=20, max_trials=5000)
 
+    gcps['aff_resid'] = Mref.residuals(gcps[['search_j', 'search_i']].values,
+                                       gcps[['match_j', 'match_i']].values)
+
     gcps_orig = gcps.copy()
 
     gcps = gcps[inliers_ref]
 
-    out = sliding_window_filter([ortho.shape[1], ortho.shape[0]], gcps,
-                                1000, mindist=500, how='z_corr', is_ascending=False)
+    # out = sliding_window_filter([ortho.shape[1], ortho.shape[0]], gcps,
+    #                             1000, mindist=500, how='z_corr', is_ascending=False)
+    # gcps = gcps.loc[out]
 
-    gcps = gcps.loc[out]
-
-    Mfin, inliers_fin = ransac((gcps[['search_j', 'search_i']].values, gcps[['match_j', 'match_i']].values),
-                               AffineTransform, min_samples=6, residual_threshold=20, max_trials=5000)
-    gcps = gcps[inliers_fin]
+    # Mfin, inliers_fin = ransac((gcps[['search_j', 'search_i']].values, gcps[['match_j', 'match_i']].values),
+    #                            AffineTransform, min_samples=6, residual_threshold=20, max_trials=5000)
+    # gcps = gcps[inliers_fin]
 
     print('{} valid matches found'.format(gcps.shape[0]))
 
@@ -346,7 +355,7 @@ def register_ortho(fn_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, landmask=
     #     out = sliding_window_filter([ortho.shape[1], ortho.shape[0]], gcps, 2000, mindist=1000, how='camp_dist')
     #    gcps = gcps.loc[out]
     niter = 0
-    while all([np.any(gcps.camp_res > 5 * nmad(gcps.camp_res)),
+    while any([np.any(gcps.camp_res > 5 * nmad(gcps.camp_res)),
                np.any(gcps.camp_dist > 5 * nmad(gcps.camp_dist)),
                gcps.camp_res.max() > 2]) and niter < 5:
         gcps = gcps[np.logical_and.reduce((gcps.camp_res < 5 * nmad(gcps.camp_res),
@@ -383,4 +392,3 @@ def register_ortho(fn_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, landmask=
                    glob('NoDist-OIS*.tif.txt'):
         os.remove(txtfile)
     print('end.')
-
