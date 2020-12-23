@@ -309,11 +309,11 @@ def move_bad_tapas(ori):
 
 
 def run_bascule(in_gcps, outdir, img_pattern, sub, ori):
+    echo = subprocess.Popen('echo', stdout=subprocess.PIPE)
     p = subprocess.Popen(['mm3d', 'GCPBascule', img_pattern, ori,
                           'TerrainRelAuto{}'.format(sub),
                           os.path.join(outdir, 'AutoGCPs{}.xml'.format(sub)),
-                          os.path.join(outdir, 'AutoMeasures{}-S2D.xml'.format(sub))])
-    p.communicate(input='\n')
+                          os.path.join(outdir, 'AutoMeasures{}-S2D.xml'.format(sub))], stdin=echo.stdout)
     p.wait()
 
     out_gcps = get_bascule_residuals(os.path.join('Ori-TerrainRelAuto{}'.format(sub),
@@ -322,6 +322,7 @@ def run_bascule(in_gcps, outdir, img_pattern, sub, ori):
 
 
 def run_campari(in_gcps, outdir, img_pattern, sub, dx, ortho_res):
+    echo = subprocess.Popen('echo', stdout=subprocess.PIPE)
     p = subprocess.Popen(['mm3d', 'Campari', img_pattern,
                           'TerrainRelAuto{}'.format(sub),
                           'TerrainFirstPass{}'.format(sub),
@@ -329,8 +330,7 @@ def run_campari(in_gcps, outdir, img_pattern, sub, dx, ortho_res):
                                                      np.abs(dx),
                                                      os.path.join(outdir, 'AutoMeasures{}-S2D.xml'.format(sub)),
                                                      np.abs(dx / ortho_res)),
-                          'SH=Homol', 'AllFree=1'])
-    p.communicate(input='\n')
+                          'SH=Homol', 'AllFree=1'], stdin=echo.stdout)
     p.wait()
 
     out_gcps = get_campari_residuals('Ori-TerrainFirstPass{}/Residus.xml'.format(sub), in_gcps)
@@ -341,9 +341,9 @@ def run_campari(in_gcps, outdir, img_pattern, sub, dx, ortho_res):
 def save_gcps(in_gcps, outdir, utmstr, sub):
     in_gcps.to_file(os.path.join(outdir, 'AutoGCPs{}.shp'.format(sub)))
     write_auto_gcps(in_gcps, sub, outdir, utmstr)
+    echo = subprocess.Popen('echo', stdout=subprocess.PIPE)
     p = subprocess.Popen(['mm3d', 'GCPConvert', 'AppInFile',
-                          os.path.join(outdir, 'AutoGCPs{}.txt'.format(sub))])
-    p.communicate(input='\n')
+                          os.path.join(outdir, 'AutoGCPs{}.txt'.format(sub))], stdin=echo.stdout)
     p.wait()
 
     auto_root = ET.parse(os.path.join(outdir, 'AutoMeasures{}-S2D.xml'.format(sub))).getroot()
