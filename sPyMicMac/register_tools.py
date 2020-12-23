@@ -25,6 +25,7 @@ from pybob.GeoImg import GeoImg
 import sPyMicMac.image_tools as imtools
 import sPyMicMac.micmac_tools as mmtools
 from sPyMicMac.usgs_tools import get_usgs_footprints
+from IPython import embed
 
 
 def sliding_window_filter(img_shape, pts_df, winsize, stepsize=None, mindist=2000, how='residual', is_ascending=True):
@@ -258,6 +259,9 @@ def register_ortho(fn_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, landmask=
     # for each of these pairs (src, dst), find the precise subpixel match (or not...)
     gcps = imtools.find_grid_matches(rough_tfm, ref_img, mask_full, Minit_full, spacing=density, dstwin=400)
 
+    xy = np.array([ref_img.ij2xy((pt[1], pt[0])) for pt in gcps[['search_j', 'search_i']].values]).reshape(-1, 2)
+    gcps['geometry'] = [Point(pt) for pt in xy]
+
     gcps = gcps[mask_full[gcps.search_i, gcps.search_j] == 255]
 
     max_d = 400 - 60
@@ -266,9 +270,6 @@ def register_ortho(fn_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, landmask=
                                        gcps.di.abs() < 2 * nmad(gcps.di),
                                        gcps.dj.abs() < max_d,
                                        gcps.dj.abs() < 2 * nmad(gcps.dj)])]
-
-    xy = np.array([ref_img.ij2xy((pt[1], pt[0])) for pt in gcps[['search_j', 'search_i']].values]).reshape(-1, 2)
-    gcps['geometry'] = [Point(pt) for pt in xy]
 
     # gcps = gcps[gcps.z_corr > gcps.z_corr.quantile(0.5)]
 
@@ -310,9 +311,10 @@ def register_ortho(fn_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, landmask=
 
     gcps = gcps[inliers_ref]
 
-    # out = sliding_window_filter([ortho.shape[1], ortho.shape[0]], gcps,
-    #                             1000, mindist=500, how='z_corr', is_ascending=False)
-    # gcps = gcps.loc[out]
+    out = sliding_window_filter([ortho.shape[1], ortho.shape[0]], gcps,
+                                min(1000, ortho.shape[1] / 4, ortho.shape[0] / 4),
+                                mindist=400, how='z_corr', is_ascending=False)
+    gcps = gcps.loc[out]
 
     # Mfin, inliers_fin = ransac((gcps[['search_j', 'search_i']].values, gcps[['match_j', 'match_i']].values),
     #                            AffineTransform, min_samples=6, residual_threshold=20, max_trials=5000)
@@ -346,14 +348,15 @@ def register_ortho(fn_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, landmask=
     gcps = mmtools.run_bascule(gcps, out_dir, match_pattern, subscript, ori)
     gcps['res_dist'] = np.sqrt(gcps.xres**2 + gcps.yres**2)
 
-    gcps = gcps[gcps.res_dist < 5 * nmad(gcps.res_dist)]
+    gcps = gcps[gcps.res_dist < 3 * nmad(gcps.res_dist)]
 
     mmtools.save_gcps(gcps, out_dir, utm_str, subscript)
     gcps = mmtools.run_bascule(gcps, out_dir, match_pattern, subscript, ori)
     gcps['res_dist'] = np.sqrt(gcps.xres**2 + gcps.yres**2)
 
-    gcps = gcps[gcps.res_dist < 5 * nmad(gcps.res_dist)]
+    gcps = gcps[gcps.res_dist < 3 * nmad(gcps.res_dist)]
 
+    mmtools.save_gcps(gcps, out_dir, utm_str, subscript)
     gcps = mmtools.run_campari(gcps, out_dir, match_pattern, subscript, ref_img.dx, ortho_res)
     gcps['camp_dist'] = np.sqrt(gcps.camp_xres**2 + gcps.camp_yres**2)
 
@@ -361,15 +364,19 @@ def register_ortho(fn_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, landmask=
     #     out = sliding_window_filter([ortho.shape[1], ortho.shape[0]], gcps, 2000, mindist=1000, how='camp_dist')
     #    gcps = gcps.loc[out]
     niter = 0
-    while any([np.any(gcps.camp_res > 5 * nmad(gcps.camp_res)),
-               np.any(gcps.camp_dist > 5 * nmad(gcps.camp_dist)),
+    while any([np.any(gcps.camp_res > 4 * nmad(gcps.camp_res)),
+               np.any(gcps.camp_dist > 4 * nmad(gcps.camp_dist)),
                gcps.camp_res.max() > 2]) and niter <= 5:
-        gcps = gcps[np.logical_and.reduce((gcps.camp_res < 5 * nmad(gcps.camp_res),
+        valid_inds = np.logical_and.reduce((gcps.camp_res < 4 * nmad(gcps.camp_res),
                                            gcps.camp_res < gcps.camp_res.max(),
-                                           gcps.z_corr > gcps.z_corr.min()))]
+                                           gcps.z_corr > gcps.z_corr.min()))
+        if np.count_nonzero(valid_inds) < 10:
+            break
+
         mmtools.save_gcps(gcps, out_dir, utm_str, subscript)
         gcps = mmtools.run_bascule(gcps, out_dir, match_pattern, subscript, ori)
         gcps['res_dist'] = np.sqrt(gcps.xres ** 2 + gcps.yres ** 2)
+
         gcps = mmtools.run_campari(gcps, out_dir, match_pattern, subscript, ref_img.dx, ortho_res)
         gcps['camp_dist'] = np.sqrt(gcps.camp_xres**2 + gcps.camp_yres**2)
         niter += 1
@@ -398,3 +405,4 @@ def register_ortho(fn_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, landmask=
                    glob('NoDist-OIS*.tif.txt'):
         os.remove(txtfile)
     print('end.')
+    # embed()
