@@ -196,7 +196,7 @@ def register_ortho(fn_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, landmask=
     if tfm_points is not None:
         pts = pd.read_csv(tfm_points)
         src = pts[['J', 'I']].values * lowres_
-        dst = np.array([ref_lowres.xy2ij((row.X, row.Y) for i, row in pts.iterrows())])
+        dst = np.array([ref_lowres.xy2ij((row.X, row.Y)) for i, row in pts.iterrows()])
         M = EuclideanTransform()
         M.estimate(src, dst[:, ::-1])
     else:
