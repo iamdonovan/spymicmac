@@ -330,7 +330,7 @@ def run_campari(in_gcps, outdir, img_pattern, sub, dx, ortho_res):
                                                      np.abs(dx),
                                                      os.path.join(outdir, 'AutoMeasures{}-S2D.xml'.format(sub)),
                                                      np.abs(dx / ortho_res)),
-                          'SH=Homol', 'AllFree=1'], stdin=echo.stdout)
+                          'SH=Homol', 'AllFree=1', 'CPI1=1'], stdin=echo.stdout)
     p.wait()
 
     out_gcps = get_campari_residuals('Ori-TerrainFirstPass{}/Residus.xml'.format(sub), in_gcps)
