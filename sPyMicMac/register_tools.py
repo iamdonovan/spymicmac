@@ -16,7 +16,7 @@ from shapely.geometry.point import Point
 from skimage.io import imread
 from skimage.measure import ransac
 from skimage.filters import median
-from skimage.morphology import disk
+from skimage.morphology import disk, binary_dilation
 from skimage.transform import EuclideanTransform, AffineTransform, warp
 from pybob.bob_tools import mkdir_p
 from pybob.ddem_tools import nmad
@@ -91,7 +91,7 @@ def get_lowres_transform(lowres, ref, fprint, ref_mask, imgsource='DECLASSII'):
     else:
         try:
             ortho_mask = 255 * np.ones(lowres.shape, dtype=np.uint8)
-            ortho_mask[lowres == 0] = 0
+            ortho_mask[binary_dilation(lowres == 0, selem=disk(5))] = 0
 
             kp, des, matches = imtools.get_matches(lowres.astype(np.uint8),
                                                    ref.img.astype(np.uint8),
@@ -193,13 +193,20 @@ def register_ortho(fn_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, landmask=
 
     lowres_mask[~fmask] = 0
 
-    M = get_lowres_transform(ortho_lowres, ref_lowres, fprint, lowres_mask, imgsource=imgsource)
+    if tfm_points is not None:
+        pts = pd.read_csv(tfm_points)
+        src = pts[['J', 'I']].values * lowres_
+        dst = np.array([ref_lowres.xy2ij((row.X, row.Y) for i, row in pts.iterrows())])
+        M = EuclideanTransform()
+        M.estimate(src, dst[:, ::-1])
+    else:
+        M = get_lowres_transform(ortho_lowres, ref_lowres, fprint, lowres_mask, imgsource=imgsource)
 
     init_tfm = warp(ortho_lowres, M, output_shape=ref_lowres.img.shape, preserve_range=True)
 
-    if glacmask is not None:
-        lowres_mask[gmask] = 255
-        lowres_mask[~fmask] = 0
+    # if glacmask is not None:
+    #   lowres_mask[gmask] = 255
+    #    lowres_mask[~fmask] = 0
 
     rough_gcps = imtools.find_grid_matches(init_tfm, ref_lowres, lowres_mask, M, spacing=20, srcwin=40, dstwin=100)
     max_d = 100 - 40
@@ -313,7 +320,7 @@ def register_ortho(fn_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, landmask=
 
     out = sliding_window_filter([ortho.shape[1], ortho.shape[0]], gcps,
                                 min(1000, ortho.shape[1] / 4, ortho.shape[0] / 4),
-                                mindist=400, how='z_corr', is_ascending=False)
+                                mindist=500, how='z_corr', is_ascending=False)
     gcps = gcps.loc[out]
 
     # Mfin, inliers_fin = ransac((gcps[['search_j', 'search_i']].values, gcps[['match_j', 'match_i']].values),
@@ -348,13 +355,13 @@ def register_ortho(fn_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, landmask=
     gcps = mmtools.run_bascule(gcps, out_dir, match_pattern, subscript, ori)
     gcps['res_dist'] = np.sqrt(gcps.xres**2 + gcps.yres**2)
 
-    gcps = gcps[gcps.res_dist < 3 * nmad(gcps.res_dist)]
+    gcps = gcps[gcps.res_dist < 4 * nmad(gcps.res_dist)]
 
     mmtools.save_gcps(gcps, out_dir, utm_str, subscript)
     gcps = mmtools.run_bascule(gcps, out_dir, match_pattern, subscript, ori)
     gcps['res_dist'] = np.sqrt(gcps.xres**2 + gcps.yres**2)
 
-    gcps = gcps[gcps.res_dist < 3 * nmad(gcps.res_dist)]
+    gcps = gcps[gcps.res_dist < 4 * nmad(gcps.res_dist)]
 
     mmtools.save_gcps(gcps, out_dir, utm_str, subscript)
     gcps = mmtools.run_campari(gcps, out_dir, match_pattern, subscript, ref_img.dx, ortho_res)
@@ -373,6 +380,7 @@ def register_ortho(fn_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, landmask=
         if np.count_nonzero(valid_inds) < 10:
             break
 
+        gcps = gcps.loc[valid_inds]
         mmtools.save_gcps(gcps, out_dir, utm_str, subscript)
         gcps = mmtools.run_bascule(gcps, out_dir, match_pattern, subscript, ori)
         gcps['res_dist'] = np.sqrt(gcps.xres ** 2 + gcps.yres ** 2)
