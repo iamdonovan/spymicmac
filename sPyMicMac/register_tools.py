@@ -195,7 +195,7 @@ def register_ortho(fn_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, landmask=
 
     if tfm_points is not None:
         pts = pd.read_csv(tfm_points)
-        src = pts[['J', 'I']].values * lowres_
+        src = pts[['J', 'I']].values / lowres_
         dst = np.array([ref_lowres.xy2ij((row.X, row.Y)) for i, row in pts.iterrows()])
         M = EuclideanTransform()
         M.estimate(src, dst[:, ::-1])
@@ -211,9 +211,11 @@ def register_ortho(fn_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, landmask=
     rough_gcps = imtools.find_grid_matches(init_tfm, ref_lowres, lowres_mask, M, spacing=20, srcwin=40, dstwin=100)
     max_d = 100 - 40
     rough_gcps = rough_gcps[np.logical_and.reduce([rough_gcps.di.abs() < max_d,
-                                                   rough_gcps.di.abs() < 2 * nmad(rough_gcps.di),
+                                                   rough_gcps.di < rough_gcps.di.median() + 2 * nmad(rough_gcps.di),
+                                                   rough_gcps.di > rough_gcps.di.median() - 2 * nmad(rough_gcps.di),
                                                    rough_gcps.dj.abs() < max_d,
-                                                   rough_gcps.dj.abs() < 2 * nmad(rough_gcps.dj)])]
+                                                   rough_gcps.dj < rough_gcps.dj.median() + 2 * nmad(rough_gcps.dj),
+                                                   rough_gcps.dj > rough_gcps.dj.median() - 2 * nmad(rough_gcps.dj)])]
 
     Minit, inliers = ransac((rough_gcps[['search_j', 'search_i']].values,
                              rough_gcps[['orig_j', 'orig_i']].values),
