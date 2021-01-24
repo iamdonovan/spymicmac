@@ -14,6 +14,7 @@ import xml.etree.ElementTree as ET
 from shapely.strtree import STRtree
 from skimage.io import imread
 from pybob.bob_tools import mkdir_p
+from pybob.GeoImg import GeoImg
 from sPyMicMac.usgs_tools import get_usgs_footprints
 
 
@@ -179,17 +180,21 @@ def get_valid_image_points(shape, pts, pts_nodist):
     return np.logical_and(in_im, in_nd)
 
 
-def write_image_mesures(imlist, out_dir='.', subscript=''):
+def write_image_mesures(imlist, gcps, out_dir='.', subscript='', ort_dir='Ortho-MEC-Relative'):
     E = builder.ElementMaker()
     MesureSet = E.SetOfMesureAppuisFlottants()
 
     for im in imlist:
         print(im)
-        img = imread(im)
+        img_geo = GeoImg(os.path.join(ort_dir, 'Ort_' + im))
         impts = pd.read_csv('Auto-{}.txt'.format(im), sep=' ', names=['j', 'i'])
-        impts_nodist = pd.read_csv('NoDist-{}.txt'.format(im), sep=' ', names=['j', 'i'])
+        # impts_nodist = pd.read_csv('NoDist-{}.txt'.format(im), sep=' ', names=['j', 'i'])
 
-        valid_pts = get_valid_image_points(img.shape, impts, impts_nodist)
+        xmin, xmax, ymin, ymax = img_geo.find_valid_bbox()
+
+        # valid_pts = get_valid_image_points(img.shape, impts, impts_nodist)
+        valid_pts = np.logical_and.reduce([xmin <= gcps.rel_x, gcps.rel_x < xmax,
+                                           ymin <= gcps.rel_y, gcps.rel_y < ymax])
 
         if np.count_nonzero(valid_pts) == 0:
             continue
