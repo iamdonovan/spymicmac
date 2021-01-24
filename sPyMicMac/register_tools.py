@@ -142,6 +142,8 @@ def register_ortho(fn_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, landmask=
     else:
         subscript = ''
 
+    ort_dir = os.path.dirname(fn_ortho)
+
     imlist, match_pattern = get_imlist(im_subset)
 
     ref_img = GeoImg(fn_ref)
@@ -149,6 +151,7 @@ def register_ortho(fn_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, landmask=
     utm_str = get_utm_str(ref_img)
 
     ortho = imread(fn_ortho)
+
     ortho = median(ortho, selem=disk(1))
 
     ortho_ = Image.fromarray(ortho)
@@ -351,7 +354,7 @@ def register_ortho(fn_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, landmask=
 
     # print('searching for points in orthorectified images')
     print('finding image measures')
-    mmtools.write_image_mesures(imlist, out_dir, subscript)
+    mmtools.write_image_mesures(imlist, gcps, out_dir, subscript, ort_dir=ort_dir)
 
     print('running mm3d GCPBascule to estimate terrain errors')
     gcps = mmtools.run_bascule(gcps, out_dir, match_pattern, subscript, ori)
