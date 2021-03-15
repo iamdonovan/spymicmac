@@ -269,7 +269,7 @@ def register_ortho(fn_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, landmask=
     mask_full[rough_tfm == 0] = 0
 
     # for each of these pairs (src, dst), find the precise subpixel match (or not...)
-    gcps = imtools.find_grid_matches(rough_tfm, ref_img, mask_full, Minit_full, spacing=density, dstwin=400)
+    gcps = imtools.find_grid_matches(rough_tfm, ref_img, mask_full, Minit_full, spacing=density, dstwin=600)
 
     xy = np.array([ref_img.ij2xy((pt[1], pt[0])) for pt in gcps[['search_j', 'search_i']].values]).reshape(-1, 2)
     gcps['geometry'] = [Point(pt) for pt in xy]
@@ -326,7 +326,7 @@ def register_ortho(fn_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, landmask=
     out = sliding_window_filter([ortho.shape[1], ortho.shape[0]], gcps,
                                 min(1000, ortho.shape[1] / 4, ortho.shape[0] / 4),
                                 mindist=500, how='z_corr', is_ascending=False)
-    gcps = gcps.loc[out]
+    # gcps = gcps.loc[out]
 
     # Mfin, inliers_fin = ransac((gcps[['search_j', 'search_i']].values, gcps[['match_j', 'match_i']].values),
     #                            AffineTransform, min_samples=6, residual_threshold=20, max_trials=5000)
