@@ -11,6 +11,8 @@ import lxml.etree as etree
 import lxml.builder as builder
 import difflib
 import xml.etree.ElementTree as ET
+from shapely.geometry.point import Point
+from shapely.geometry import LineString
 from shapely.strtree import STRtree
 from skimage.io import imread
 from pybob.bob_tools import mkdir_p
@@ -39,6 +41,8 @@ def write_neighbour_images(imlist, fprints=None, nameField='ID', prefix='OIS-Ree
     for i, row in fprints.iterrows():
         fn = row[nameField]
         fp = row['geometry']
+
+        print(fn)
 
         res = s.query(fp)
         intersects = [c for c in res if fp.intersection(c).area > 0]
@@ -361,4 +365,151 @@ def save_gcps(in_gcps, outdir, utmstr, sub):
     out_xml = ET.ElementTree(auto_root)
     out_xml.write(os.path.join(outdir, 'AutoMeasures{}-S2D.xml'.format(sub)),
                   encoding="utf-8", xml_declaration=True)
+
+
+######################################################################################################################
+# orientation tools - used for visualizing, manipulating camera orientation files
+######################################################################################################################
+def load_orientation(fn_img, ori):
+    """
+
+    :param fn_img:
+    :param ori:
+    :return:
+    """
+    ori_root = ET.parse(os.path.join(ori, 'Orientation-{}.xml'.format(fn_img))).getroot()
+    if ori_root.tag != 'OrientationConique':
+        ori_coniq = ori_root.find('OrientationConique')
+    else:
+        ori_coniq = ori_root
+    centre = [float(p) for p in ori_coniq.find('Externe').find('Centre').text.split()]
+    rotMat = ori_coniq.find('Externe').find('ParamRotation').find('CodageMatr')
+
+    if rotMat is not None:
+        l1 = [float(p) for p in rotMat.find('L1').text.split()]
+        l2 = [float(p) for p in rotMat.find('L2').text.split()]
+        l3 = [float(p) for p in rotMat.find('L3').text.split()]
+    else:
+        l1 = [np.nan, np.nan, np.nan]
+        l2 = [np.nan, np.nan, np.nan]
+        l3 = [np.nan, np.nan, np.nan]
+
+    prof = ori_coniq.find('Externe').find('Profondeur')
+    if prof is not None:
+        prof = prof.text
+    else:
+        prof = np.nan
+
+    altisol = ori_coniq.find('Externe').find('AltiSol')
+    if altisol is not None:
+        altisol = altisol.text
+    else:
+        altisol = np.nan
+
+    return centre, l1, l2, l3, prof, altisol
+
+
+def load_all_orientation(imlist, ori):
+    """
+
+    :param imlist:
+    :param ori:
+    :return:
+    """
+    df = pd.DataFrame()
+    points = []
+    for i, fn_img in enumerate(imlist):
+        centre, l1, l2, l3, prof, altisol = load_orientation(fn_img, ori)
+
+        df.loc[i, 'name'] = fn_img
+        points.append(Point(centre[0], centre[1], centre[2]))
+        df.loc[i, 'x'] = centre[0]
+        df.loc[i, 'y'] = centre[1]
+        df.loc[i, 'z'] = centre[2]
+
+        df.loc[i, 'l11'] = l1[0]
+        df.loc[i, 'l12'] = l1[1]
+        df.loc[i, 'l13'] = l1[2]
+
+        df.loc[i, 'l21'] = l2[0]
+        df.loc[i, 'l22'] = l2[1]
+        df.loc[i, 'l23'] = l2[2]
+
+        df.loc[i, 'l31'] = l3[0]
+        df.loc[i, 'l32'] = l3[1]
+        df.loc[i, 'l33'] = l3[2]
+
+        df.loc[i, 'profondeur'] = prof
+        df.loc[i, 'altisol'] = altisol
+
+    df['geometry'] = points
+    return df
+
+
+def extend_line(df, first, last):
+    """
+
+    :param df:
+    :param first:
+    :param last:
+    :return:
+    """
+    firstImg = df.loc[df.name.str.contains(first), 'geometry'].values[0]
+    lastImg = df.loc[df.name.str.contains(last), 'geometry'].values[0]
+    dx = firstImg.x - lastImg.x
+    dy = firstImg.y - lastImg.y
+    dz = firstImg.z - lastImg.z
+    outpt = Point(firstImg.x + dx, firstImg.y + dy, firstImg.z + dz)
+
+    return outpt
+
+
+def interp_line(df, first, last, nimgs=None, pos=None):
+    """
+
+    :param df:
+    :param first:
+    :param last:
+    :param pos:
+    :return:
+    """
+    if nimgs is None:
+        nimgs = np.abs(int(last) - int(first)).astype(int)
+    firstImg = df.loc[df.name.str.contains(first), 'geometry'].values[0]
+    lastImg = df.loc[df.name.str.contains(last), 'geometry'].values[0]
+    flightLine = LineString([firstImg, lastImg])
+    avgDist = flightLine.length / nimgs
+    if pos is not None:
+        return flightLine.interpolate(pos * avgDist)
+    else:
+        ptList = []
+        for i in range(1, nimgs):
+            ptList.append((i, flightLine.interpolate(i * avgDist)))
+        return ptList
+
+
+def dem_to_text(fn_dem, fn_out='dem_pts.txt', spacing=100):
+    """
+
+    :param fn_dem:
+    :param spacing:
+    :return:
+    """
+    if isinstance(fn_dem, GeoImg):
+        dem = fn_dem
+    else:
+        dem = GeoImg(fn_dem)
+    x, y = dem.xy()
+
+    z = dem.img[::spacing, ::spacing].flatten()
+    x = x[::spacing, ::spacing].flatten()
+    y = y[::spacing, ::spacing].flatten()
+
+    x = x[np.isfinite(z)]
+    y = y[np.isfinite(z)]
+    z = z[np.isfinite(z)]
+
+    with open(fn_out, 'w') as f:
+        for pt in list(zip(x, y, z)):
+            print(pt[0], pt[1], pt[2], file=f)
 
