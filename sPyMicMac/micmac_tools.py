@@ -206,7 +206,7 @@ def write_image_mesures(imlist, gcps, out_dir='.', subscript='', ort_dir='Ortho-
         this_im_mes = E.MesureAppuiFlottant1Im(E.NameIm(im))
 
         for i, (ind, row) in enumerate(impts[valid_pts].iterrows()):
-            this_mes = E.OneMesureAF1I(E.NamePt('GCP{}'.format(ind)),
+            this_mes = E.OneMesureAF1I(E.NamePt(gcps.iloc[ind]['id']),
                                        E.PtIm('{} {}'.format(row.j, row.i)))
             this_im_mes.append(this_mes)
 
@@ -330,7 +330,7 @@ def run_bascule(in_gcps, outdir, img_pattern, sub, ori):
     return out_gcps
 
 
-def run_campari(in_gcps, outdir, img_pattern, sub, dx, ortho_res):
+def run_campari(in_gcps, outdir, img_pattern, sub, dx, ortho_res, allfree=1):
     echo = subprocess.Popen('echo', stdout=subprocess.PIPE)
     p = subprocess.Popen(['mm3d', 'Campari', img_pattern,
                           'TerrainRelAuto{}'.format(sub),
@@ -339,11 +339,11 @@ def run_campari(in_gcps, outdir, img_pattern, sub, dx, ortho_res):
                                                      np.abs(dx),
                                                      os.path.join(outdir, 'AutoMeasures{}-S2D.xml'.format(sub)),
                                                      np.abs(dx / ortho_res)),
-                          'SH=Homol', 'AllFree=1', 'CPI1=1'], stdin=echo.stdout)
+                          'SH=Homol', 'AllFree={}'.format(allfree)], stdin=echo.stdout)
     p.wait()
 
     out_gcps = get_campari_residuals('Ori-TerrainFirstPass{}/Residus.xml'.format(sub), in_gcps)
-    out_gcps.dropna(inplace=True)  # sometimes, campari can return no information for a gcp
+    # out_gcps.dropna(inplace=True)  # sometimes, campari can return no information for a gcp
     return out_gcps
 
 

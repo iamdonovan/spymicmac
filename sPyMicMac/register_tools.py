@@ -359,7 +359,7 @@ def register_ortho_old(fn_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, landm
     mask_full[rough_tfm == 0] = 0
 
     # for each of these pairs (src, dst), find the precise subpixel match (or not...)
-    gcps = imtools.find_grid_matches(rough_tfm, ref_img, mask_full, Minit_full, spacing=density, dstwin=400)
+    gcps = imtools.find_grid_matches(rough_tfm, ref_img, mask_full, Minit_full, spacing=density, dstwin=600)
 
     xy = np.array([ref_img.ij2xy((pt[1], pt[0])) for pt in gcps[['search_j', 'search_i']].values]).reshape(-1, 2)
     gcps['geometry'] = [Point(pt) for pt in xy]
