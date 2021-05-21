@@ -147,6 +147,7 @@ def transform_centers(img_gt, ref, imlist, footprints, ori):
         footprints.loc[i, 'name'] = 'OIS-Reech_' + row['ID'] + '.tif'
 
     join = footprints.set_index('name').join(rel_ori.set_index('name'), lsuffix='abs', rsuffix='rel')
+    join.dropna(inplace=True)
 
     ref_ij = np.array([ref.xy2ij((row.xabs, row.yabs)) for i, row in join.iterrows()])
     rel_ij = np.array([((row.xrel - img_gt[4]) / img_gt[0],
