@@ -154,7 +154,7 @@ def transform_centers(img_gt, ref, imlist, footprints, ori):
                         (row.yrel - img_gt[5]) / img_gt[3]) for i, row in join.iterrows()])
 
     model, inliers = ransac((ref_ij[:, ::-1], rel_ij), AffineTransform, min_samples=10, residual_threshold=4)
-    return model, inliers
+    return model, inliers, join
 
 
 def refine_lowres_tfm(rough_tfm, ref, mask, Minit):
@@ -180,6 +180,30 @@ def refine_lowres_tfm(rough_tfm, ref, mask, Minit):
                             rough_gcps[['orig_j', 'orig_i']].values),
                            AffineTransform, min_samples=10, residual_threshold=10, max_trials=5000)
     return Mref, inliers
+
+
+def scale_factor(centers, img_gt, ref):
+    """
+
+    :param centers:
+    :param img_gt:
+    :param ref:
+    :return:
+    """
+    ref_ij = np.array([ref.xy2ij((row.xabs, row.yabs)) for i, row in centers.iterrows()])
+    rel_ij = np.array([((row.xrel - img_gt[4]) / img_gt[0],
+                        (row.yrel - img_gt[5]) / img_gt[3]) for i, row in centers.iterrows()])
+    ref_pt = Point(ref_ij[0])
+    rel_pt = Point(rel_ij[0])
+
+    ref_dist = []
+    rel_dist = []
+
+    for i in range(1, ref_ij.shape[0]):
+        ref_dist.append(ref_pt.distance(Point(ref_ij[i])))
+        rel_dist.append(rel_pt.distance(Point(rel_ij[i])))
+
+    return np.nanmean(np.array(ref_dist) / np.array(rel_dist))
 
 
 def get_mask(footprints, img, imlist, landmask=None, glacmask=None):
@@ -575,10 +599,13 @@ def register_ortho(fn_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, landmask=
     lowres_mask, fmask, [xmin, xmax, ymin, ymax] = get_mask(footprints, ref_lowres, imlist, landmask, glacmask)
     ref_lowres = ref_lowres.crop_to_extent([xmin, xmax, ymin, ymax], pixel_size=init_res)
 
-    Minit, _ = transform_centers(lowres_gt, ref_lowres, imlist, footprints, 'Ori-{}'.format(ori))
+    Minit, _, centers = transform_centers(lowres_gt, ref_lowres, imlist, footprints, 'Ori-{}'.format(ori))
     init_tfm = warp(ortho, Minit, output_shape=ref_lowres.shape, preserve_range=True, order=5)
 
     Mref, _ = refine_lowres_tfm(init_tfm, ref_lowres, lowres_mask, Minit)
+
+    rescale_fact = np.ceil(1 / scale_factor(centers, ortho_gt, ref_img))
+    ortho = np.array(ortho_.resize((np.array(ortho_.size) / rescale_fact).astype(int), Image.LANCZOS))
 
     i_ = np.arange(0, ortho_lowres.shape[0], 10)
     j_ = np.arange(0, ortho_lowres.shape[1], 10)
@@ -592,7 +619,7 @@ def register_ortho(fn_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, landmask=
         dst_tfm.append(Minit.inverse(pt) * resamp_fact)
     dst_tfm = np.array(dst_tfm).reshape(-1, 2)
 
-    Mref_full, _ = ransac((dst_tfm, resamp_fact * src_grd), AffineTransform, min_samples=3,
+    Mref_full, _ = ransac((dst_tfm, resamp_fact / rescale_fact * src_grd), AffineTransform, min_samples=3,
                            residual_threshold=1, max_trials=1000)
 
     rough_tfm = warp(ortho, Mref_full, output_shape=ref_img.shape, preserve_range=True)
