@@ -330,8 +330,13 @@ def run_bascule(in_gcps, outdir, img_pattern, sub, ori):
     return out_gcps
 
 
-def run_campari(in_gcps, outdir, img_pattern, sub, dx, ortho_res, allfree=1):
+def run_campari(in_gcps, outdir, img_pattern, sub, dx, ortho_res, allfree=True):
     echo = subprocess.Popen('echo', stdout=subprocess.PIPE)
+    if allfree:
+        allfree_tag = 1
+    else:
+        allfree_tag = 0
+
     p = subprocess.Popen(['mm3d', 'Campari', img_pattern,
                           'TerrainRelAuto{}'.format(sub),
                           'TerrainFirstPass{}'.format(sub),
@@ -339,7 +344,7 @@ def run_campari(in_gcps, outdir, img_pattern, sub, dx, ortho_res, allfree=1):
                                                      np.abs(dx),
                                                      os.path.join(outdir, 'AutoMeasures{}-S2D.xml'.format(sub)),
                                                      np.abs(dx / ortho_res)),
-                          'SH=Homol', 'AllFree={}'.format(allfree)], stdin=echo.stdout)
+                          'SH=Homol', 'AllFree={}'.format(allfree_tag)], stdin=echo.stdout)
     p.wait()
 
     out_gcps = get_campari_residuals('Ori-TerrainFirstPass{}/Residus.xml'.format(sub), in_gcps)

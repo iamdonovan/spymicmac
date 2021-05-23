@@ -540,7 +540,7 @@ def register_ortho_old(fn_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, landm
 
 def register_ortho(fn_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, landmask=None, footprints=None,
                    im_subset=None, block_num=None, ori='Relative', ortho_res=8, init_res=400,
-                   imgsource='DECLASSII', density=200, out_dir=None):
+                   imgsource='DECLASSII', density=200, out_dir=None, allfree=True):
     """
 
     :param fn_ortho:
@@ -681,7 +681,7 @@ def register_ortho(fn_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, landmask=
     mmtools.save_gcps(gcps, out_dir, utm_str, subscript)
 
     gcps = mmtools.run_bascule(gcps, out_dir, match_pattern, subscript, ori)
-    gcps = mmtools.run_campari(gcps, out_dir, match_pattern, subscript, ref_img.dx, ortho_res)
+    gcps = mmtools.run_campari(gcps, out_dir, match_pattern, subscript, ref_img.dx, ortho_res, allfree=allfree)
     gcps['camp_dist'] = np.sqrt(gcps.camp_xres ** 2 + gcps.camp_yres ** 2)
 
     niter = 0
@@ -699,7 +699,7 @@ def register_ortho(fn_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, landmask=
         gcps = mmtools.run_bascule(gcps, out_dir, match_pattern, subscript, ori)
         gcps['res_dist'] = np.sqrt(gcps.xres ** 2 + gcps.yres ** 2)
 
-        gcps = mmtools.run_campari(gcps, out_dir, match_pattern, subscript, ref_img.dx, ortho_res)
+        gcps = mmtools.run_campari(gcps, out_dir, match_pattern, subscript, ref_img.dx, ortho_res, allfree=allfree)
         gcps['camp_dist'] = np.sqrt(gcps.camp_xres ** 2 + gcps.camp_yres ** 2)
         niter += 1
 
