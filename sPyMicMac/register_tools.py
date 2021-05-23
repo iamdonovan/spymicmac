@@ -576,13 +576,13 @@ def register_ortho(fn_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, landmask=
     imlist, match_pattern = get_imlist(im_subset)
 
     ref_img = GeoImg(fn_ref)
-    ref_lowres = ref_img.resample(init_res)
-    resamp_fact = init_res / ref_img.dx
+    # ref_lowres = ref_img.resample(init_res)
+    # resamp_fact = init_res / ref_img.dx
 
     utm_str = get_utm_str(ref_img)
 
     ortho = imread(fn_ortho)
-    ortho_ = Image.fromarray(ortho)
+    # ortho_ = Image.fromarray(ortho)
 
     fn_tfw = fn_ortho.replace('.tif', '.tfw')
     with open(fn_tfw, 'r') as f:
@@ -592,6 +592,8 @@ def register_ortho(fn_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, landmask=
         clean_imlist = [im.split('OIS-Reech_')[-1].split('.tif')[0] for im in imlist]
         print('Attempting to get image footprints from USGS EarthExplorer.')
         footprints = get_usgs_footprints(clean_imlist, dataset=imgsource)
+    else:
+        footprints = gpd.read_file(footprints)
 
     mask_full, _, ref_img = get_mask(footprints, ref_img, imlist, landmask, glacmask)
 
