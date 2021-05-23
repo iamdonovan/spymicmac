@@ -600,6 +600,13 @@ def register_ortho(fn_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, landmask=
     Minit, _, centers = transform_centers(ortho_gt, ref_img, imlist, footprints, 'Ori-{}'.format(ori))
     rough_tfm = warp(ortho, Minit, output_shape=ref_img.shape, preserve_range=True)
 
+    fig, ax = plt.subplots(1, 2, figsize=(7, 5))
+    ax[0].imshow(rough_tfm[::10, ::10], extent=[0, rough_tfm.shape[1], rough_tfm.shape[0], 0], cmap='gray')
+    ax[1].imshow(ref_img.img[::10, ::10], extent=[0, ref_img.shape[1], ref_img.shape[0], 0], cmap='gray')
+
+    plt.savefig('initial_transformation{}.png'.format(subscript), dpi=200, bbox_inches='tight')
+    plt.close(fig)
+
     # for each of these pairs (src, dst), find the precise subpixel match (or not...)
     gcps = imtools.find_grid_matches(rough_tfm, ref_img, mask_full, Minit, spacing=density, dstwin=400)
 
