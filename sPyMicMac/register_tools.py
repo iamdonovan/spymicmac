@@ -235,7 +235,7 @@ def get_mask(footprints, img, imlist, landmask=None, glacmask=None):
 
     mask[~fmask] = 0
 
-    return mask, fmask, [xmin, xmax, ymin, ymax]
+    return mask, fmask, img
 
 
 def register_ortho_old(fn_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, landmask=None, footprints=None,
@@ -583,51 +583,23 @@ def register_ortho(fn_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, landmask=
 
     ortho = imread(fn_ortho)
     ortho_ = Image.fromarray(ortho)
-    ortho_lowres = np.array(ortho_.resize((np.array(ortho_.size) / resamp_fact).astype(int), Image.LANCZOS))
 
     fn_tfw = fn_ortho.replace('.tif', '.tfw')
     with open(fn_tfw, 'r') as f:
         ortho_gt = [float(l.strip()) for l in f.readlines()]
-    lowres_gt = np.array(ortho_gt)
-    lowres_gt[[0, 3]] = lowres_gt[[0, 3]] * resamp_fact
 
     if footprints is None:
         clean_imlist = [im.split('OIS-Reech_')[-1].split('.tif')[0] for im in imlist]
         print('Attempting to get image footprints from USGS EarthExplorer.')
         footprints = get_usgs_footprints(clean_imlist, dataset=imgsource)
 
-    lowres_mask, fmask, [xmin, xmax, ymin, ymax] = get_mask(footprints, ref_lowres, imlist, landmask, glacmask)
-    ref_lowres = ref_lowres.crop_to_extent([xmin, xmax, ymin, ymax], pixel_size=init_res)
+    mask_full, _, ref_img = get_mask(footprints, ref_img, imlist, landmask, glacmask)
 
-    Minit, _, centers = transform_centers(lowres_gt, ref_lowres, imlist, footprints, 'Ori-{}'.format(ori))
-    init_tfm = warp(ortho, Minit, output_shape=ref_lowres.shape, preserve_range=True, order=5)
-
-    Mref, _ = refine_lowres_tfm(init_tfm, ref_lowres, lowres_mask, Minit)
-
-    rescale_fact = np.ceil(1 / scale_factor(centers, ortho_gt, ref_img))
-    ortho = np.array(ortho_.resize((np.array(ortho_.size) / rescale_fact).astype(int), Image.LANCZOS))
-
-    i_ = np.arange(0, ortho_lowres.shape[0], 10)
-    j_ = np.arange(0, ortho_lowres.shape[1], 10)
-
-    I, J = np.meshgrid(i_, j_)
-
-    src_grd = np.array(list(zip(J.reshape(-1, 1), I.reshape(-1, 1)))).reshape(-1, 2)
-
-    dst_tfm = []
-    for pt in src_grd:
-        dst_tfm.append(Minit.inverse(pt) * resamp_fact)
-    dst_tfm = np.array(dst_tfm).reshape(-1, 2)
-
-    Mref_full, _ = ransac((dst_tfm, resamp_fact / rescale_fact * src_grd), AffineTransform, min_samples=3,
-                           residual_threshold=1, max_trials=1000)
-
-    rough_tfm = warp(ortho, Mref_full, output_shape=ref_img.shape, preserve_range=True)
-
-    mask_full, _, _ = get_mask(footprints, ref_img, imlist, landmask, glacmask)
+    Minit, _, centers = transform_centers(ortho_gt, ref_img, imlist, footprints, 'Ori-{}'.format(ori))
+    rough_tfm = warp(ortho, Minit, output_shape=ref_img.shape, preserve_range=True)
 
     # for each of these pairs (src, dst), find the precise subpixel match (or not...)
-    gcps = imtools.find_grid_matches(rough_tfm, ref_img, mask_full, Mref_full, spacing=density, dstwin=400)
+    gcps = imtools.find_grid_matches(rough_tfm, ref_img, mask_full, Minit, spacing=density, dstwin=400)
 
     xy = np.array([ref_img.ij2xy((pt[1], pt[0])) for pt in gcps[['search_j', 'search_i']].values]).reshape(-1, 2)
     gcps['geometry'] = [Point(pt) for pt in xy]
