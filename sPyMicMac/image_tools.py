@@ -202,7 +202,7 @@ def stretch_image(img, scale=(0,1), mult=255, outtype=np.uint8, mask=None):
     return (mult * (img - minval) / (maxval - minval)).astype(outtype)
 
 
-def contrast_enhance(fn_img, qmin=0.02, qmax=0.98, gamma=1.25):
+def contrast_enhance(fn_img, mask_value=None, qmin=0.02, qmax=0.98, gamma=1.25):
     """
 
     :param fn_img:
@@ -211,8 +211,11 @@ def contrast_enhance(fn_img, qmin=0.02, qmax=0.98, gamma=1.25):
     :param gamma:
     :return:
     """
-    img = io.imread(fn_img).astype(np.float32)
-    img[img == 0] = np.nan
+    img = io.imread(fn_img)
+    if mask_value is not None:
+        img = img.astype(np.float32)
+        img[img == mask_value] = np.nan
+
     filt = nanmedian_filter(img, footprint=disk(3))
 
     stretch = stretch_image(filt, scale=(qmin, qmax))
