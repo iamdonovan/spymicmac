@@ -153,7 +153,7 @@ def transform_centers(img_gt, ref, imlist, footprints, ori):
     rel_ij = np.array([((row.xrel - img_gt[4]) / img_gt[0],
                         (row.yrel - img_gt[5]) / img_gt[3]) for i, row in join.iterrows()])
 
-    model, inliers = ransac((ref_ij[:, ::-1], rel_ij), AffineTransform, min_samples=10, residual_threshold=50, max_trials=5000)
+    model, inliers = ransac((ref_ij[:, ::-1], rel_ij), AffineTransform, min_samples=10, residual_threshold=100, max_trials=5000)
     print('{} inliers for center transformation'.format(np.count_nonzero(inliers)))
     return model, inliers, join
 
