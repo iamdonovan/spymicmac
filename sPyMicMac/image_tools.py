@@ -7,9 +7,8 @@ import cv2
 from itertools import chain
 import gdal
 from rtree import index
-from skimage import morphology
 from skimage.filters import rank
-from skimage import exposure, transform
+from skimage import exposure, transform, morphology, io
 from skimage.morphology import binary_dilation, disk
 from skimage.measure import ransac
 from skimage.feature import peak_local_max
@@ -21,7 +20,7 @@ from shapely.ops import cascaded_union
 import geopandas as gpd
 # import pyvips
 from llc import jit_filter_function
-from pybob.image_tools import match_hist, reshape_geoimg, create_mask_from_shapefile
+from pybob.image_tools import match_hist, reshape_geoimg, create_mask_from_shapefile, nanmedian_filter
 from pymmaster.mmaster_tools import orient_footprint
 
 
@@ -122,6 +121,11 @@ def get_subpixel(res, how='min'):
 
 
 def highpass_filter(img):
+    """
+
+    :param img:
+    :return:
+    """
     v = img.copy()
     v[np.isnan(img)] = 0
     vv = ndimage.gaussian_filter(v, 3)
@@ -135,11 +139,6 @@ def highpass_filter(img):
     return tmphi
 
 
-# def splitter(img, nblocks, overlap=0):
-#     split1 = np.array_split(img, nblocks[0], axis=0)
-#     split2 = [np.array_split(im, nblocks[1], axis=1) for im in split1]
-#     olist = [np.copy(a) for a in list(chain.from_iterable(split2))]
-#     return olist
 def splitter(img, nblocks, overlap=0):
     new_width = int(np.floor(img.shape[1]/nblocks[1]))
     new_height = int(np.floor(img.shape[0]/nblocks[0]))
@@ -181,6 +180,15 @@ def get_subimg_offsets(split, shape, overlap=0):
 
 
 def stretch_image(img, scale=(0,1), mult=255, outtype=np.uint8, mask=None):
+    """
+
+    :param img:
+    :param scale:
+    :param mult:
+    :param outtype:
+    :param mask:
+    :return:
+    """
     if mask is None:
         maxval = np.nanquantile(img, max(scale))
         minval = np.nanquantile(img, min(scale))
@@ -194,7 +202,32 @@ def stretch_image(img, scale=(0,1), mult=255, outtype=np.uint8, mask=None):
     return (mult * (img - minval) / (maxval - minval)).astype(outtype)
 
 
+def contrast_enhance(fn_img, qmin=0.02, qmax=0.98, gamma=1.25):
+    """
+
+    :param fn_img:
+    :param qmin:
+    :param qmax:
+    :param gamma:
+    :return:
+    """
+    img = io.imread(fn_img).astype(np.float32)
+    img[img == 0] = np.nan
+    filt = nanmedian_filter(img, footprint=disk(3))
+
+    stretch = stretch_image(filt, scale=(qmin, qmax))
+    gamma = exposure.adjust_gamma(stretch, gamma=gamma)
+    return gamma
+
+
 def make_binary_mask(img, erode=0, mask_value=0):
+    """
+
+    :param img:
+    :param erode:
+    :param mask_value:
+    :return:
+    """
     _mask = 255 * np.ones(img.shape, dtype=np.uint8)
     if np.isfinite(mask_value):
         _mask[img == mask_value] = 0
