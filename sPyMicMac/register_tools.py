@@ -29,6 +29,17 @@ from IPython import embed
 
 
 def sliding_window_filter(img_shape, pts_df, winsize, stepsize=None, mindist=2000, how='residual', is_ascending=True):
+    """
+
+    :param img_shape:
+    :param pts_df:
+    :param winsize:
+    :param stepsize:
+    :param mindist:
+    :param how:
+    :param is_ascending:
+    :return:
+    """
     if stepsize is None:
         stepsize = winsize / 2
 
@@ -69,6 +80,11 @@ def sliding_window_filter(img_shape, pts_df, winsize, stepsize=None, mindist=200
 
 
 def get_imlist(im_subset):
+    """
+
+    :param im_subset:
+    :return:
+    """
     if im_subset is None:
         imlist = glob('OIS*.tif')
         match_pattern = 'OIS.*.tif'
@@ -85,6 +101,15 @@ def get_imlist(im_subset):
 
 
 def get_lowres_transform(lowres, ref, fprint, ref_mask, imgsource='DECLASSII'):
+    """
+
+    :param lowres:
+    :param ref:
+    :param fprint:
+    :param ref_mask:
+    :param imgsource:
+    :return:
+    """
 
     if imgsource == 'DECLASSII':
         M = imtools.transform_from_fprint(lowres, ref, fprint, ref_mask)
@@ -115,6 +140,11 @@ def get_lowres_transform(lowres, ref, fprint, ref_mask, imgsource='DECLASSII'):
 
 
 def get_utm_str(img):
+    """
+
+    :param img:
+    :return:
+    """
     epsg_str = str(img.epsg)
     hemi_dict = {'6': 'N', '7': 'S'}
 
@@ -558,6 +588,7 @@ def register_ortho(fn_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, landmask=
     :param imgsource:
     :param density:
     :param out_dir:
+    :param allfree:
     :return:
     """
     print('start.')
