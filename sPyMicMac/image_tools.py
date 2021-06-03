@@ -257,6 +257,15 @@ def keypoint_grid(img, spacing=25, size=10):
 
 
 def get_dense_keypoints(img, mask, npix=100, nblocks=None, return_des=False):
+    """
+
+    :param img:
+    :param mask:
+    :param npix:
+    :param nblocks:
+    :param return_des:
+    :return:
+    """
     orb = cv2.ORB_create()
     keypts = []
     if return_des:
@@ -295,6 +304,11 @@ def get_dense_keypoints(img, mask, npix=100, nblocks=None, return_des=False):
 
 
 def get_footprint_overlap(fprints):
+    """
+
+    :param fprints:
+    :return:
+    """
     if fprints.shape[0] == 1:
         return fprints.geometry.values[0]
 
@@ -315,6 +329,14 @@ def get_footprint_overlap(fprints):
 
 
 def get_footprint_mask(shpfile, geoimg, filelist, fprint_out=False):
+    """
+
+    :param shpfile:
+    :param geoimg:
+    :param filelist:
+    :param fprint_out:
+    :return:
+    """
     imlist = [im.split('OIS-Reech_')[-1].split('.tif')[0] for im in filelist]
     if isinstance(shpfile, str):
         footprints_shp = gpd.read_file(shpfile)
@@ -341,6 +363,16 @@ def get_footprint_mask(shpfile, geoimg, filelist, fprint_out=False):
 
 def get_rough_geotransform(img1, img2, landmask=None, footmask=None,
                            stretch=(0.05, 0.95), equalize=False):
+    """
+
+    :param img1:
+    :param img2:
+    :param landmask:
+    :param footmask:
+    :param stretch:
+    :param equalize:
+    :return:
+    """
     if equalize:
         img2_eq = (255 * exposure.equalize_adapthist(img2.img.astype(np.uint16),
                                                      clip_limit=0.03)).astype(np.uint8)
@@ -376,6 +408,16 @@ def get_rough_geotransform(img1, img2, landmask=None, footmask=None,
 
 
 def get_initial_transformation(img1, img2, pRes=800, landmask=None, footmask=None, imlist=None):
+    """
+
+    :param img1:
+    :param img2:
+    :param pRes:
+    :param landmask:
+    :param footmask:
+    :param imlist:
+    :return:
+    """
     im2_lowres = reshape_geoimg(img2, pRes, pRes)
 
     im2_eq = match_hist(im2_lowres.img, np.array(img1))
@@ -459,6 +501,17 @@ def find_gcp_match(img, template, method=cv2.TM_CCORR_NORMED):
 
 
 def find_grid_matches(tfm_img, refgeo, mask, initM=None, spacing=200, srcwin=60, dstwin=600):
+    """
+
+    :param tfm_img:
+    :param refgeo:
+    :param mask:
+    :param initM:
+    :param spacing:
+    :param srcwin:
+    :param dstwin:
+    :return:
+    """
     match_pts = []
     z_corrs = []
     peak_corrs = []
@@ -547,6 +600,13 @@ def find_grid_matches(tfm_img, refgeo, mask, initM=None, spacing=200, srcwin=60,
 
 
 def transform_from_fprint(img, geo, fprint):
+    """
+
+    :param img:
+    :param geo:
+    :param fprint:
+    :return:
+    """
     oprint = orient_footprint(fprint)
     h, w = img.shape
     src_pts = np.array([[0, 0], [0, h-1], [w-1, h-1], [w-1, 0]]).reshape(-1, 2)
