@@ -24,6 +24,16 @@ from sPyMicMac.usgs_tools import get_usgs_footprints
 # MicMac interfaces - write xml files for MicMac to read
 ######################################################################################################################
 def write_neighbour_images(imlist, fprints=None, nameField='ID', prefix='OIS-Reech_', fileExt='.tif', **kwargs):
+    """
+
+    :param imlist:
+    :param fprints:
+    :param nameField:
+    :param prefix:
+    :param fileExt:
+    :param kwargs:
+    :return:
+    """
     E = builder.ElementMaker()
     NamedRel = E.SauvegardeNamedRel()
 
@@ -62,6 +72,16 @@ def write_neighbour_images(imlist, fprints=None, nameField='ID', prefix='OIS-Ree
 
 
 def get_gcp_meas(im_name, meas_name, in_dir, E, nodist=None, gcp_name='GCP'):
+    """
+
+    :param im_name:
+    :param meas_name:
+    :param in_dir:
+    :param E:
+    :param nodist:
+    :param gcp_name:
+    :return:
+    """
     im = gdal.Open(os.path.sep.join([in_dir, im_name]))
     maxj = im.RasterXSize
     maxi = im.RasterYSize
@@ -86,6 +106,12 @@ def get_gcp_meas(im_name, meas_name, in_dir, E, nodist=None, gcp_name='GCP'):
 
 
 def get_im_meas(gcps, E):
+    """
+
+    :param gcps:
+    :param E:
+    :return:
+    """
     pt_els = []
     for ind, row in gcps.iterrows():
         this_mes = E.OneMesureAF1I(
@@ -97,6 +123,11 @@ def get_im_meas(gcps, E):
 
 
 def generate_measures_files(joined=False):
+    """
+
+    :param joined:
+    :return:
+    """
     i_list = np.arange(22, -1, -1)
     if not joined:
         j_list = np.arange(0, 24)
@@ -153,6 +184,11 @@ def generate_measures_files(joined=False):
 
 
 def get_match_pattern(imlist):
+    """
+
+    :param imlist:
+    :return:
+    """
     matches = []
     for i, this_im in enumerate(imlist[:-1]):
         for im in imlist[i + 1:]:
@@ -168,12 +204,27 @@ def get_match_pattern(imlist):
 
 
 def write_auto_mesures(gcp_df, subscript, out_dir, outname='AutoMeasures'):
+    """
+
+    :param gcp_df:
+    :param subscript:
+    :param out_dir:
+    :param outname:
+    :return:
+    """
     with open(os.path.join(out_dir, '{}{}.txt'.format(outname, subscript)), 'w') as f:
         for i, row in gcp_df.iterrows():
             print('{} {} {}'.format(row.rel_x, row.rel_y, row.el_rel), file=f)
 
 
 def get_valid_image_points(shape, pts, pts_nodist):
+    """
+
+    :param shape:
+    :param pts:
+    :param pts_nodist:
+    :return:
+    """
     maxi, maxj = shape
 
     in_im = np.logical_and.reduce((0 < pts.j, pts.j < maxj,
@@ -185,6 +236,15 @@ def get_valid_image_points(shape, pts, pts_nodist):
 
 
 def write_image_mesures(imlist, gcps, out_dir='.', subscript='', ort_dir='Ortho-MEC-Relative'):
+    """
+
+    :param imlist:
+    :param gcps:
+    :param out_dir:
+    :param subscript:
+    :param ort_dir:
+    :return:
+    """
     E = builder.ElementMaker()
     MesureSet = E.SetOfMesureAppuisFlottants()
 
@@ -218,6 +278,15 @@ def write_image_mesures(imlist, gcps, out_dir='.', subscript='', ort_dir='Ortho-
 
 
 def write_auto_gcps(gcp_df, subscript, out_dir, utm_zone, outname='AutoGCPs'):
+    """
+
+    :param gcp_df:
+    :param subscript:
+    :param out_dir:
+    :param utm_zone:
+    :param outname:
+    :return:
+    """
     with open(os.path.join(out_dir, '{}{}.txt'.format(outname, subscript)), 'w') as f:
         # print('#F= N X Y Z Ix Iy Iz', file=f)
         print('#F= N X Y Z', file=f)
@@ -229,6 +298,12 @@ def write_auto_gcps(gcp_df, subscript, out_dir, utm_zone, outname='AutoGCPs'):
 
 
 def get_bascule_residuals(fn_basc, gcp_df):
+    """
+
+    :param fn_basc:
+    :param gcp_df:
+    :return:
+    """
     root = ET.parse(fn_basc).getroot()
     gcp_res = root.findall('Residus')
     gcp_names = np.array([res.find('Name').text for res in gcp_res])
@@ -255,6 +330,12 @@ def get_bascule_residuals(fn_basc, gcp_df):
 
 
 def get_campari_residuals(fn_resids, gcp_df):
+    """
+
+    :param fn_resids:
+    :param gcp_df:
+    :return:
+    """
     camp_root = ET.parse(fn_resids).getroot()
 
     last_iter = camp_root.findall('Iters')[-1].findall('OneAppui')
@@ -297,6 +378,11 @@ def get_campari_residuals(fn_resids, gcp_df):
 
 
 def move_bad_tapas(ori):
+    """
+
+    :param ori: 
+    :return: 
+    """
     root = ET.parse(os.path.join(ori, 'Residus.xml')).getroot()
     res_df = pd.DataFrame()
 
@@ -318,6 +404,15 @@ def move_bad_tapas(ori):
 
 
 def run_bascule(in_gcps, outdir, img_pattern, sub, ori):
+    """
+
+    :param in_gcps:
+    :param outdir:
+    :param img_pattern:
+    :param sub:
+    :param ori:
+    :return:
+    """
     echo = subprocess.Popen('echo', stdout=subprocess.PIPE)
     p = subprocess.Popen(['mm3d', 'GCPBascule', img_pattern, ori,
                           'TerrainRelAuto{}'.format(sub),
@@ -331,6 +426,17 @@ def run_bascule(in_gcps, outdir, img_pattern, sub, ori):
 
 
 def run_campari(in_gcps, outdir, img_pattern, sub, dx, ortho_res, allfree=True):
+    """
+
+    :param in_gcps:
+    :param outdir:
+    :param img_pattern:
+    :param sub:
+    :param dx:
+    :param ortho_res:
+    :param allfree:
+    :return:
+    """
     echo = subprocess.Popen('echo', stdout=subprocess.PIPE)
     if allfree:
         allfree_tag = 1
@@ -353,6 +459,14 @@ def run_campari(in_gcps, outdir, img_pattern, sub, dx, ortho_res, allfree=True):
 
 
 def save_gcps(in_gcps, outdir, utmstr, sub):
+    """
+
+    :param in_gcps:
+    :param outdir:
+    :param utmstr:
+    :param sub:
+    :return:
+    """
     in_gcps.to_file(os.path.join(outdir, 'AutoGCPs{}.shp'.format(sub)))
     write_auto_gcps(in_gcps, sub, outdir, utmstr)
     echo = subprocess.Popen('echo', stdout=subprocess.PIPE)
