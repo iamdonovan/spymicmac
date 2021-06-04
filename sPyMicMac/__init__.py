@@ -5,4 +5,4 @@ from . import image
 from . import micmac
 from . import register
 from . import usgs
-from . import ee
+from . import ee_tools
