@@ -22,10 +22,9 @@ from pybob.bob_tools import mkdir_p
 from pybob.ddem_tools import nmad
 from pybob.image_tools import create_mask_from_shapefile
 from pybob.GeoImg import GeoImg
-import sPyMicMac.image_tools as imtools
-import sPyMicMac.micmac_tools as mmtools
-from sPyMicMac.usgs_tools import get_usgs_footprints
-from IPython import embed
+import sPyMicMac.image as imtools
+import sPyMicMac.micmac as mmtools
+from sPyMicMac.usgs import get_usgs_footprints
 
 
 def sliding_window_filter(img_shape, pts_df, winsize, stepsize=None, mindist=2000, how='residual', is_ascending=True):

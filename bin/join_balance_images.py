@@ -3,7 +3,7 @@ import os
 from glob import glob
 import argparse
 import pyvips
-from sPyMicMac.image_tools import join_halves
+from sPyMicMac.image import join_halves
 
 
 def _argparser():

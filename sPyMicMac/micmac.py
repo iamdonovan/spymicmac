@@ -17,7 +17,7 @@ from shapely.strtree import STRtree
 from skimage.io import imread
 from pybob.bob_tools import mkdir_p
 from pybob.GeoImg import GeoImg
-from sPyMicMac.usgs_tools import get_usgs_footprints
+from sPyMicMac.usgs import get_usgs_footprints
 
 
 ######################################################################################################################

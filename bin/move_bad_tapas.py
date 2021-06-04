@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 import argparse
-from sPyMicMac.micmac_tools import move_bad_tapas
+from sPyMicMac.micmac import move_bad_tapas
 
 
 def _argparser():

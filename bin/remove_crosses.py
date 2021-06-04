@@ -11,7 +11,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from pybob.image_tools import nanmedian_filter
 from pybob.bob_tools import mkdir_p
-import sPyMicMac.image_tools as imtools
+import sPyMicMac.image as imtools
 
 
 def fix_cross(subimg):

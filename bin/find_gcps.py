@@ -27,8 +27,8 @@ from pybob.image_tools import create_mask_from_shapefile, reshape_geoimg, match_
 from pybob.plot_tools import plot_geoimg_sidebyside
 from pybob.bob_tools import mkdir_p
 from pybob.ddem_tools import nmad
-import sPyMicMac.image_tools as imtools
-import sPyMicMac.micmac_tools as mmt
+import sPyMicMac.image as imtools
+import sPyMicMac.micmac as mmt
 from pymmaster.mmaster_tools import orient_footprint
 
 

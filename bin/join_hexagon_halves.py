@@ -8,7 +8,7 @@ from skimage.transform import ProjectiveTransform, AffineTransform, EuclideanTra
 import gdal
 # import pyvips
 import numpy as np
-import sPyMicMac.image_tools as imtools
+import sPyMicMac.image as imtools
 
 
 def blend_halves(_left, _right, left_shape):

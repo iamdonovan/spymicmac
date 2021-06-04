@@ -18,8 +18,8 @@ import lxml.etree as etree
 import lxml.builder as builder
 from pybob.bob_tools import mkdir_p
 from pybob.ddem_tools import nmad
-import sPyMicMac.image_tools as imtools
-import sPyMicMac.micmac_tools as mmt
+import sPyMicMac.image as imtools
+import sPyMicMac.micmac as mmt
 
 
 def moving_average(a, n=5):

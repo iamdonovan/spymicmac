@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 import argparse
-import sPyMicMac.micmac_tools as mt
+import sPyMicMac.micmac as mt
 
 
 def _argparser():
