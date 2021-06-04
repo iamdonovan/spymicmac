@@ -1,4 +1,4 @@
-modules
+sPyMicMac
 =================================
 
 sPyMicMac modules and shell scripts

@@ -1,5 +1,5 @@
 Welcome to sPyMicMac's documentation!
-=================================
+=====================================
 
 This is the documentation for sPyMicMac, a set of python tools for processing historic spy satellite (KH-9) and
 aerial imagery.
@@ -10,7 +10,7 @@ aerial imagery.
    :maxdepth: 2
 
    setup
-   tutorials
+   tutorials/index
    sPyMicMac/index
 
 Indices and tables

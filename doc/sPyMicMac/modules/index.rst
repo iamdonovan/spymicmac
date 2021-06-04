@@ -4,5 +4,5 @@ modules
 .. toctree::
    :glob:
    :titlesonly:
-   
+
    *
