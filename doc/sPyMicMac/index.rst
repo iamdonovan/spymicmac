@@ -1,10 +1,10 @@
 modules
 =================================
 
-Modules
+sPyMicMac modules and shell scripts
 
 .. toctree::
-   :glob:
-   :titlesonly:
-   
-   *
+   :maxdepth: 2
+
+   modules/index
+   scripts/index
