@@ -1,0 +1,2 @@
+automatically finding control points
+====================================
