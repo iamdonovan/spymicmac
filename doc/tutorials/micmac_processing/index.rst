@@ -12,6 +12,7 @@ using an orthorectified image and external DEM.
 .. toctree::
    :maxdepth: 2
 
+   setup_files
    ../preprocessing/index
    fiducials
    resample
