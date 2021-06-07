@@ -120,193 +120,193 @@ def _argparser():
     return _parser
 
 
-# def main():
-np.seterr(divide='ignore', invalid='ignore')
-parser = _argparser()
-args = parser.parse_args()
+def main():
+    np.seterr(divide='ignore', invalid='ignore')
+    parser = _argparser()
+    args = parser.parse_args()
 
-print('Reading {}'.format(args.img))
-gd = gdal.Open(args.img)
-metadata = gd.GetMetadata_Dict()
-img = gd.ReadAsArray()
-print('Image read.')
+    print('Reading {}'.format(args.img))
+    gd = gdal.Open(args.img)
+    metadata = gd.GetMetadata_Dict()
+    img = gd.ReadAsArray()
+    print('Image read.')
 
-img_ = Image.fromarray(img)
-img_lowres = np.array(img_.resize((np.array(img_.size)/10).astype(int), Image.LANCZOS))
-del img_
+    img_ = Image.fromarray(img)
+    img_lowres = np.array(img_.resize((np.array(img_.size)/10).astype(int), Image.LANCZOS))
+    del img_
 
-tmp_cross = imtools.cross_template(args.csize, width=3)
-cross = np.ones((args.csize, args.csize)).astype(np.uint8)
-cross[tmp_cross == 1] = 255
+    tmp_cross = imtools.cross_template(args.csize, width=3)
+    cross = np.ones((args.csize, args.csize)).astype(np.uint8)
+    cross[tmp_cross == 1] = 255
 
-fig = plt.figure(figsize=(7, 12))
-ax = fig.add_subplot(111)
-ax.imshow(img_lowres, cmap='gray', extent=[0, img.shape[1], img.shape[0], 0])
+    fig = plt.figure(figsize=(7, 12))
+    ax = fig.add_subplot(111)
+    ax.imshow(img_lowres, cmap='gray', extent=[0, img.shape[1], img.shape[0], 0])
 
-if args.orig is None:
-    img_lowres_mask = np.zeros(img_lowres.shape)
-    img_lowres_mask[np.logical_or(img_lowres < 25,
-                                  filters.median(img_lowres, selem=disk(16)) < 25)] = 1
+    if args.orig is None:
+        img_lowres_mask = np.zeros(img_lowres.shape)
+        img_lowres_mask[np.logical_or(img_lowres < 25,
+                                      filters.median(img_lowres, selem=disk(16)) < 25)] = 1
 
-    vert = np.count_nonzero(filters.sobel_v(img_lowres_mask)**2 > 0.8, axis=0)
-    hori = np.count_nonzero(filters.sobel_h(img_lowres_mask)**2 > 0.8, axis=1)
+        vert = np.count_nonzero(filters.sobel_v(img_lowres_mask)**2 > 0.8, axis=0)
+        hori = np.count_nonzero(filters.sobel_h(img_lowres_mask)**2 > 0.8, axis=1)
 
-    vpeaks = peak_local_max(moving_average(vert), min_distance=6000, num_peaks=1, exclude_border=10)
-    hpeaks = peak_local_max(moving_average(hori), min_distance=3000, num_peaks=2, exclude_border=10)
+        vpeaks = peak_local_max(moving_average(vert), min_distance=6000, num_peaks=1, exclude_border=10)
+        hpeaks = peak_local_max(moving_average(hori), min_distance=3000, num_peaks=2, exclude_border=10)
 
-    top, bot = 10 * hpeaks.min(), 10 * hpeaks.max()
-    edge = 10 * vpeaks.min()
-    if edge < 5000:
-        search_corners = [(bot-625, edge+180), (top+625, edge+180)]
-    else:
-        search_corners = [(bot - 625, edge-180), (top + 625, edge-180)]
-
-    # corners = [(bot, lft), (bot, rgt), (top, rgt), (top, lft)]
-    # search_corners = [(bot-625, lft+180), (bot-625, rgt-180),
-    #                   (top+625, rgt-180), (top+625, lft+180)] # average distance of cross centers to img corners
-    grid_corners = []
-    for c in search_corners:
-        _i, _j = find_cross(img, c, cross, args)
-        if any(np.isnan([_j, _i])):
-            grid_corners.append((c[1], c[0]))
+        top, bot = 10 * hpeaks.min(), 10 * hpeaks.max()
+        edge = 10 * vpeaks.min()
+        if edge < 5000:
+            search_corners = [(bot-625, edge+180), (top+625, edge+180)]
         else:
-            grid_corners.append((_j, _i))
-    pixres = (grid_corners[0][1] - grid_corners[1][1]) / 22
-    npix = 23 * pixres
+            search_corners = [(bot - 625, edge-180), (top + 625, edge-180)]
 
-    perp = get_perp(grid_corners)
+        # corners = [(bot, lft), (bot, rgt), (top, rgt), (top, lft)]
+        # search_corners = [(bot-625, lft+180), (bot-625, rgt-180),
+        #                   (top+625, rgt-180), (top+625, lft+180)] # average distance of cross centers to img corners
+        grid_corners = []
+        for c in search_corners:
+            _i, _j = find_cross(img, c, cross, args)
+            if any(np.isnan([_j, _i])):
+                grid_corners.append((c[1], c[0]))
+            else:
+                grid_corners.append((_j, _i))
+        pixres = (grid_corners[0][1] - grid_corners[1][1]) / 22
+        npix = 23 * pixres
 
-    if edge < 5000:
-        left_edge = LineString([grid_corners[0], grid_corners[1]])
-        right_edge = LineString([grid_corners[0] + npix * perp,
-                                 grid_corners[1] + npix * perp])
-    else:
-        right_edge = LineString([grid_corners[0], grid_corners[1]])
-        left_edge = LineString([grid_corners[0] - npix * perp,
-                                grid_corners[1] - npix * perp])
+        perp = get_perp(grid_corners)
 
-else:
-    orig_y, orig_x = args.orig
-    oj, oi = find_cross(img, args.orig, cross, args)
-    if any(np.isnan([oj, oi])):
-        print('Failed to find valid origin. Falling back to the one provided.')
-        oi, oj = orig_y, orig_x
-    else:
-        print('Found origin location: {}, {}'.format(oi, oj))
-
-    if args.scanres is None:
-        npix_x = np.float(metadata['TIFFTAG_XRESOLUTION'])
-        npix_y = np.float(metadata['TIFFTAG_YRESOLUTION'])
-    else:
-        npix_x = args.scanres
-        if args.scanres_y is None:
-            npix_y = args.scanres
+        if edge < 5000:
+            left_edge = LineString([grid_corners[0], grid_corners[1]])
+            right_edge = LineString([grid_corners[0] + npix * perp,
+                                     grid_corners[1] + npix * perp])
         else:
-            npix_y = args.scanres_y
+            right_edge = LineString([grid_corners[0], grid_corners[1]])
+            left_edge = LineString([grid_corners[0] - npix * perp,
+                                    grid_corners[1] - npix * perp])
 
-    left_edge = LineString([(oj, oi), (oj, oi+22*npix_y)])
-    right_edge = LineString([(oj+23*npix_x, oi), (oj+23*npix_x, oi+23*npix_y)])
+    else:
+        orig_y, orig_x = args.orig
+        oj, oi = find_cross(img, args.orig, cross, args)
+        if any(np.isnan([oj, oi])):
+            print('Failed to find valid origin. Falling back to the one provided.')
+            oi, oj = orig_y, orig_x
+        else:
+            print('Found origin location: {}, {}'.format(oi, oj))
 
-II, JJ, search_grid = make_grid(left_edge, right_edge)
-matched_grid = []
+        if args.scanres is None:
+            npix_x = np.float(metadata['TIFFTAG_XRESOLUTION'])
+            npix_y = np.float(metadata['TIFFTAG_YRESOLUTION'])
+        else:
+            npix_x = args.scanres
+            if args.scanres_y is None:
+                npix_y = args.scanres
+            else:
+                npix_y = args.scanres_y
 
-print('Finding grid points in image...')
-# now that we have a list of coordinates, we can loop through and find the real grid locations
-if args.nproc > 1:
-    subimgs = []
-    std_devs = []
-    means = []
-    for loc in search_grid:
-        subimg, _, _ = imtools.make_template(img, loc, args.tsize)
-        subimgs.append(subimg)
-    pool = mp.Pool(args.nproc)
-    outputs = pool.map(partial(imtools.find_match, template=cross), subimgs)
-    pool.close()
-    # have to map outputs to warped_ij
-    for n, output in enumerate(outputs):
-        res, this_i, this_j = output
-        maxj, maxi = cv2.minMaxLoc(res)[2]  # 'peak' is actually the minimum location, remember.
-        inv_res = res.max() - res
-        std_devs.append(inv_res.std())
-        means.append(inv_res.mean())
+        left_edge = LineString([(oj, oi), (oj, oi+22*npix_y)])
+        right_edge = LineString([(oj+23*npix_x, oi), (oj+23*npix_x, oi+23*npix_y)])
 
-        pks = peak_local_max(inv_res, min_distance=5, num_peaks=2)
-        if pks.size > 0:
-            this_z_corrs = []
-            for pk in pks:
-                max_ = inv_res[pk[0], pk[1]]
-                this_z_corrs.append((max_ - inv_res.mean()) / inv_res.std())
+    II, JJ, search_grid = make_grid(left_edge, right_edge)
+    matched_grid = []
 
-            if max(this_z_corrs) > 5 and max(this_z_corrs)/min(this_z_corrs) > 1.15:
-                rel_i = this_i - args.tsize
-                rel_j = this_j - args.tsize
-                i, j = search_grid[n]
-                matched_grid.append((rel_i+i, rel_j+j))
+    print('Finding grid points in image...')
+    # now that we have a list of coordinates, we can loop through and find the real grid locations
+    if args.nproc > 1:
+        subimgs = []
+        std_devs = []
+        means = []
+        for loc in search_grid:
+            subimg, _, _ = imtools.make_template(img, loc, args.tsize)
+            subimgs.append(subimg)
+        pool = mp.Pool(args.nproc)
+        outputs = pool.map(partial(imtools.find_match, template=cross), subimgs)
+        pool.close()
+        # have to map outputs to warped_ij
+        for n, output in enumerate(outputs):
+            res, this_i, this_j = output
+            maxj, maxi = cv2.minMaxLoc(res)[2]  # 'peak' is actually the minimum location, remember.
+            inv_res = res.max() - res
+            std_devs.append(inv_res.std())
+            means.append(inv_res.mean())
+
+            pks = peak_local_max(inv_res, min_distance=5, num_peaks=2)
+            if pks.size > 0:
+                this_z_corrs = []
+                for pk in pks:
+                    max_ = inv_res[pk[0], pk[1]]
+                    this_z_corrs.append((max_ - inv_res.mean()) / inv_res.std())
+
+                if max(this_z_corrs) > 5 and max(this_z_corrs)/min(this_z_corrs) > 1.15:
+                    rel_i = this_i - args.tsize
+                    rel_j = this_j - args.tsize
+                    i, j = search_grid[n]
+                    matched_grid.append((rel_i+i, rel_j+j))
+                else:
+                    matched_grid.append((np.nan, np.nan))
             else:
                 matched_grid.append((np.nan, np.nan))
-        else:
-            matched_grid.append((np.nan, np.nan))
-else:
-    for loc in search_grid:
-        _j, _i = find_cross(img, loc, cross, args)
-        matched_grid.append((_j, _i))
+    else:
+        for loc in search_grid:
+            _j, _i = find_cross(img, loc, cross, args)
+            matched_grid.append((_j, _i))
 
-matched_grid = np.array(matched_grid)
-search_grid = np.array(search_grid)
+    matched_grid = np.array(matched_grid)
+    search_grid = np.array(search_grid)
 
-gcps_df = pd.DataFrame()
-for i, pr in enumerate(list(zip(II, JJ))):
-    gcps_df.loc[i, 'gcp'] = 'GCP_{}_{}'.format(pr[0], pr[1])
+    gcps_df = pd.DataFrame()
+    for i, pr in enumerate(list(zip(II, JJ))):
+        gcps_df.loc[i, 'gcp'] = 'GCP_{}_{}'.format(pr[0], pr[1])
 
-gcps_df['search_j'] = search_grid[:, 1]
-gcps_df['search_i'] = search_grid[:, 0]
-gcps_df['match_j'] = matched_grid[:, 1]
-gcps_df['match_i'] = matched_grid[:, 0]
+    gcps_df['search_j'] = search_grid[:, 1]
+    gcps_df['search_i'] = search_grid[:, 0]
+    gcps_df['match_j'] = matched_grid[:, 1]
+    gcps_df['match_i'] = matched_grid[:, 0]
 
-dx = gcps_df['match_j'] - gcps_df['search_j']
-dy = gcps_df['match_i'] - gcps_df['search_i']
+    dx = gcps_df['match_j'] - gcps_df['search_j']
+    dy = gcps_df['match_i'] - gcps_df['search_i']
 
-nomatch = np.isnan(gcps_df.match_j)
+    nomatch = np.isnan(gcps_df.match_j)
 
-# ux = griddata(gcps_df.loc[~nomatch, ['search_j', 'search_i']], gcps_df.loc[~nomatch, 'dj'],
-#               gcps_df[['search_j', 'search_i']])
-# uy = griddata(gcps_df.loc[~nomatch, ['search_j', 'search_i']], gcps_df.loc[~nomatch, 'di'],
-#               gcps_df[['search_j', 'search_i']])
+    # ux = griddata(gcps_df.loc[~nomatch, ['search_j', 'search_i']], gcps_df.loc[~nomatch, 'dj'],
+    #               gcps_df[['search_j', 'search_i']])
+    # uy = griddata(gcps_df.loc[~nomatch, ['search_j', 'search_i']], gcps_df.loc[~nomatch, 'di'],
+    #               gcps_df[['search_j', 'search_i']])
 
-ux = lsq_fit(gcps_df.search_j.values, gcps_df.search_i.values, gcps_df.match_j.values)
-uy = lsq_fit(gcps_df.search_j.values, gcps_df.search_i.values, gcps_df.match_i.values)
+    ux = lsq_fit(gcps_df.search_j.values, gcps_df.search_i.values, gcps_df.match_j.values)
+    uy = lsq_fit(gcps_df.search_j.values, gcps_df.search_i.values, gcps_df.match_i.values)
 
-gcps_df.loc[nomatch, 'match_j'] = ux[nomatch]
-gcps_df.loc[nomatch, 'match_i'] = uy[nomatch]
+    gcps_df.loc[nomatch, 'match_j'] = ux[nomatch]
+    gcps_df.loc[nomatch, 'match_i'] = uy[nomatch]
 
-gcps_df['dj'] = gcps_df['match_j'] - gcps_df['search_j']
-gcps_df['di'] = gcps_df['match_i'] - gcps_df['search_i']
+    gcps_df['dj'] = gcps_df['match_j'] - gcps_df['search_j']
+    gcps_df['di'] = gcps_df['match_i'] - gcps_df['search_i']
 
-gcps_df['im_row'] = gcps_df['match_i']
-gcps_df['im_col'] = gcps_df['match_j']
+    gcps_df['im_row'] = gcps_df['match_i']
+    gcps_df['im_col'] = gcps_df['match_j']
 
-print('Grid points found.')
-mkdir_p('match_imgs')
+    print('Grid points found.')
+    mkdir_p('match_imgs')
 
-ax.quiver(gcps_df.search_j, gcps_df.search_i, gcps_df.dj, gcps_df.di, color='r')
-ax.plot(gcps_df.search_j[nomatch], gcps_df.search_i[nomatch], 'b+')
-this_out = os.path.splitext(args.img)[0]
-fig.savefig('match_imgs/' + this_out + '_matches.png', bbox_inches='tight', dpi=200)
-# fig.close()
+    ax.quiver(gcps_df.search_j, gcps_df.search_i, gcps_df.dj, gcps_df.di, color='r')
+    ax.plot(gcps_df.search_j[nomatch], gcps_df.search_i[nomatch], 'b+')
+    this_out = os.path.splitext(args.img)[0]
+    fig.savefig('match_imgs/' + this_out + '_matches.png', bbox_inches='tight', dpi=200)
+    # fig.close()
 
-E = builder.ElementMaker()
-ImMes = E.MesureAppuiFlottant1Im(E.NameIm(args.img))
+    E = builder.ElementMaker()
+    ImMes = E.MesureAppuiFlottant1Im(E.NameIm(args.img))
 
-pt_els = mmt.get_im_meas(gcps_df, E)
-for p in pt_els:
-    ImMes.append(p)
-mkdir_p('Ori-InterneScan')
+    pt_els = mmt.get_im_meas(gcps_df, E)
+    for p in pt_els:
+        ImMes.append(p)
+    mkdir_p('Ori-InterneScan')
 
-outxml = E.SetOfMesureAppuisFlottants(ImMes)
-tree = etree.ElementTree(outxml)
-tree.write('Ori-InterneScan/MeasuresIm-' + args.img + '.xml', pretty_print=True,
-           xml_declaration=True, encoding="utf-8")
+    outxml = E.SetOfMesureAppuisFlottants(ImMes)
+    tree = etree.ElementTree(outxml)
+    tree.write('Ori-InterneScan/MeasuresIm-' + args.img + '.xml', pretty_print=True,
+               xml_declaration=True, encoding="utf-8")
 
 
-# if __name__ == "__main__":
-#     main()
+if __name__ == "__main__":
+    main()
