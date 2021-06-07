@@ -28,7 +28,7 @@ autodoc_mock_imports = ['numpy', 'scipy', 'matplotlib', 'fiona', 'cv2', 'pyvips'
                         'shapely.geometry.polygon', 'shapely.geometry', 'shapely.ops',  'shapely.strtree',
                         'skimage', 'gdal', 'h5py', 'pyproj', 'osgeo', 'llc', 'descartes', 'lxml.etree', 'ee',
                         'pybob.landsat_tools', 'skimage.feature', 'skimage.morphology', 'skimage.filters',
-                        'lxml.builder', 'rtree']
+                        'lxml.builder', 'rtree', 'ogr', 'skimage.measure']
 
 sys.modules.update((mod_name, Mock()) for mod_name in autodoc_mock_imports)
 sys.path.insert(0, os.path.abspath('..'))
