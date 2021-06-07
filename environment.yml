@@ -1,0 +1,22 @@
+name: spymicmac
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python>=3.7
+  - pyproj
+  - scikit-image
+  - geopandas
+  - matplotlib
+  - sphinx
+  - opencv
+  - lxml
+  - gdal
+  - pyasn1
+  - earthengine-api
+  - numba
+  - pip:
+      - pybob>=0.25
+      - sphinx-argparse
+      - sphinx-rtd-theme
+      - usgs
