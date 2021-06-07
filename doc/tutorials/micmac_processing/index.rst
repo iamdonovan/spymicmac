@@ -13,6 +13,7 @@ using an orthorectified image and external DEM.
    :maxdepth: 2
 
    ../preprocessing/index
+   fiducials
    resample
    tapioca
    tapas
