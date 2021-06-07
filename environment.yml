@@ -17,6 +17,7 @@ dependencies:
   - numba
   - pip:
       - pybob>=0.25
+      - pymmaster
       - sphinx-argparse
       - sphinx-rtd-theme
       - usgs
