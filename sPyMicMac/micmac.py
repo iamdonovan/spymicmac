@@ -1,5 +1,5 @@
 """
-sPyMicMac.micmac_tools is a collection of tools for interfacing with MicMac
+sPyMicMac.micmac is a collection of tools for interfacing with MicMac
 """
 import os
 import subprocess

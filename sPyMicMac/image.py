@@ -1,5 +1,5 @@
 """
-sPyMicMac.image_tools is a collection of tools for working with KH-9 Hexagon imagery.
+sPyMicMac.image is a collection of tools for working with aerial images.
 """
 import os
 from glob import glob

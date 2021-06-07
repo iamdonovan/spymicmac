@@ -1,3 +1,6 @@
+"""
+sPyMicMac.usgs is a collection of tools for interfacing with USGS Earth Explorer.
+"""
 import os
 import netrc
 import geopandas as gpd

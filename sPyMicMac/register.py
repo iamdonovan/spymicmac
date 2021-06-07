@@ -1,5 +1,5 @@
 """
-sPyMicMac.register_tools is a collection of tools for registering images and finding GCPs.
+sPyMicMac.register is a collection of tools for registering images and finding GCPs.
 """
 import os
 import re
