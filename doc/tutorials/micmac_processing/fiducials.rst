@@ -11,9 +11,12 @@ Ideally, you will have a camera calibration report, that will tell you the locat
 of the different fiducial markers in the image geometry. Note that using ``ReSampFid`` **requires** a file,
 ``Ori-InterneScan/MeasuresCamera.xml``, that tells MicMac what the location of each fiducial mark is.
 
-An example of this file can be found **here**. Note that the image coordinates are defined with the origin in the upper left
-corner, rather than the center of the image used by most calibration files. You can translate from one system to the
-other with the following:
+An example of this file can be found `here <../../../examples/MicMac-LocalChantierDescripteur.xml>`_. You will need to set
+the image size (in mm) by changing the values in ``SzCaptMm`` under ``CameraEntry`` (line 8 of the file). You will also
+need to set the image matching pattern (``PatternTransform``) and focal length in mm (``CalcName``) for each set of
+images - if, for example, different focal lengths were used. Note that the image coordinates are defined with the
+origin in the upper left corner, rather than the center of the image used by most calibration files. You can translate
+from one system to the other with the following:
 ::
 
     xp = x - min(x)
