@@ -1,0 +1,37 @@
+<Global>
+  <ChantierDescripteur >
+
+    <!-- Define a camera model (name and sensor/film size) -->
+    <LocCamDataBase>
+        <CameraEntry>
+              <Name> ZeissRMKATOP15  </Name>
+              <SzCaptMm>  229 229  </SzCaptMm> <!-- MidSideFiducials or "MaxFidX-MinFidX MaxFidY-MinFidY"-->
+              <ShortName> Zeiss RMK A Top15* and Zeiss Pleogon A3/4 </ShortName>
+         </CameraEntry>
+    </LocCamDataBase>
+    <!-- Associate images to a camera model -->
+    <KeyedNamesAssociations>
+            <Calcs>
+                 <Arrite>  1 1 </Arrite>
+                 <Direct>
+                       <PatternTransform> .*  </PatternTransform> <!-- Regular expressions of the group of images with the following camera model -->
+                       <CalcName> ZeissRMKATOP15 </CalcName> <!-- Name of the camera for these images -->
+                 </Direct>
+             </Calcs>
+             <Key> NKS-Assoc-STD-CAM </Key>
+    </KeyedNamesAssociations>
+        
+    <!-- Associate images to a focal length -->
+    <KeyedNamesAssociations>
+            <Calcs>
+                 <Arrite>  1 1 </Arrite>
+                 <Direct>
+                       <PatternTransform> OIS-Reech_AR57.*  </PatternTransform> <!-- Regular expressions of the group of images with the following focal length -->
+                       <CalcName> 153.46 </CalcName>   <!-- See calibration report -->
+                 </Direct>
+             </Calcs>
+             <Key>   NKS-Assoc-STD-FOC  </Key>
+    </KeyedNamesAssociations>
+        
+  </ChantierDescripteur>
+</Global>
