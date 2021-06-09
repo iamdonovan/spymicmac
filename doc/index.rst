@@ -10,6 +10,7 @@ aerial imagery.
    :maxdepth: 2
 
    setup
+   examples/index
    tutorials/index
    sPyMicMac/index
 
