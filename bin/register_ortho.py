@@ -11,11 +11,11 @@ def _argparser():
     _parser.add_argument('fn_dem', action='store', type=str, help='dem')
     _parser.add_argument('fn_reldem', action='store', type=str, help='relative dem corresponding to ortho')
     _parser.add_argument('-glacmask', action='store', type=str, default=None,
-                         help='path to shapefile of glacier outlines')
+                         help='path to shapefile of glacier outlines (i.e., an exclusion mask)')
     _parser.add_argument('-landmask', action='store', type=str, default=None,
-                         help='path to shapefile of land outlines')
+                         help='path to shapefile of land outlines (i.e., an inclusion mask)')
     _parser.add_argument('-footprints', action='store', type=str, default=None,
-                         help='approximate outline of hexagon images to crop satellite image to')
+                         help='path to shapefile of image outlines. If not set, will download from USGS.')
     _parser.add_argument('-im_subset', action='store', type=str, default=None, nargs='+',
                          help='subset of raw images to work with (default all)')
     _parser.add_argument('-corr_thresh', action='store', type=float, default=0.5,
