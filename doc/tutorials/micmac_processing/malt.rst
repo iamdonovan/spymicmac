@@ -42,6 +42,13 @@ At this point, you should have a finished DEM and orthomosaic. You may want to c
 co-registering it to a DEM of known quality. You may also wish to remove residual
 `doming effects <https://doi.org/10.5194/isprs-annals-V-3-2020-375-2020>`_ using ``mm3d PostProc Banana``.
 
+You can also run :doc:`../../sPyMicMac/scripts/post_process_micmac` to apply the AutoMask to the DEM and
+georeference the correlation mask:
+::
+
+    cd MEC-Malt
+    post_process_micmac.sh -z "8 +north" -n Block1
+
 
 .. [#] If you are running :py:meth:`sPyMicMac.register.register_ortho` with ``block`` set to a value (e.g., ``-b 1``), this
     will be ``Ori-TerrainFirstPass_block1``. You should also change ``DirMEC`` to a different name, (e.g., ``MEC-Malt_block1``),
