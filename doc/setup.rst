@@ -32,12 +32,12 @@ Check the **README.md** (or **LISEZMOI.md**) file to install any dependencies, t
     ...
     /home/bob/software/micmac/build:~$ make install -j$n
 
-where $n is the number of cores to compile MicMac with. The compiler flag **-DWERROR=0** is needed, as some of the dependencies
+where ``$n`` is the number of cores to compile MicMac with. The compiler flag ``-DWERROR=0`` is needed, as some of the dependencies
 will throw warnings that will force the compiler to quit with errors if we don't turn it off.
 
-Finally, make sure to add the MicMac bin directory (/home/bob/software/micmac/bin in the above example) to your $PATH
-environment variable, in order to be able to run MicMac. You can check that all dependencies are installed by running
-the following:
+Finally, make sure to add the MicMac bin directory (``/home/bob/software/micmac/bin`` in the above example)
+to your ``$PATH`` environment variable, in order to be able to run MicMac. You can check that all dependencies are
+installed by running the following:
 ::
 
     /home/bob:~$ mm3d CheckDependencies
@@ -64,8 +64,8 @@ In a nutshell, the basic idea is: clone the MicMac git repository, then build th
 Optional: Preparing a python environment
 ########################################
 If you like, you can set up a dedicated python environment for your sPyMicMac needs. This can be handy, in case any
-packages required by sPyMicMac clash with packages in your default environment. Our personal preference is `conda <https://docs.conda.io/en/latest/>`_,
-but your preferences may differ.
+packages required by sPyMicMac clash with packages in your default environment. Our personal preference
+is `conda <https://docs.conda.io/en/latest/>`_, but your preferences may differ.
 
 The git repository has a file, environment.yml, which provides a working environment for sPyMicMac and conda.
 Once you have conda installed, simply run:
@@ -84,15 +84,15 @@ sPyMicMac scripts and tools, if it is not already activated in your terminal.
 
 Installing sPyMicMac
 ####################
-Next, use **pip** to install the scripts and python modules:
+Next, use ``pip`` to install the scripts and python modules:
 ::
 
     pip install -e sPyMicMac
 
-from the repository folder. Note: the *-e* allows you to make changes to the code (for example, from git updates
-or through your own tinkering), that will then be updated within your python install. If you run *pip install*
+from the repository folder. Note: the `-e` allows you to make changes to the code (for example, from git updates
+or through your own tinkering), that will then be updated within your python install. If you run `pip install`
 without this option, it will install a static version of the package, and any changes/updates will have to be
-explictly re-installed.
+explicitly re-installed.
 
 Assuming that you haven't run into any errors, you should be set up. You can verify this by running:
 ::
