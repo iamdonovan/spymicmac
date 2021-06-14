@@ -31,6 +31,8 @@ The result shows a significant reduction in the striping:
     :alt: a scanned aerial image with striping removed
 
 
+.. _contrast-enhancement:
+
 contrast enhancement
 ---------------------
 Another common issue with scanned aerial images is that they can have inconsistent brightness between different
