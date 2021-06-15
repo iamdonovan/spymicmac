@@ -3,7 +3,7 @@ fiducial marks
 
 Once you have finished pre-processing the images, you need to resample them to a common geometry using
 `mm3d ReSampFid <https://micmac.ensg.eu/index.php/ReSampFid>`_. For historical aerial images, follow the steps below to
-find the fiducial markers for resampling. For KH-9 images, use :doc:`../../sPyMicMac/scripts/find_reseau_shifts`.
+find the fiducial markers for resampling. For KH-9 images, use :doc:`../../sPyMicMac/scripts/find_reseau_grid`.
 
 SaisieAppuisInitQT
 ------------------
