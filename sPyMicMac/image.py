@@ -2,12 +2,19 @@
 sPyMicMac.image is a collection of tools for working with aerial images.
 """
 import os
+import shutil
 from glob import glob
-import cv2
+import multiprocessing as mp
+from functools import partial
 from itertools import chain
+import cv2
 import gdal
+import matplotlib.pyplot as plt
+import pandas as pd
+import lxml.etree as etree
+import lxml.builder as builder
 from rtree import index
-from skimage.filters import rank
+from skimage.filters import rank, median, sobel_v, sobel_h
 from skimage import exposure, transform, morphology, io
 from skimage.morphology import binary_dilation, disk
 from skimage.measure import ransac
@@ -17,11 +24,14 @@ from scipy.interpolate import RectBivariateSpline as RBS
 from scipy import ndimage
 import numpy as np
 from shapely.ops import cascaded_union
+from shapely.geometry import LineString
 import geopandas as gpd
 # import pyvips
 from llc import jit_filter_function
 from pybob.image_tools import match_hist, reshape_geoimg, create_mask_from_shapefile, nanmedian_filter
+from pybob.bob_tools import mkdir_p
 from pymmaster.mmaster_tools import orient_footprint
+from sPyMicMac.micmac import get_im_meas, parse_im_meas
 
 
 ######################################################################################################################
@@ -49,14 +59,6 @@ def cross_template(shape, width=3):
     cross[half_r - half_w:half_r + half_w + 1, :] = 1
     cross[:, half_c - half_w:half_c + half_w + 1] = 1
     return cross
-
-
-def cross_filter(img, cross):
-    cross_edge = cross == 2
-    cross_cent = cross == 1
-    edge_std = ndimage.filters.generic_filter(highpass_filter(img), nanstd, footprint=cross_edge)
-    cent_std = ndimage.filters.generic_filter(highpass_filter(img), nanstd, footprint=cross_cent)
-    return np.where(np.logical_and(edge_std != 0, cent_std != 0), cent_std / edge_std, 2)
 
 
 def make_template(img, pt, half_size):
@@ -206,6 +208,7 @@ def contrast_enhance(fn_img, mask_value=None, qmin=0.02, qmax=0.98, gamma=1.25):
     """
 
     :param fn_img:
+    :param mask_value:
     :param qmin:
     :param qmax:
     :param gamma:
@@ -242,6 +245,17 @@ def make_binary_mask(img, erode=0, mask_value=0):
         _mask[~erode_mask] = 0
 
     return _mask
+
+
+def balance_image(img):
+    """
+
+    :param img:
+    :return:
+    """
+    img_eq = (255 * exposure.equalize_adapthist(img)).astype(np.uint8)
+    img_filt = median(img_eq, selem=disk(1))
+    return img_filt
 
 
 ######################################################################################################################
@@ -620,48 +634,396 @@ def transform_from_fprint(img, geo, fprint):
     return transform.estimate_transform('euclidean', dst_pts, src_pts)
 
 
-######################################################################################################################
-# image writing
-######################################################################################################################
-# def join_halves(img, overlap, indir='.', outdir='.', color_balance=True):
-#     """
-#     Join scanned halves of KH-9 image into one, given a common overlap point.
-#
-#     :param img: KH-9 image name (i.e., DZB1215-500454L001001) to join. The function will look for open image halves
-#         img_a.tif and img_b.tif, assuming 'a' is the left-hand image and 'b' is the right-hand image.
-#     :param overlap: Image coordinates for a common overlap point, in the form [x1, y1, x2, y2]. Best results tend to be
-#         overlaps toward the middle of the y range. YMMV.
-#     :param indir: Directory containing images to join ['.']
-#     :param outdir: Directory to write joined image to ['.']
-#     :param color_balance: Attempt to color balance the two image halves before joining [True].
-#
-#     :type img: str
-#     :type overlap: array-like
-#     :type indir: str
-#     :type outdir: str
-#     :type color_balance: bool
-#     """
-#
-#     left = pyvips.Image.new_from_file(os.path.sep.join([indir, '{}_a.tif'.format(img)]), memory=True)
-#     right = pyvips.Image.new_from_file(os.path.sep.join([indir, '{}_b.tif'.format(img)]), memory=True)
-#     outfile = os.path.sep.join([outdir, '{}.tif'.format(img)])
-#
-#     if len(overlap) < 4:
-#         x1, y1 = overlap
-#         if x1 < 0:
-#             join = left.merge(right, 'horizontal', x1, y1)
-#         else:
-#             join = right.merge(left, 'horizontal', x1, y1)
-#
-#         join.write_to_file(outfile)
-#     else:
-#         x1, y1, x2, y2 = overlap
-#
-#         join = left.mosaic(right, 'horizontal', x1, y1, x2, y2, mblend=0)
-#         if color_balance:
-#             balance = join.globalbalance(int_output=True)
-#             balance.write_to_file(outfile)
-#         else:
-#             join.write_to_file(outfile)
-#
-#     return
+def find_cross(img, pt, cross, tsize=300):
+    subimg, _, _ = make_template(img, pt, tsize)
+    res, this_i, this_j = find_match(subimg, cross)
+    inv_res = res.max() - res
+
+    pks = peak_local_max(inv_res, min_distance=5, num_peaks=2)
+    this_z_corrs = []
+    for pk in pks:
+        max_ = inv_res[pk[0], pk[1]]
+        this_z_corrs.append((max_ - inv_res.mean()) / inv_res.std())
+    if max(this_z_corrs) > 4 and max(this_z_corrs)/min(this_z_corrs) > 1.15:
+        return this_i-tsize+pt[0], this_j-tsize+pt[1]
+    else:
+        return np.nan, np.nan
+
+
+def lsq_fit(x, y, z):
+    tmp_A = []
+    tmp_b = []
+
+    for kk in range(z.size):
+        _ind = np.unravel_index(kk, z.shape)
+        tmp_A.append([x[_ind], y[_ind], 1])
+        tmp_b.append(z[_ind])
+
+    A = np.matrix(tmp_A)
+    b = np.matrix(tmp_b).T
+
+    A = A[np.isfinite(z.reshape(-1, 1)).any(axis=1)]
+    b = b[np.isfinite(b)]
+
+    fit = (A.T * A).I * A.T * b.T
+    out_lsq = np.zeros(z.shape)
+    for kk in range(z.size):
+        _ind = np.unravel_index(kk, z.shape)
+        out_lsq[_ind] = fit[0] * x[_ind] + fit[1] * y[_ind] + fit[2]
+    return out_lsq
+
+
+def _moving_average(a, n=5):
+    ret = np.cumsum(a)
+    ret[n:] = ret[n:] - ret[:-n]
+    return ret[n - 1:] / n
+
+
+def get_perp(corners):
+    a = np.array([corners[1][0] - corners[0][0],
+                  corners[1][1] - corners[0][1]])
+    a = a / np.linalg.norm(a)
+    return np.array([-a[1], a[0]])
+
+
+def find_border(img, cross, tsize=300):
+    img_mask = np.zeros(img.shape)
+    img_mask[np.logical_or(img < 25, median(img, selem=disk(16)) < 25)] = 1
+
+    vert = np.count_nonzero(sobel_v(img_mask)**2 > 0.8, axis=0)
+    hori = np.count_nonzero(sobel_h(img_mask)**2 > 0.8, axis=1)
+
+    vpeaks = peak_local_max(_moving_average(vert), min_distance=6000, num_peaks=1, exclude_border=10)
+    hpeaks = peak_local_max(_moving_average(hori), min_distance=3000, num_peaks=2, exclude_border=10)
+
+    top, bot = 10 * hpeaks.min(), 10 * hpeaks.max()
+    edge = 10 * vpeaks.min()
+    if edge < 5000:
+        search_corners = [(bot-625, edge+180), (top+625, edge+180)]
+    else:
+        search_corners = [(bot - 625, edge-180), (top + 625, edge-180)]
+
+    grid_corners = []
+    for c in search_corners:
+        _i, _j = find_cross(img, c, cross, tsize)
+        if any(np.isnan([_j, _i])):
+            grid_corners.append((c[1], c[0]))
+        else:
+            grid_corners.append((_j, _i))
+    pixres = (grid_corners[0][1] - grid_corners[1][1]) / 22
+    npix = 23 * pixres
+
+    perp = get_perp(grid_corners)
+
+    if edge < 5000:
+        left_edge = LineString([grid_corners[0], grid_corners[1]])
+        right_edge = LineString([grid_corners[0] + npix * perp,
+                                 grid_corners[1] + npix * perp])
+    else:
+        right_edge = LineString([grid_corners[0], grid_corners[1]])
+        left_edge = LineString([grid_corners[0] - npix * perp,
+                                grid_corners[1] - npix * perp])
+
+    return left_edge, right_edge, top, bot
+
+
+def _search_grid(ledge, redge, left, right):
+    i_grid = []
+    j_grid = []
+    search_pts = []
+
+    for ii in range(0, 23):
+        this_left = ledge.interpolate(ii * left.length / 22)
+        this_right = redge.interpolate(ii * right.length / 22)
+        this_line = LineString([this_left, this_right])
+        for jj in range(0, 24):
+            this_pt = this_line.interpolate(jj * this_line.length / 23)
+            i_grid.append(ii)
+            j_grid.append(jj)
+            search_pts.append((this_pt.y, this_pt.x))
+
+    return i_grid, j_grid, search_pts
+
+
+def find_reseau_grid(fn_img, csize=361, tsize=300, nproc=1, return_val=False):
+    """
+
+    :param fn_img:
+    :param csize:
+    :param tsize:
+    :param scanres:
+    :param scanres_y:
+    :param nproc:
+    :param return_val:
+    :return:
+    """
+    print('Reading {}'.format(fn_img))
+    img = io.imread(fn_img)
+
+    print('Image read.')
+    tmp_cross = cross_template(csize, width=3)
+    cross = np.ones((csize, csize)).astype(np.uint8)
+    cross[tmp_cross == 1] = 255
+
+    fig = plt.figure(figsize=(7, 12))
+    ax = fig.add_subplot(111)
+    ax.imshow(img[::10, ::10], cmap='gray', extent=[0, img.shape[1], img.shape[0], 0])
+
+    left_edge, right_edge, top, bot = find_border(img)
+
+    II, JJ, search_grid = _search_grid(left_edge, right_edge)
+    matched_grid = []
+
+    print('Finding grid points in {}...'.format(fn_img))
+    if nproc > 1:
+        subimgs = []
+        std_devs = []
+        means = []
+        for loc in search_grid:
+            subimg, _, _ = make_template(img, loc, tsize)
+            subimgs.append(subimg)
+        pool = mp.Pool(nproc)
+        outputs = pool.map(partial(find_match, template=cross), subimgs)
+        pool.close()
+        # have to map outputs to warped_ij
+        for n, output in enumerate(outputs):
+            res, this_i, this_j = output
+            maxj, maxi = cv2.minMaxLoc(res)[2]  # 'peak' is actually the minimum location, remember.
+            inv_res = res.max() - res
+            std_devs.append(inv_res.std())
+            means.append(inv_res.mean())
+
+            pks = peak_local_max(inv_res, min_distance=5, num_peaks=2)
+            if pks.size > 0:
+                this_z_corrs = []
+                for pk in pks:
+                    max_ = inv_res[pk[0], pk[1]]
+                    this_z_corrs.append((max_ - inv_res.mean()) / inv_res.std())
+
+                if max(this_z_corrs) > 5 and max(this_z_corrs) / min(this_z_corrs) > 1.15:
+                    rel_i = this_i - tsize
+                    rel_j = this_j - tsize
+                    i, j = search_grid[n]
+                    matched_grid.append((rel_i + i, rel_j + j))
+                else:
+                    matched_grid.append((np.nan, np.nan))
+            else:
+                matched_grid.append((np.nan, np.nan))
+    else:
+        for loc in search_grid:
+            _j, _i = find_cross(img, loc, cross, tsize=tsize)
+            matched_grid.append((_j, _i))
+
+    matched_grid = np.array(matched_grid)
+    search_grid = np.array(search_grid)
+
+    gcps_df = pd.DataFrame()
+    for i, pr in enumerate(list(zip(II, JJ))):
+        gcps_df.loc[i, 'gcp'] = 'GCP_{}_{}'.format(pr[0], pr[1])
+
+    gcps_df['search_j'] = search_grid[:, 1]
+    gcps_df['search_i'] = search_grid[:, 0]
+    gcps_df['match_j'] = matched_grid[:, 1]
+    gcps_df['match_i'] = matched_grid[:, 0]
+
+    model = AffineTransform()
+    model.estimate(gcps_df[['search_j', 'search_i']].values, gcps_df[['match_j', 'match_i']].values)
+    dst = model(gcps_df[['search_j', 'search_i']].values)
+
+    nomatch = np.isnan(gcps_df.match_j)
+
+    ux = lsq_fit(gcps_df.search_j.values, gcps_df.search_i.values, gcps_df.match_j.values)
+    uy = lsq_fit(gcps_df.search_j.values, gcps_df.search_i.values, gcps_df.match_i.values)
+
+    gcps_df.loc[nomatch, 'match_j'] = ux[nomatch]
+    gcps_df.loc[nomatch, 'match_i'] = uy[nomatch]
+
+    gcps_df['dj'] = gcps_df['match_j'] - dst[:, 0]
+    gcps_df['di'] = gcps_df['match_i'] - dst[:, 1]
+
+    gcps_df['im_row'] = gcps_df['match_i']
+    gcps_df['im_col'] = gcps_df['match_j']
+
+    print('Grid points found.')
+    mkdir_p('match_imgs')
+
+    ax.quiver(gcps_df.search_j, gcps_df.search_i, gcps_df.dj, gcps_df.di, color='r')
+    ax.plot(gcps_df.search_j[nomatch], gcps_df.search_i[nomatch], 'b+')
+    this_out = os.path.splitext(fn_img)[0]
+    fig.savefig(os.path.join('match_imgs', this_out + '_matches.png'), bbox_inches='tight', dpi=200)
+
+    E = builder.ElementMaker()
+    ImMes = E.MesureAppuiFlottant1Im(E.NameIm(fn_img))
+
+    pt_els = get_im_meas(gcps_df, E)
+    for p in pt_els:
+        ImMes.append(p)
+    mkdir_p('Ori-InterneScan')
+
+    outxml = E.SetOfMesureAppuisFlottants(ImMes)
+    tree = etree.ElementTree(outxml)
+    tree.write(os.path.join('Ori-InterneScan', 'MeasuresIm-' + fn_img + '.xml'), pretty_print=True,
+               xml_declaration=True, encoding="utf-8")
+
+    if return_val:
+        return gcps_df
+
+
+def _fix_cross(subimg):
+    subimg = subimg.astype(np.float32)
+
+    cross = cross_template(subimg.shape[0], width=5)
+    cross[:, :16] = 0
+    cross[:, -16:] = 0
+    cross[:16, :] = 0
+    cross[-16:, :] = 0
+    if subimg.shape[0] != cross.shape[0]:
+        cross = cross[:subimg.shape[0], :]
+
+    if subimg.shape[1] != cross.shape[1]:
+        cross = cross[:, :subimg.shape[1]]
+
+    subimg[cross != 0] = np.nan
+    fixed = nanmedian_filter(subimg, footprint=disk(7))
+    subimg[np.isnan(subimg)] = fixed[np.isnan(subimg)]
+    return subimg.astype(np.uint8)
+
+
+def remove_crosses(fn_img):
+    """
+
+    :param fn_img:
+    :return:
+    """
+    fn_meas = os.path.join('Ori-InterneScan', 'MeasuresIm-{}.xml'.format(fn_img))
+    img = io.imread(fn_img)
+    gcps = parse_im_meas(fn_meas)
+
+    pt = np.round([gcps.i[0], gcps.j[0]]).astype(int)
+    subim, row_, col_ = make_template(img, pt, 200)
+    cross = cross_template(subim.shape[0], width=5)
+    cross[:, 16:22] = 1
+    cross[:, -24:-16] = 1
+    cross[16:22, :] = 1
+    cross[-24:-16, :] = 1
+
+    subim = subim.astype(np.float32)
+    subim[cross != 0] = np.nan
+    fixed = nanmedian_filter(subim, footprint=disk(7))
+    subim[np.isnan(subim)] = fixed[np.isnan(subim)]
+    img[int(pt[0]) - row_[0]:int(pt[0]) + row_[1] + 1, int(pt[1]) - col_[0]:int(pt[1]) + col_[1] + 1] = subim.astype(
+        np.uint8)
+
+    for i, row in gcps.loc[1:].iterrows():
+        pt = np.round([row.i, row.j]).astype(int)
+        subim, row_, col_ = make_template(img, pt, 200)
+        img[pt[0] - row_[0]:pt[0] + row_[1] + 1, pt[1] - col_[0]:pt[1] + col_[1] + 1] = _fix_cross(subim)
+
+    mkdir_p('original')
+    shutil.move(fn_img, 'original')
+    io.imsave(fn_img, img.astype(np.uint8))
+
+
+def join_hexagon(im_pattern, overlap=2000, blend=True, corona=False):
+    """
+
+    :param im_pattern:
+    :param overlap:
+    :param blend:
+    :param corona:
+    :return:
+    """
+    if not corona:
+        left = io.imread('{}_a.tif'.format(im_pattern))
+        right = io.imread('{}_b.tif'.format(im_pattern))
+
+        left_gd = gdal.Open('{}_a.tif'.format(im_pattern))
+        right_gd = gdal.Open('{}_b.tif'.format(im_pattern))
+
+        M = match_halves(left, right, overlap=overlap)
+
+        out_shape = (left.shape[0], left.shape[1] + right.shape[1])
+
+        combined_right = warp(right, M, output_shape=out_shape, preserve_range=True, order=3)
+
+        combined_left = np.zeros(out_shape)
+        combined_left[:, :left.shape[1]] = left
+
+        if blend:
+            combined = _blend(combined_left, combined_right, left.shape)
+        else:
+            combined = combined_left + combined_right
+
+        last_ind = np.where(np.sum(combined, axis=0) > 0)[0][-1]
+        combined = combined[:, :last_ind+1]
+
+        io.imsave('{}.tif'.format(im_pattern), combined.astype(np.uint8))
+    else:
+        left = io.imread('{}_d.tif'.format(im_pattern))
+        for right_img in ['c', 'b', 'a']:
+            right = io.imread('{}_{}.tif'.format(im_pattern, right_img))
+
+            M = match_halves(left, right, overlap=overlap)
+            out_shape = (left.shape[0], left.shape[1] + right.shape[1])
+
+            combined_right = warp(right, M, output_shape=out_shape, preserve_range=True, order=3)
+
+            combined_left = np.zeros(out_shape)
+            combined_left[:, :left.shape[1]] = left
+
+            if blend:
+                combined = _blend(combined_left, combined_right, left.shape)
+            else:
+                combined = combined_left + combined_right
+
+            last_ind = np.where(np.sum(combined, axis=0) > 0)[0][-1]
+            left = combined[:, :last_ind + 1]
+
+        io.imsave('{}.tif'.format(im_pattern), combined.astype(np.uint8))
+
+
+def _blend(_left, _right, left_shape):
+    first = np.where(np.sum(_right, axis=0) > 0)[0][0]
+    last = left_shape[1]
+
+    m = 1 / (first - last)
+    alpha = np.ones(_left.shape, dtype=np.float32)
+    alpha[:, last:] = 0
+    for i, ind in enumerate(np.arange(first, last)):
+        alpha[:, ind] = 1 + m * (ind - first)
+
+    return alpha * _left + (1 - alpha) * _right
+
+
+def match_halves(left, right, overlap):
+    """
+
+    :param left:
+    :param right:
+    :param overlap:
+    :return:
+    """
+    src_pts = []
+    dst_pts = []
+
+    row_inds = list(range(0, left.shape[0] + 1, overlap))
+    if row_inds[-1] != left.shape[0]:
+        row_inds.append(-1)
+    row_inds = np.array(row_inds)
+
+    for i, ind in enumerate(row_inds[:-1]):
+        try:
+            l_sub = left[ind:row_inds[i + 1], -overlap:]
+            r_sub = right[ind:row_inds[i + 1], :overlap]
+
+            kp, des, matches = get_matches(l_sub, r_sub)
+            src_pts.extend(
+                [np.array(kp[0][m.queryIdx].pt) + np.array([left.shape[1] - overlap, ind]) for m in matches])
+            dst_pts.extend([np.array(kp[1][m.trainIdx].pt) + np.array([0, ind]) for m in matches])
+        except:
+            continue
+
+    model, inliers = ransac((np.array(src_pts), np.array(dst_pts)), EuclideanTransform,
+                        min_samples=25, residual_threshold=1, max_trials=1000)
+    print('{} tie points found'.format(np.count_nonzero(inliers)))
+    return model
