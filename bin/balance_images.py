@@ -1,20 +1,28 @@
 import os
+import argparse
 from glob import glob
 from skimage.io import imread, imsave
-from skimage.exposure import equalize_adapthist
-from skimage.filters import median
-from skimage.morphology import disk
-import numpy as np
 from pybob.bob_tools import mkdir_p
+from sPyMicMac.image import balance_image
 
-mkdir_p('balanced')
 
-imlist = glob('OIS*.tif')
-imlist.sort()
+def _argparser():
+    _parser = argparse.ArgumentParser(description="Apply CLAHE to all re-sampled images in current directory.",
+                                      formatter_class=argparse.RawDescriptionHelpFormatter)
+    return _parser
 
-for im in imlist:
-    print(im)
-    img = imread(im)
-    img_eq = (255 * equalize_adapthist(img)).astype(np.uint8)
-    img_filt = median(img_eq, selem=disk(1))
-    imsave(os.path.join('balanced', im), img_filt)
+
+def main():
+    mkdir_p('balanced')
+
+    imlist = glob('OIS*.tif')
+    imlist.sort()
+
+    for im in imlist:
+        print(im)
+        img_filt = balance_image(imread(im))
+        imsave(os.path.join('balanced', im), img_filt)
+
+
+if __name__ == "__main__":
+    main()
