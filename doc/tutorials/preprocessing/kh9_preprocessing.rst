@@ -61,7 +61,23 @@ labelled 'a' and 'b', with 'a' corresponding to the left-hand scan, and 'b' corr
 This is what :py:meth:`sPyMicMac.image.join_hexagon` is expecting - that the overlap between the two halves is the
 right-hand side of image 'a', and the left-hand side of image 'b'.
 
-As there is sometimes a difference in brightness between the two halves, ``spymicmac.image.join_hexagon()`` has the
+Once the images have been re-sampled using :doc:`../../sPyMicMac/scripts/resample_hexagon`, the border will be removed,
+and the images will overlap by 2 mm:
+
+.. image:: ../../img/resamp_half_a.png
+    :width: 49%
+
+.. image:: ../../img/resamp_half_b.png
+    :width: 49%
+
+After calling :py:meth:`sPyMicMac.image.join_hexagon`, the image should look something like this:
+
+.. image:: ../../img/joined.png
+    :width: 98%
+    :align: center
+    :alt: a re-sampled and joined KH-9 image showing Hofsjökull, Iceland
+
+As there is sometimes a difference in brightness between the two halves, :py:meth:`sPyMicMac.image.join_hexagon` has the
 option to blend the two halves over the overlap by averaging the values from the two halves, starting from
 100% of the value of image 'a', linearly increasing to 100% of the value of image 'b' at the end of the
 overlapping part.
