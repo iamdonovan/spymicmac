@@ -9,18 +9,22 @@ contrast in the images, in order to help improve the final results.
 
 reseau field
 -------------
-To help correct some of the distortion in the images caused by film storage, :py:meth:``sPyMicMac.image`` includes
+To help correct some of the distortion in the images caused by film storage, :py:meth:`sPyMicMac.image` includes
 a routine to automatically find the Reseau markers in the image and use their locations to resample the images using
-``ReSampFid``. In the image below, you can see the difference between the expected location of each Reseau marker
+``ReSampFid``. In the images below, you can see the difference between the expected location of each Reseau marker
 and the automatically detected locations:
 
-.. image:: ../../img/reseau_field.png
-    :width: 600
-    :align: center
+.. image:: ../../img/reseau_offset_a.png
+    :width: 49%
     :alt: a KH-9 image with the Reseau field warping shown
 
-To run the routine, use either ``sPyMicMac.image.find_reseau_grid`` or
-:doc:``../../sPyMicMac/scripts/find_reseau_shifts``. This will produce a ``MeasuresIm`` file that will be read
+.. image:: ../../img/reseau_offset_b.png
+    :width: 49%
+    :alt: a KH-9 image with the Reseau field warping shown
+
+
+To run the routine, use either :py:meth:`sPyMicMac.image.find_reseau_grid` or
+:doc:`../../sPyMicMac/scripts/find_reseau_grid`. This will produce a ``MeasuresIm`` file that will be read
 by ``ReSampFid``.
 
 .. note::
@@ -30,12 +34,20 @@ by ``ReSampFid``.
 
 cross removal
 --------------
-Once the images have been resampled, you can "remove" the Reseau marks using ``spymicmac.image.remove_crosses``.
-(**to be continued...**)
+Once you have found the Reseau marks in each image half, you can "remove" the Reseau marks using either
+:py:meth:`sPyMicMac.image.remove_crosses` or :doc:`../../sPyMicMac/scripts/remove_crosses`.
+
+.. image:: ../../img/fixed_cross.png
+    :width: 600
+    :align: center
+    :alt: an image showing a Reseau mark on the left, and the Reseau mark erased on the right.
+
+After this step, you can use :doc:`../../sPyMicMac/scripts/resample_hexagon`, or call ``mm3d ReSampFid`` directly,
+to re-sample the images before joining the two halves together.
 
 image joining
 --------------
-Because of the large size of the film, USGS scans the images in two halves with 1-2" overlap, as shown in
+Because of the large size of the film, USGS scans the images in two halves with a small amount of overlap, as shown in
 the example below.
 
 .. image:: ../../img/half_a.png
@@ -44,9 +56,9 @@ the example below.
 .. image:: ../../img/half_b.png
     :width: 49%
 
-In ``sPyMicMac``, the function to join the images is ``spymicmac.image.join_hexagon()``. Normally, the scans are
+In ``sPyMicMac``, the function to join the images is :py:meth:`sPyMicMac.image.join_hexagon`. Normally, the scans are
 labelled 'a' and 'b', with 'a' corresponding to the left-hand scan, and 'b' corresponding to the right-hand scan.
-This is what ``spymicmac.image.join_hexagon()`` is expecting - that the overlap between the two halves is the
+This is what :py:meth:`sPyMicMac.image.join_hexagon` is expecting - that the overlap between the two halves is the
 right-hand side of image 'a', and the left-hand side of image 'b'.
 
 As there is sometimes a difference in brightness between the two halves, ``spymicmac.image.join_hexagon()`` has the
