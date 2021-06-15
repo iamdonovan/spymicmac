@@ -11,7 +11,7 @@ level=9
 name=HexagonOUT
 dir=$(pwd)
 orig_dir=$(pwd)
-while getopts "z:n:h" opt; do
+while getopts "z:n:l:d:h" opt; do
   case $opt in
     h)
       echo "Post-process outputs from MicMac into nice files to use."
@@ -38,11 +38,11 @@ while getopts "z:n:h" opt; do
       dir=$OPTARG
       ;;
     \?)
-      echo "RunMicMacAster.sh: Invalid option: -$OPTARG" >&2
+      echo "PostProcessMicMac.sh: Invalid option: -$OPTARG" >&2
       exit 1
       ;;
     :)
-      echo "RunMicMacAster.sh: Option -$OPTARG requires an argument." >&2
+      echo "PostProcessMicMac.sh: Option -$OPTARG requires an argument." >&2
       exit 1
       ;;
   esac
@@ -50,7 +50,7 @@ done
 
 if [ $utm_set -eq 0 ]; then
       echo "Error: UTM Zone has not been set."
-      echo "call RunMicMacAster.sh -h for details on usage."
+      echo "call PostProcessMicMac.sh -h for details on usage."
       echo " "
       exit 1
 fi
