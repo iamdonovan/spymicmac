@@ -7,6 +7,7 @@ from glob import glob
 import multiprocessing as mp
 from functools import partial
 from itertools import chain
+import PIL.Image
 import cv2
 import gdal
 import matplotlib.pyplot as plt
@@ -14,9 +15,8 @@ import pandas as pd
 import lxml.etree as etree
 import lxml.builder as builder
 from rtree import index
-from skimage.filters import rank, median, sobel_v, sobel_h
-from skimage import exposure, transform, morphology, io
-from skimage.morphology import binary_dilation, disk
+from skimage import exposure, transform, morphology, io, filters
+from skimage.morphology import binary_closing, binary_dilation, disk
 from skimage.measure import ransac
 from skimage.feature import peak_local_max
 from skimage.transform import match_histograms, warp, AffineTransform, EuclideanTransform
@@ -75,7 +75,7 @@ def make_template(img, pt, half_size):
 
 
 def find_match(img, template):
-    img_eq = rank.equalize(img, selem=morphology.disk(100))
+    img_eq = filters.rank.equalize(img, selem=morphology.disk(100))
     # res = cross_filter(img_eq, template)
     res = cv2.matchTemplate(img_eq, template, cv2.TM_CCORR_NORMED)
     i_off = (img.shape[0] - res.shape[0]) / 2
@@ -254,7 +254,7 @@ def balance_image(img):
     :return:
     """
     img_eq = (255 * exposure.equalize_adapthist(img)).astype(np.uint8)
-    img_filt = median(img_eq, selem=disk(1))
+    img_filt = filters.median(img_eq, selem=disk(1))
     return img_filt
 
 
@@ -686,22 +686,13 @@ def get_perp(corners):
     return np.array([-a[1], a[0]])
 
 
-def find_border(img, cross, tsize=300):
-    img_mask = np.zeros(img.shape)
-    img_mask[np.logical_or(img < 25, median(img, selem=disk(16)) < 25)] = 1
+def find_border(img, rough_ext, cross, tsize=300):
+    left, right, top, bot = rough_ext
 
-    vert = np.count_nonzero(sobel_v(img_mask)**2 > 0.8, axis=0)
-    hori = np.count_nonzero(sobel_h(img_mask)**2 > 0.8, axis=1)
-
-    vpeaks = peak_local_max(_moving_average(vert), min_distance=6000, num_peaks=1, exclude_border=10)
-    hpeaks = peak_local_max(_moving_average(hori), min_distance=3000, num_peaks=2, exclude_border=10)
-
-    top, bot = 10 * hpeaks.min(), 10 * hpeaks.max()
-    edge = 10 * vpeaks.min()
-    if edge < 5000:
-        search_corners = [(bot-625, edge+180), (top+625, edge+180)]
+    if np.isnan(right):
+        search_corners = [(bot-625, left+180), (top+625, left+180)]
     else:
-        search_corners = [(bot - 625, edge-180), (top + 625, edge-180)]
+        search_corners = [(bot-625, right-180), (top+625, right-180)]
 
     grid_corners = []
     for c in search_corners:
@@ -715,7 +706,7 @@ def find_border(img, cross, tsize=300):
 
     perp = get_perp(grid_corners)
 
-    if edge < 5000:
+    if np.isnan(right):
         left_edge = LineString([grid_corners[0], grid_corners[1]])
         right_edge = LineString([grid_corners[0] + npix * perp,
                                  grid_corners[1] + npix * perp])
@@ -724,17 +715,69 @@ def find_border(img, cross, tsize=300):
         left_edge = LineString([grid_corners[0] - npix * perp,
                                 grid_corners[1] - npix * perp])
 
-    return left_edge, right_edge, top, bot
+    return left_edge, right_edge
 
 
-def _search_grid(ledge, redge, left, right):
+def downsample_image(img, fact=4):
+    _img = PIL.Image.fromarray(img)
+    return np.array(_img.resize((np.array(_img.size) / fact).astype(int), PIL.Image.LANCZOS))
+
+
+def get_rough_frame(img):
+    """
+
+    :param img:
+    :return:
+    """
+    img_lowres = downsample_image(img, fact=10)
+    img_seg = np.zeros(img_lowres.shape)
+    img_seg[img_lowres > filters.threshold_local(img_lowres, 101)] = 1
+    img_seg = binary_closing(img_seg, selem=disk(1))
+
+    v_sob = filters.sobel_v(img_seg)**2
+    h_sob = filters.sobel_h(img_seg)**2
+
+    vert = np.count_nonzero(v_sob > 0.5, axis=0)
+    hori = np.count_nonzero(h_sob > 0.5, axis=1)
+
+    vert_thresh = 0.3 * vert.max()
+    hori_thresh = 0.3 * hori.max()
+
+    try:
+        xmin = 10 * peak_local_max(vert[:200], num_peaks=2, min_distance=20,
+                                   threshold_abs=vert_thresh, exclude_border=10).max()
+    except ValueError:
+        xmin = np.nan
+
+    try:
+        xmax = 10 * (peak_local_max(vert[-200:], num_peaks=2, min_distance=20,
+                                    threshold_abs=vert_thresh, exclude_border=10).min() + img_lowres.shape[1] - 200)
+    except ValueError:
+        xmax = np.nan
+
+    try:
+        ymin = 10 * peak_local_max(hori[:200], num_peaks=2, min_distance=10,
+                                   threshold_abs=hori_thresh, exclude_border=5).max()
+    except ValueError:
+        ymin = np.nan
+
+    try:
+        ymax = 10 * (peak_local_max(hori[-200:], num_peaks=2, min_distance=10,
+                                    threshold_abs=hori_thresh, exclude_border=5).min() + img_lowres.shape[0] - 200)
+    except ValueError:
+        ymax = np.nan
+
+    return xmin, xmax, ymin, ymax
+
+
+def _search_grid(left, right):
     i_grid = []
     j_grid = []
     search_pts = []
 
     for ii in range(0, 23):
-        this_left = ledge.interpolate(ii * left.length / 22)
-        this_right = redge.interpolate(ii * right.length / 22)
+        this_left = left.interpolate(ii * left.length / 22)
+        this_right = right.interpolate(ii * right.length / 22)
         this_line = LineString([this_left, this_right])
         for jj in range(0, 24):
             this_pt = this_line.interpolate(jj * this_line.length / 23)
@@ -759,6 +802,9 @@ def find_reseau_grid(fn_img, csize=361, tsize=300, nproc=1, return_val=False):
     """
     print('Reading {}'.format(fn_img))
     img = io.imread(fn_img)
+    img_ = PIL.Image.fromarray(img)
+    img_lowres = np.array(img_.resize((np.array(img_.size)/10).astype(int), PIL.Image.LANCZOS))
+    del img_
 
     print('Image read.')
     tmp_cross = cross_template(csize, width=3)
@@ -767,9 +813,12 @@ def find_reseau_grid(fn_img, csize=361, tsize=300, nproc=1, return_val=False):
 
     fig = plt.figure(figsize=(7, 12))
     ax = fig.add_subplot(111)
-    ax.imshow(img[::10, ::10], cmap='gray', extent=[0, img.shape[1], img.shape[0], 0])
+    ax.imshow(img_lowres, cmap='gray', extent=[0, img.shape[1], img.shape[0], 0])
+    ax.set_xticks([])
+    ax.set_yticks([])
 
-    left_edge, right_edge, top, bot = find_border(img)
+    rough_border = get_rough_frame(img)
+    left_edge, right_edge = find_border(img, rough_border, cross, tsize=tsize)
 
     II, JJ, search_grid = _search_grid(left_edge, right_edge)
     matched_grid = []
