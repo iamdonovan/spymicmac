@@ -6,7 +6,7 @@ while getopts "r:h" opt; do
   case $opt in
     h)
       echo "Resample KH-9 halves using mm3d ReSampFid."
-      echo "usage: resamp_hexagon.sh -r 'RES'
+      echo "usage: resamp_hexagon.sh -r 'RES'"
       echo "    -r RES      : Scan resolution to re-sample to (default: 0.014 mm/pixel)"
       echo "    -h          : displays this message and exits."
       echo " "
