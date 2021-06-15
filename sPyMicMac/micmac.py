@@ -122,6 +122,23 @@ def get_im_meas(gcps, E):
     return pt_els
 
 
+def parse_im_meas(fn_meas):
+    """
+
+    :param fn_meas:
+    :return:
+    """
+    gcp_df = pd.DataFrame()
+    root = ET.parse(fn_meas).getroot()
+    measures = root.findall('MesureAppuiFlottant1Im')[0]
+    for i, mes in enumerate(measures.findall('OneMesureAF1I')):
+        gcp_df.loc[i, 'name'] = mes.find('NamePt').text
+        pt = mes.find('PtIm').text.split()
+        gcp_df.loc[i, 'i'] = float(pt[1])
+        gcp_df.loc[i, 'j'] = float(pt[0])
+    return gcp_df
+
+
 def generate_measures_files(joined=False):
     """
 
