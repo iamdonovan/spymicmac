@@ -7,7 +7,7 @@ from sPyMicMac.image import balance_image
 
 
 def _argparser():
-    _parser = argparse.ArgumentParser(description="Apply CLAHE to all re-sampled images in current directory.",
+    _parser = argparse.ArgumentParser(description="Apply Contrast-limited Adaptive Histogram Equalization (CLAHE) to all re-sampled images in current directory.",
                                       formatter_class=argparse.RawDescriptionHelpFormatter)
     return _parser
 
