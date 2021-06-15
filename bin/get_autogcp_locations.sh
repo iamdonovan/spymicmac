@@ -1,4 +1,15 @@
 #!/bin/bash
+programname=$0
+
+function usage {
+      echo "Find location of automatically-detected control points in individual images using mm3d XYZ2Im."
+      echo "usage: $programname Dir-ORI GCP_MEASURES_FILE <Images>"
+      exit 0
+}
+
+if [ $# -lt 3 ]; then
+  usage
+fi
 
 ori=$1
 meas_file=$2
