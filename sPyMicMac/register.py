@@ -164,7 +164,7 @@ def transform_centers(img_gt, ref, imlist, footprints, ori):
     Use the camera centers in relative space provided by MicMac Orientation files, along with camera footprints,
     to estimate a transformation between the relative coordinate system and the absolute coordinate system.
 
-    :param array-like img_gt: the image GeoTransform (as provided by ...)
+    :param array-like img_gt: the image GeoTransform (as provided by gdal.Dataset.GetGeoTransform)
     :param GeoImg ref: the reference image to use to determine the output image shape
     :param list imlist: a list of of the images that were used for the relative orthophoto
     :param GeoDataFrame footprints: the (approximate) image footprints - the centroid will be used for the absolute camera positions.
