@@ -624,11 +624,33 @@ def interp_line(df, first, last, nimgs=None, pos=None):
         return ptList
 
 
+def update_center(fn_img, ori, new_center):
+    """
+    Update the camera position in an Orientation file.
+
+    :param str fn_img: the name of the image to update the orientation for.
+    :param str ori: the name of the orientation directory (e.g., Ori-Relative)
+    :param list new_center: a list of the new camera position [x, y, z]
+    """
+    ori_root = ET.parse(os.path.join(ori, 'Orientation-{}.xml'.format(fn_img))).getroot()
+    if ori_root.tag != 'OrientationConique':
+        ori_coniq = ori_root.find('OrientationConique')
+    else:
+        ori_coniq = ori_root
+
+    ori_coniq.find('Externe').find('Centre').text = ' '.join([str(f) for f in new_center])
+
+    tree = ET.ElementTree(ori_root)
+    tree.write(os.path.join(ori, 'Orientation-{}.xml'.format(fn_img)),
+               encoding="utf-8", xml_declaration=True)
+
+
 def dem_to_text(fn_dem, fn_out='dem_pts.txt', spacing=100):
     """
 
-    :param fn_dem:
-    :param spacing:
+    :param str fn_dem:
+    :param str fn_out:
+    :param int spacing:
     :return:
     """
     if isinstance(fn_dem, GeoImg):
