@@ -29,15 +29,18 @@ from sPyMicMac.usgs import get_usgs_footprints
 
 def sliding_window_filter(img_shape, pts_df, winsize, stepsize=None, mindist=2000, how='residual', is_ascending=True):
     """
+    Given a DataFrame of indices representing points, use a sliding window filter to keep only the 'best' points within
+    a given window and separation distance.
 
-    :param img_shape:
-    :param pts_df:
-    :param winsize:
-    :param stepsize:
-    :param mindist:
-    :param how:
-    :param is_ascending:
+    :param array-like img_shape: The shape of the image to filter indices from.
+    :param DataFrame pts_df: A DataFrame that contains the pixel locations of points (column: orig_j, row: orig_i)
+    :param int winsize: the size of the window to use for the filter.
+    :param int stepsize: how large of a step size to use for the sliding window (default: winsize/2)
+    :param int mindist: the minimum distance (in pixels) to use between points (default: 2000)
+    :param str how: how to sort pts_df to determine the 'best' points to keep (default: 'residual')
+    :param bool is_ascending: whether the column named in 'how' should be sorted ascending or descending (default: True)
     :return:
+        - **out_inds** (*array-like*) -- an array with the filtered indices
     """
     if stepsize is None:
         stepsize = winsize / 2
@@ -80,9 +83,13 @@ def sliding_window_filter(img_shape, pts_df, winsize, stepsize=None, mindist=200
 
 def get_imlist(im_subset):
     """
+    Given either a list of filenames or a regex match pattern, return a list of filenames and a pattern to provide
+    to MicMac.
 
-    :param im_subset:
+    :param list im_subset: a list of filenames or a match pattern (e.g., ['OIS.*tif']) representing filenames
     :return:
+        - **imlist** (*list*) -- the list of filenames matching the provided pattern.
+        - **match_pattern** (*str*) -- the match pattern to be provided to MicMac.
     """
     if im_subset is None:
         imlist = glob('OIS*.tif')
@@ -100,15 +107,6 @@ def get_imlist(im_subset):
 
 
 def get_lowres_transform(lowres, ref, fprint, ref_mask, imgsource='DECLASSII'):
-    """
-
-    :param lowres:
-    :param ref:
-    :param fprint:
-    :param ref_mask:
-    :param imgsource:
-    :return:
-    """
 
     if imgsource == 'DECLASSII':
         M = imtools.transform_from_fprint(lowres, ref, fprint, ref_mask)
@@ -138,13 +136,19 @@ def get_lowres_transform(lowres, ref, fprint, ref_mask, imgsource='DECLASSII'):
     return M
 
 
-def get_utm_str(img):
+def get_utm_str(epsg):
     """
+    Given a GeoImg, read the associated EPSG code and return a UTM zone.
 
-    :param img:
+    Examples:
+        - get_utm_str(32608) -> 'UTM Zone 8N'
+        - get_utm_str(32708) -> 'UTM Zone 8S'
+
+    :param int|str epsg: a str or int representing an EPSG Code
     :return:
+        - **utm_str** (*str*) -- the UTM string representation
     """
-    epsg_str = str(img.epsg)
+    epsg_str = str(epsg)
     hemi_dict = {'6': 'N', '7': 'S'}
 
     if epsg_str[:2] == '32':
@@ -157,13 +161,18 @@ def get_utm_str(img):
 
 def transform_centers(img_gt, ref, imlist, footprints, ori):
     """
+    Use the camera centers in relative space provided by MicMac Orientation files, along with camera footprints,
+    to estimate a transformation between the relative coordinate system and the absolute coordinate system.
 
-    :param img_gt:
-    :param ref:
-    :param imlist:
-    :param footprints:
-    :param ori:
+    :param array-like img_gt: the image GeoTransform (as provided by ...)
+    :param GeoImg ref: the reference image to use to determine the output image shape
+    :param list imlist: a list of of the images that were used for the relative orthophoto
+    :param GeoDataFrame footprints: the (approximate) image footprints - the centroid will be used for the absolute camera positions.
+    :param str ori: name of orientation directory (after Ori-)
     :return:
+        - **model** (*AffineTransform*) -- the estimated Affine Transformation between relative and absolute space
+        - **inliers** (*array-like*) -- a list of the inliers returned by skimage.measure.ransac
+        - **join** (*GeoDataFrame*) -- the joined image footprints and relative orientation files
     """
 
     rel_ori = mmtools.load_all_orientation(imlist, ori)
@@ -188,14 +197,6 @@ def transform_centers(img_gt, ref, imlist, footprints, ori):
 
 
 def refine_lowres_tfm(rough_tfm, ref, mask, Minit):
-    """
-
-    :param rough_tfm:
-    :param ref:
-    :param mask:
-    :param Minit:
-    :return:
-    """
     rough_gcps = imtools.find_grid_matches(rough_tfm, ref, mask, Minit, spacing=20, srcwin=40, dstwin=100)
     max_d = 100 - 40
 
@@ -213,13 +214,7 @@ def refine_lowres_tfm(rough_tfm, ref, mask, Minit):
 
 
 def scale_factor(centers, img_gt, ref):
-    """
 
-    :param centers:
-    :param img_gt:
-    :param ref:
-    :return:
-    """
     ref_ij = np.array([ref.xy2ij((row.xabs, row.yabs)) for i, row in centers.iterrows()])
     rel_ij = np.array([((row.xrel - img_gt[4]) / img_gt[0],
                         (row.yrel - img_gt[5]) / img_gt[3]) for i, row in centers.iterrows()])
@@ -238,13 +233,18 @@ def scale_factor(centers, img_gt, ref):
 
 def get_mask(footprints, img, imlist, landmask=None, glacmask=None):
     """
+    Create a mask for an image from different sources.
 
-    :param footprints:
-    :param img:
-    :param imlist:
-    :param landmask:
-    :param glacmask:
-    :return:
+    :param GeoDataFrame footprints: vector data representing image footprints
+    :param GeoImg img: the GeoImg to create a mask for
+    :param array-like imlist: a list of image names
+    :param str landmask: path to file of land outlines (i.e., an inclusion mask)
+    :param str glacmask: path to file of glacier outlines (i.e., an exclusion mask)
+
+    :returns:
+        - **mask** (*array-like*) -- the mask
+        - **fmask** (*GeoImg*) -- the georeferenced footprint mask
+        - **img** (*GeoImg*) -- the GeoImg, cropped to a 10 pixel buffer around the image footprints
     """
     fmask, fprint = imtools.get_footprint_mask(footprints, img, imlist, fprint_out=True)
     fmask_geo = img.copy(new_raster=fmask)
@@ -290,7 +290,7 @@ def register_ortho_old(fn_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, landm
 
     ref_img = GeoImg(fn_ref)
 
-    utm_str = get_utm_str(ref_img)
+    utm_str = get_utm_str(ref_img.epsg)
 
     ortho = imread(fn_ortho)
 
@@ -569,26 +569,26 @@ def register_ortho_old(fn_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, landm
 
 
 def register_ortho(fn_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, landmask=None, footprints=None,
-                   im_subset=None, block_num=None, ori='Relative', ortho_res=8, init_res=400,
+                   im_subset=None, block_num=None, ori='Relative', ortho_res=8.,
                    imgsource='DECLASSII', density=200, out_dir=None, allfree=True):
     """
+    Register a relative orthoimage and DEM to a reference orthorectified image and DEM.
 
-    :param fn_ortho:
-    :param fn_ref:
-    :param fn_reldem:
-    :param fn_dem:
-    :param glacmask:
-    :param landmask:
-    :param footprints:
-    :param im_subset:
-    :param block_num:
-    :param ori:
-    :param ortho_res:
-    :param imgsource:
-    :param density:
-    :param out_dir:
-    :param allfree:
-    :return:
+    :param str fn_ortho: path to relative orthoimage
+    :param str fn_ref: path to reference orthorectified image
+    :param str fn_reldem: path to relative DEM
+    :param str fn_dem: path to reference DEM
+    :param str glacmask: path to file of glacier outlines (i.e., an exclusion mask)
+    :param str landmask: path to file of land outlines (i.e., an inclusion mask)
+    :param str footprints: path to shapefile of image outlines. If not set, will download from USGS.
+    :param str im_subset: subset of raw images to work with
+    :param str block_num: block number to use if processing multiple image blocks
+    :param str ori: name of orientation directory (after Ori-) (default: Relative)
+    :param float ortho_res: approx. ground sampling distance (pixel resolution) of ortho image (default: 8 m)
+    :param str imgsource: USGS dataset name for images (default: DECLASSII)
+    :param int density: pixel spacing to look for GCPs (default: 200)
+    :param str out_dir: output directory to save auto GCP files to (default: auto_gcps)
+    :param bool allfree: run Campari setting all parameters free (default: True)
     """
     print('start.')
 
@@ -610,7 +610,7 @@ def register_ortho(fn_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, landmask=
     # ref_lowres = ref_img.resample(init_res)
     # resamp_fact = init_res / ref_img.dx
 
-    utm_str = get_utm_str(ref_img)
+    utm_str = get_utm_str(ref_img.epsg)
 
     ortho = imread(fn_ortho)
     # ortho_ = Image.fromarray(ortho)
