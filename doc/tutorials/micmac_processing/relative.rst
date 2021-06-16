@@ -25,8 +25,9 @@ DEM. To generate an orthomosaic, we use `Tawny <https://micmac.ensg.eu/index.php
     mm3d Tawny Ortho-MEC-Malt Out=Orthophotomosaic.tif RadiomEgal=0
 
 Here, we use ``RadiomEgal=0`` to use the images as-is, rather than attempting to balance the radiometry (as this
-can lead to undesirable results). Finally, you might need to re-combine the image tiles, depending on how large they
-are:
+can lead to undesirable results). Finally, you might need to re-combine the image tiles using
+`mosaic_micmac_tiles.py <https://mmaster-workflows.readthedocs.io/en/v0.1/pymmaster/python/scripts/mosaic_micmac_tiles.html>`_,
+depending on how large they are:
 ::
 
     cd Ortho-MEC-Malt
