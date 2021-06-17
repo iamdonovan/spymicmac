@@ -653,6 +653,23 @@ def update_center(fn_img, ori, new_center):
 
 
 def fix_orientation(cameras, ori_df, ori, nsig=4):
+    """
+    Correct erroneous Tapas camera positions using an estimated affine transformation between the absolute camera locations
+    and the relative locations read from the orientation directory.
+
+    Once the positions have been updated, you should re-run Tapas using the InOri set to the directory; e.g., if you
+    have updated Ori-Relative, you should run:
+
+        mm3d Tapas RelativeBasic "OIS.*tif" InOri=Relative Out=Relative LibFoc=0
+
+    :param pandas.DataFrame cameras: A DataFrame containing camera positions (x, y, z) and a 'name' column that contains
+        the image names.
+    :param pandas.DataFrame ori_df: A DataFrame output from sPyMicMac.micmac.load_all_orientations, or that contains
+        a 'name' column and camera positions in relative space (x, y, z)
+    :param str ori: the Orientation directory to update (e.g., Ori-Relative)
+    :param int|float nsig: the number of normalized absolute deviations from the median residual value to consider
+        a camera an outlier (default: 4)
+    """
     join = cameras.set_index('name').join(ori_df.set_index('name'), lsuffix='abs', rsuffix='rel')
 
     model = AffineTransform()
