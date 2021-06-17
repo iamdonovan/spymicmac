@@ -175,7 +175,7 @@ def transform_centers(img_gt, ref, imlist, footprints, ori):
         - **join** (*GeoDataFrame*) -- the joined image footprints and relative orientation files
     """
 
-    rel_ori = mmtools.load_all_orientation(imlist, ori)
+    rel_ori = mmtools.load_all_orientation(ori, imlist=imlist)
 
     footprints = footprints.to_crs(epsg=ref.epsg).copy()
 

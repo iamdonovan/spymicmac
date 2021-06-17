@@ -11,6 +11,7 @@ import lxml.etree as etree
 import lxml.builder as builder
 import difflib
 import xml.etree.ElementTree as ET
+from glob import glob
 from scipy.interpolate import LinearNDInterpolator
 from shapely.geometry.point import Point
 from shapely.geometry import LineString
@@ -512,10 +513,18 @@ def save_gcps(in_gcps, outdir, utmstr, sub):
 ######################################################################################################################
 def load_orientation(fn_img, ori):
     """
+    Read camera position and rotation information from an Orientation xml file.
 
-    :param fn_img:
-    :param ori:
+    :param str fn_img: the name of the image to read the orientation file for.
+    :param str ori: the name of the orientation directory (e.g., Ori-Relative).
     :return:
+        - **centre** (*list*) -- the camera position (x, y, z)
+        - **l1** (*list*) -- the L1 orientation parameters
+        - **l2** (*list*) -- the L2 orientation parameters
+        - **l3** (*list*) -- the L3 orientation parameters
+        - **prof** (*float*) -- the 'Profondeur' value from the xml file.
+        - **altisol** (*float*) -- the 'AltiSol' value from the xml file.
+
     """
     ori_root = ET.parse(os.path.join(ori, 'Orientation-{}.xml'.format(fn_img))).getroot()
     if ori_root.tag != 'OrientationConique':
@@ -549,15 +558,23 @@ def load_orientation(fn_img, ori):
     return centre, l1, l2, l3, prof, altisol
 
 
-def load_all_orientation(imlist, ori):
+def load_all_orientation(ori, imlist=None):
     """
+    Load all of the orientation parameters for a set of images from a given directory.
 
-    :param imlist:
-    :param ori:
+    :param str ori: the orientation directory to read
+    :param list imlist: the images to load. If not set, loads all orientation files from the given directory.
     :return:
+        - **df** (*pandas.DataFrame*) -- a DataFrame containing the orientation parameters for each image
     """
     df = pd.DataFrame()
     points = []
+
+    if imlist is None:
+        imlist = [os.path.basename(g).split('Orientation-')[1].split('.xml')[0] for g in
+                  glob(os.path.join(ori, '*.tif.xml'))]
+        imlist.sort()
+
     for i, fn_img in enumerate(imlist):
         centre, l1, l2, l3, prof, altisol = load_orientation(fn_img, ori)
 
@@ -588,11 +605,13 @@ def load_all_orientation(imlist, ori):
 
 def extend_line(df, first, last):
     """
+    Extend a flightline using existing camera positions.
 
-    :param df:
-    :param first:
-    :param last:
+    :param GeoDataFrame df: a GeoDataFrame containing the camera positions and image names
+    :param str first: the name of the image to start interpolating from.
+    :param str last: the name of the image to end interpolating at.
     :return:
+        - **outpt** (*shapely.Point*) -- the new point along the flightline.
     """
     firstImg = df.loc[df.name.str.contains(first), 'geometry'].values[0]
     lastImg = df.loc[df.name.str.contains(last), 'geometry'].values[0]
@@ -660,7 +679,7 @@ def fix_orientation(cameras, ori_df, ori, nsig=4):
     Once the positions have been updated, you should re-run Tapas using the InOri set to the directory; e.g., if you
     have updated Ori-Relative, you should run:
 
-        mm3d Tapas RelativeBasic "OIS.*tif" InOri=Relative Out=Relative LibFoc=0
+        mm3d Tapas RadialBasic "OIS.*tif" InOri=Relative Out=Relative LibFoc=0
 
     :param pandas.DataFrame cameras: A DataFrame containing camera positions (x, y, z) and a 'name' column that contains
         the image names.
