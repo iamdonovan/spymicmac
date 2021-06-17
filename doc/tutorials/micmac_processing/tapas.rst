@@ -48,9 +48,41 @@ You can then open the ``.ply`` file using, for example, `Cloud Compare <https://
     :align: center
     :alt: a point cloud showing the relative orientation for a block of images
 
-todo: describe steps for fixing orientation
---------------------------------------------
+fixing the orientation
+------------------------
 If your `Tapas` output looks okay, you can move on to the next step, :doc:`relative`.
 
 If you are unlucky, however, there are some tools in :py:meth:`sPyMicMac.micmac` to help manipulate the orientation
-files to help ``Tapas`` converge. **To be continued...**
+files to help ``Tapas`` converge. For example, occasionally cameras will be positioned in an incorrect location, especially images with lots of
+ice/snow.
+
+If the absolute camera positions are (approximately) known, :py:meth:`sPyMicMac.micmac.fix_orientation` will estimate
+an affine transformation between the known absolute positions and the relative positions estimated by Tapas.
+Outliers are identified by comparing the normalized median absolute deviation (NMAD) of the residuals, and the camera
+positions in the orientation file are overwritten with the position estimated from the transformation using
+:py:meth:`sPyMicMac.micmac.update_center`.
+
+.. note::
+    Once you have updated the center locations with the new estimated positions, you should re-run ``Tapas``
+    using ``InOri=<Updated Orientation>``:
+    ::
+
+        mm3d Tapas RadialBasic "OIS.*tif" InOri=Relative Out=Relative LibFoc=0
+
+    In most cases (but not always!), seeding the locations in this way will help ``Tapas`` converge to a
+    more accurate solution.
+
+In the example shown below, two images (marked with red squares) have been identified as outliers using the estimated
+transformation. The positions have been updated using :py:meth:`sPyMicMac.micmac.fix_orientation`, and re-running
+``Tapas`` has helped position the cameras correctly:
+
+.. image:: ../../img/fixed_orientation.png
+    :width: 98%
+    :align: center
+    :alt: a point cloud showing the relative orientation for a block of images
+
+If the camera positions are not well-known (often the case for historic air photos), you can use
+:py:meth:`sPyMicMac.micmac.interp_line` or :py:meth:`sPyMicMac.micmac.extend_line` to estimate the positions based
+on an assumed flight line, using positions that have converged properly. Once you have the new positions estimated,
+you should update the positions in the orientation files using :py:meth:`sPyMicMac.micmac.update_center`, and re-run
+``Tapas`` as shown above.
