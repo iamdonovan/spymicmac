@@ -11,12 +11,16 @@ import lxml.etree as etree
 import lxml.builder as builder
 import difflib
 import xml.etree.ElementTree as ET
+from scipy.interpolate import LinearNDInterpolator
 from shapely.geometry.point import Point
 from shapely.geometry import LineString
 from shapely.strtree import STRtree
 from skimage.io import imread
+from skimage.measure import ransac
+from skimage.transform import AffineTransform
 from pybob.bob_tools import mkdir_p
 from pybob.GeoImg import GeoImg
+from pybob.ddem_tools import nmad
 from sPyMicMac.usgs import get_usgs_footprints
 
 
@@ -602,12 +606,15 @@ def extend_line(df, first, last):
 
 def interp_line(df, first, last, nimgs=None, pos=None):
     """
+    Interpolate camera positions along a flightline.
 
-    :param df:
-    :param first:
-    :param last:
-    :param pos:
+    :param GeoDataFrame df: a GeoDataFrame containing the camera positions and image names
+    :param str first: the name of the image to start interpolating from.
+    :param str last: the name of the image to end interpolating at.
+    :param int nimgs: the number of images to interpolate (default: calculated based on the image numbers)
+    :param int pos: which image position to return (default: all images between first and last)
     :return:
+        - **ptList** (*list*) -- a list containing the interpolated camera positions (or, a tuple of the requested position).
     """
     if nimgs is None:
         nimgs = np.abs(int(last) - int(first)).astype(int)
@@ -628,8 +635,8 @@ def update_center(fn_img, ori, new_center):
     """
     Update the camera position in an Orientation file.
 
-    :param str fn_img: the name of the image to update the orientation for.
-    :param str ori: the name of the orientation directory (e.g., Ori-Relative)
+    :param str fn_img: the name of the image to update the orientation for (e.g., 'OIS-Reech_ARCSEA000590122.tif')
+    :param str ori: the name of the orientation directory (e.g., 'Ori-Relative')
     :param list new_center: a list of the new camera position [x, y, z]
     """
     ori_root = ET.parse(os.path.join(ori, 'Orientation-{}.xml'.format(fn_img))).getroot()
@@ -645,12 +652,37 @@ def update_center(fn_img, ori, new_center):
                encoding="utf-8", xml_declaration=True)
 
 
+def fix_orientation(cameras, ori_df, ori, nsig=4):
+    join = cameras.set_index('name').join(ori_df.set_index('name'), lsuffix='abs', rsuffix='rel')
+
+    model = AffineTransform()
+    model.estimate(join[['xabs', 'yabs']].values, join[['xrel', 'yrel']].values)
+
+    res = model.residuals(join[['xabs', 'yabs']].values, join[['xrel', 'yrel']].values)
+
+    outliers = res - np.median(res) > nsig * nmad(res)
+    if np.count_nonzero(outliers) > 0:
+        interp = LinearNDInterpolator(join.loc[~outliers, ['xrel', 'yrel']].values, join.loc[~outliers, 'zrel'])
+        print('found {} outliers using nsig={}'.format(np.count_nonzero(outliers), nsig))
+        for name, row in join[outliers].iterrows():
+            new_x, new_y = model(row[['xabs', 'yabs']].values)[0]
+            new_z = interp(new_x, new_y)
+
+            print('new location for {}: {}, {}, {}'.format(name, new_x, new_y, new_z))
+            print('writing new Orientation file for {}'.format(name))
+            update_center(name, ori, [new_x, new_y, new_z])
+
+
+######################################################################################################################
+#
+######################################################################################################################
 def dem_to_text(fn_dem, fn_out='dem_pts.txt', spacing=100):
     """
+    Write elevations from a DEM raster to a text file for use in mm3d PostProc Banana.
 
-    :param str fn_dem:
-    :param str fn_out:
-    :param int spacing:
+    :param str fn_dem: the filename of the DEM to read.
+    :param str fn_out: the name of the text file to write out (default: dem_pts.txt)
+    :param int spacing: the pixel spacing of the DEM to write (default: every 100 pixels)
     :return:
     """
     if isinstance(fn_dem, GeoImg):
