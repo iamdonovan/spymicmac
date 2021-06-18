@@ -9,10 +9,23 @@ from usgs import api
 
 
 def get_login_creds():
+    """
+    Read a user's .netrc file and return the login credentials.
+
+    :return:
+        - **creds** -- the netrc.netrc credentials.
+    """
     return netrc.netrc(os.path.expanduser('~/.netrc'))
 
 
 def read_coords(result):
+    """
+    Parse a search result returned from USGS and create a list of coordinates for the image footprint.
+
+    :param dict result: the USGS search result
+    :return:
+        -- **coords** (*list*) -- a list of coordinates
+    """
     corner_names = ['NW', 'NE', 'SE', 'SW']
     corner_fields = [d for d in result['metadataFields'] if 'Corner' in d['fieldName'] and 'dec' in d['fieldName']]
     corner_dict = dict()
@@ -28,7 +41,17 @@ def read_coords(result):
     return coords
 
 
-def get_usgs_footprints(imglist, dataset='DECLASSII'):
+def get_usgs_footprints(imlist, dataset='DECLASSII'):
+    """
+    Search for a list of images on USGS Earth Explorer. Note that the image names should be the USGS entity ID (e.g.,
+    AR5840034159994 rather than AR5840034159994.tif).
+
+    :param list imlist: a list of image names.
+    :param str dataset: the USGS dataset name to search (default: DECLASSII).
+
+    :return:
+        -- **gdf** (*GeoDataFrame*) -- a GeoDataFrame of image footprints.
+    """
     # air photos: 'AERIAL_COMBIN'
     creds = get_login_creds()
 
@@ -44,7 +67,7 @@ def get_usgs_footprints(imglist, dataset='DECLASSII'):
     else:
         search_results = api.metadata(dataset,
                                       node='EE',
-                                      entityids=imglist)
+                                      entityids=imlist)
         for i, result in enumerate(search_results['data']):
             # coords = result['spatialFootprint']['coordinates'][0]
             coords = read_coords(result)
