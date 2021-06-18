@@ -28,26 +28,25 @@ from sPyMicMac.usgs import get_usgs_footprints
 ######################################################################################################################
 # MicMac interfaces - write xml files for MicMac to read
 ######################################################################################################################
-def write_neighbour_images(imlist, fprints=None, nameField='ID', prefix='OIS-Reech_', fileExt='.tif', **kwargs):
+def write_neighbour_images(imlist, fprints=None, nameField='ID', prefix='OIS-Reech_', fileExt='.tif',
+                           dataset='AERIAL_COMBIN'):
     """
+    Using a list of images and a collection of image footprints, return a list of potential image pairs for processing
+    with Tapioca.
 
-    :param imlist:
-    :param fprints:
-    :param nameField:
-    :param prefix:
-    :param fileExt:
-    :param kwargs:
-    :return:
+    :param list imlist: a list of (original) image names to use (e.g., without 'OIS-Reech\_')
+    :param GeoDataFrame fprints: a vector dataset of footprint polygons. If not provided, will attempt to download
+        metadata from USGS for the images.
+    :param str nameField: the field in fprints table that contains the image name
+    :param str prefix: the prefix attached to the image name read by Tapioca (default: 'OIS-Reech\_')
+    :param str fileExt: the file extension for the images read by Tapioca (default: .tif)
+    :param dataset: the USGS dataset name to search if no footprints are provided (default: AERIAL_COMBIN)
     """
     E = builder.ElementMaker()
     NamedRel = E.SauvegardeNamedRel()
 
     if fprints is None:
-        if 'dataset' not in kwargs:
-            dset = 'AERIAL_COMBIN'
-        else:
-            dset = kwargs['dataset']
-        fprints = get_usgs_footprints(imlist, dataset=dset)
+        fprints = get_usgs_footprints(imlist, dataset=dataset)
     else:
         fprints = fprints[fprints[nameField].isin(imlist)]
 
@@ -78,14 +77,16 @@ def write_neighbour_images(imlist, fprints=None, nameField='ID', prefix='OIS-Ree
 
 def get_gcp_meas(im_name, meas_name, in_dir, E, nodist=None, gcp_name='GCP'):
     """
+    Create an lxml.builder.ElementMaker object with a GCP name and the image (row, pixel) location.
 
-    :param im_name:
-    :param meas_name:
-    :param in_dir:
-    :param E:
-    :param nodist:
-    :param gcp_name:
+    :param str im_name: the image name to write the GCP location for.
+    :param str meas_name: the name of the file to read the point locations from.
+    :param str in_dir: the name of the directory where the images and measures files are located.
+    :param lxml.builder.ElementMaker E: an ElementMaker object for writing to the xml file.
+    :param str nodist: the name of the directory
+    :param str gcp_name: the prefix (e.g., GCP0, GCP1, etc.) for the GCP name (default: GCP).
     :return:
+        - **this_im_meas** (*lxml.builder.ElementMaker*) -- an ElementMaker object with the GCP location in the image.
     """
     im = gdal.Open(os.path.sep.join([in_dir, im_name]))
     maxj = im.RasterXSize
@@ -112,10 +113,12 @@ def get_gcp_meas(im_name, meas_name, in_dir, E, nodist=None, gcp_name='GCP'):
 
 def get_im_meas(gcps, E):
     """
+    Populate an lxml.builder.ElementMaker object with GCP image locations, for writing to xml files.
 
-    :param gcps:
-    :param E:
+    :param pandas.DataFrame gcps: a DataFrame with the GCPs to find image locations for.
+    :param lxml.builder.ElementMaker E: an ElementMaker object for writing to the xml file.
     :return:
+        - **pt_els** (*list*) -- a list of ElementMaker objects corresponding to each GCP image location.
     """
     pt_els = []
     for ind, row in gcps.iterrows():
@@ -129,9 +132,11 @@ def get_im_meas(gcps, E):
 
 def parse_im_meas(fn_meas):
     """
+    Read an xml file with GCP image locations into a pandas DataFrame.
 
-    :param fn_meas:
+    :param fn_meas: the name of the measures file to read.
     :return:
+        - **gcp_df** (*pandas.DataFrame*) -- a DataFrame with gcp names and image locations.
     """
     gcp_df = pd.DataFrame()
     root = ET.parse(fn_meas).getroot()
@@ -146,9 +151,9 @@ def parse_im_meas(fn_meas):
 
 def generate_measures_files(joined=False):
     """
+    Create id_fiducial.txt, MeasuresCamera.xml, and Tmp-SL-Glob.xml files for KH-9 Hexagon images.
 
-    :param joined:
-    :return:
+    :param bool joined: generate files for joined scene (220x460 mm) instead of half (220x230mm)
     """
     i_list = np.arange(22, -1, -1)
     if not joined:
@@ -207,9 +212,11 @@ def generate_measures_files(joined=False):
 
 def get_match_pattern(imlist):
     """
+    Given a list of image names, return a match pattern that can be passed to MicMac command line functions.
 
-    :param imlist:
+    :param list imlist: a list of image names.
     :return:
+        - **pattern** (*str*) -- a match pattern (e.g., "OIS.*tif") that can be passed to MicMac functions.
     """
     matches = []
     for i, this_im in enumerate(imlist[:-1]):
@@ -225,27 +232,29 @@ def get_match_pattern(imlist):
     return imlist[0][:first] + '(' + '|'.join([im[first:last] for im in imlist]) + ')' + imlist[0][last:]
 
 
-def write_auto_mesures(gcp_df, subscript, out_dir, outname='AutoMeasures'):
+def write_auto_mesures(gcps, sub, outdir, outname='AutoMeasures'):
     """
+    Write a file with GCP locations in relaive space (x, y, z) to use with get_autogcp_locations.sh
 
-    :param gcp_df:
-    :param subscript:
-    :param out_dir:
-    :param outname:
-    :return:
+    :param pandas.DataFrame gcps: a DataFrame with the GCPs to save.
+    :param str sub: the name of the block, if multiple blocks are being used (e.g., '_block1'). If not, use ''.
+    :param str outdir: the output directory to save the files to.
+    :param str outname: the base name of the file to create (default: AutoMeasures).
     """
-    with open(os.path.join(out_dir, '{}{}.txt'.format(outname, subscript)), 'w') as f:
-        for i, row in gcp_df.iterrows():
+    with open(os.path.join(outdir, '{}{}.txt'.format(outname, sub)), 'w') as f:
+        for i, row in gcps.iterrows():
             print('{} {} {}'.format(row.rel_x, row.rel_y, row.el_rel), file=f)
 
 
 def get_valid_image_points(shape, pts, pts_nodist):
     """
+    Find which image points are located within an image based on the size of the image.
 
-    :param shape:
-    :param pts:
-    :param pts_nodist:
+    :param shape: the shape of the image (rows, columns) to determine valid points for.
+    :param pandas.DataFrame pts: a DataFrame containing point locations (i, j)
+    :param pandas.DataFrame pts_nodist: a DataFrame containing point locations (i, j) calculated using no camera distortion.
     :return:
+        - **valid_pts** (*array-like*) -- an array of the points that are located within the image shape.
     """
     maxi, maxj = shape
 
@@ -257,15 +266,15 @@ def get_valid_image_points(shape, pts, pts_nodist):
     return np.logical_and(in_im, in_nd)
 
 
-def write_image_mesures(imlist, gcps, out_dir='.', subscript='', ort_dir='Ortho-MEC-Relative'):
+def write_image_mesures(imlist, gcps, outdir='.', sub='', ort_dir='Ortho-MEC-Relative'):
     """
+    Create a Measures-S2D.xml file (row, pixel) for each GCP in each image from a list of image names.
 
-    :param imlist:
-    :param gcps:
-    :param out_dir:
-    :param subscript:
-    :param ort_dir:
-    :return:
+    :param list imlist: a list of image names.
+    :param pandas.DataFrame gcps: a DataFrame of GCPs.
+    :param str outdir: the output directory to save the files to.
+    :param str sub: the name of the block, if multiple blocks are being used (e.g., '_block1').
+    :param str ort_dir: the Ortho-MEC directory where the images are located.
     """
     E = builder.ElementMaker()
     MesureSet = E.SetOfMesureAppuisFlottants()
@@ -295,21 +304,21 @@ def write_image_mesures(imlist, gcps, out_dir='.', subscript='', ort_dir='Ortho-
         MesureSet.append(this_im_mes)
 
     tree = etree.ElementTree(MesureSet)
-    tree.write(os.path.join(out_dir, 'AutoMeasures{}-S2D.xml'.format(subscript)),
+    tree.write(os.path.join(outdir, 'AutoMeasures{}-S2D.xml'.format(sub)),
                pretty_print=True, xml_declaration=True, encoding="utf-8")
 
 
-def write_auto_gcps(gcp_df, subscript, out_dir, utm_zone, outname='AutoGCPs'):
+def write_auto_gcps(gcp_df, sub, outdir, utm_zone, outname='AutoGCPs'):
     """
+    Write GCP name, x, y, and z information to a text file to use with mm3d GCPConvert.
 
-    :param gcp_df:
-    :param subscript:
-    :param out_dir:
-    :param utm_zone:
-    :param outname:
-    :return:
+    :param pandas.DataFrame gcp_df: a DataFrame with the GCPs to save.
+    :param str sub: the name of the block, if multiple blocks are being used (e.g., '_block1'). If not, use ''.
+    :param str outdir: the output directory to save the files to.
+    :param str utm_zone: the UTM zone name (e.g., 8N).
+    :param str outname: the name to use for the GCPs file (default: AutoGCPs.txt)
     """
-    with open(os.path.join(out_dir, '{}{}.txt'.format(outname, subscript)), 'w') as f:
+    with open(os.path.join(outdir, '{}{}.txt'.format(outname, sub)), 'w') as f:
         # print('#F= N X Y Z Ix Iy Iz', file=f)
         print('#F= N X Y Z', file=f)
         print('#Here the coordinates are in UTM {} X=Easting Y=Northing Z=Altitude'.format(utm_zone), file=f)
@@ -321,10 +330,12 @@ def write_auto_gcps(gcp_df, subscript, out_dir, utm_zone, outname='AutoGCPs'):
 
 def get_bascule_residuals(fn_basc, gcp_df):
     """
+    Read a given GCPBascule residual file, and add the residuals to a DataFrame with GCP information.
 
-    :param fn_basc:
-    :param gcp_df:
+    :param str fn_basc: the GCPBascule xml file to read the residuals from.
+    :param pandas.DataFrame gcp_df: a DataFrame with the GCPs to read the residuals for.
     :return:
+        - **gcp_df** (*pandas.DataFrame*) -- the input GCPs with the Bascule residuals added.
     """
     root = ET.parse(fn_basc).getroot()
     gcp_res = root.findall('Residus')
@@ -353,10 +364,12 @@ def get_bascule_residuals(fn_basc, gcp_df):
 
 def get_campari_residuals(fn_resids, gcp_df):
     """
+    Read a given Campari residual file, and add the residuals to a DataFrame with GCP information.
 
-    :param fn_resids:
-    :param gcp_df:
+    :param fn_resids: the Campari residual xml file to read.
+    :param pandas.DataFrame gcp_df: a DataFrame with the GCPs to read the residuals for.
     :return:
+        - **gcp_df** (*pandas.DataFrame*) -- the input GCPs with the Campari residuals added.
     """
     camp_root = ET.parse(fn_resids).getroot()
 
@@ -401,9 +414,9 @@ def get_campari_residuals(fn_resids, gcp_df):
 
 def move_bad_tapas(ori):
     """
+    Read residual files output from Tapas (or Campari, GCPBascule), and move images with a NaN residual.
 
-    :param ori: 
-    :return: 
+    :param str ori: the orientation directory to read the residuals file from (e.g., 'Ori-Relative').
     """
     root = ET.parse(os.path.join(ori, 'Residus.xml')).getroot()
     res_df = pd.DataFrame()
@@ -427,13 +440,15 @@ def move_bad_tapas(ori):
 
 def run_bascule(in_gcps, outdir, img_pattern, sub, ori):
     """
+    Interface for running mm3d GCPBascule and reading the residuals from the resulting xml file.
 
-    :param in_gcps:
-    :param outdir:
-    :param img_pattern:
-    :param sub:
-    :param ori:
+    :param pandas.DataFrame in_gcps: a DataFrame with the GCPs that are being input to Campari.
+    :param str outdir: the output directory where the AutoGCPs.xml file is saved.
+    :param str img_pattern: the match pattern for the images being input to Campari (e.g., "OIS.*tif")
+    :param str sub: the name of the block, if multiple blocks are being used (e.g., '_block1'). If not, use ''.
+    :param str ori: the name of the orientation directory (e.g., Ori-Relative).
     :return:
+        - **out_gcps** (*pandas.DataFrame*) -- the input gcps with the updated Campari residuals.
     """
     echo = subprocess.Popen('echo', stdout=subprocess.PIPE)
     p = subprocess.Popen(['mm3d', 'GCPBascule', img_pattern, ori,
@@ -449,15 +464,17 @@ def run_bascule(in_gcps, outdir, img_pattern, sub, ori):
 
 def run_campari(in_gcps, outdir, img_pattern, sub, dx, ortho_res, allfree=True):
     """
+    Interface for running mm3d Campari and reading the residuals from the residual xml file.
 
-    :param in_gcps:
-    :param outdir:
-    :param img_pattern:
-    :param sub:
-    :param dx:
-    :param ortho_res:
-    :param allfree:
+    :param pandas.DataFrame in_gcps: a DataFrame with the GCPs that are being input to Campari.
+    :param str outdir: the output directory where the AutoGCPs.xml file is saved.
+    :param str img_pattern: the match pattern for the images being input to Campari (e.g., "OIS.*tif")
+    :param str sub: the name of the block, if multiple blocks are being used (e.g., '_block1'). If not, use ''.
+    :param int|float dx: the pixel resolution of the reference image.
+    :param int|float ortho_res: the pixel resolution of the orthoimage being used.
+    :param bool allfree: run Campari with AllFree=1 (True), or AllFree=0 (False). (default: True)
     :return:
+        - **out_gcps** (*pandas.DataFrame*) -- the input gcps with the updated Campari residuals.
     """
     echo = subprocess.Popen('echo', stdout=subprocess.PIPE)
     if allfree:
@@ -482,12 +499,20 @@ def run_campari(in_gcps, outdir, img_pattern, sub, dx, ortho_res, allfree=True):
 
 def save_gcps(in_gcps, outdir, utmstr, sub):
     """
+    Save a GeoDataFrame of GCP information to shapefile, txt, and xml formats.
 
-    :param in_gcps:
-    :param outdir:
-    :param utmstr:
-    :param sub:
-    :return:
+    After running, the following new files will be created:
+
+        - outdir/AutoGCPs.shp (+ associated files)
+        - outdir/AutoGCPs.txt
+        - outdir/AutoGCPs.xml (output from mm3d GCPConvert)
+        - outdir/AutoMeasures.xml (a file with image locations for each GCP)
+
+    :param GeoDataFrame in_gcps: the gcps GeoDataFrame to save
+    :param str outdir: the output directory to save the files to
+    :param str utmstr: a UTM string generated by register.get_utm_str()
+    :param str sub: the name of the block, if multiple blocks are being used (e.g., '_block1'). If not, use ''.
+
     """
     in_gcps.to_file(os.path.join(outdir, 'AutoGCPs{}.shp'.format(sub)))
     write_auto_gcps(in_gcps, sub, outdir, utmstr)
@@ -719,7 +744,6 @@ def dem_to_text(fn_dem, fn_out='dem_pts.txt', spacing=100):
     :param str fn_dem: the filename of the DEM to read.
     :param str fn_out: the name of the text file to write out (default: dem_pts.txt)
     :param int spacing: the pixel spacing of the DEM to write (default: every 100 pixels)
-    :return:
     """
     if isinstance(fn_dem, GeoImg):
         dem = fn_dem
