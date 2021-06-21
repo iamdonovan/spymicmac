@@ -840,7 +840,9 @@ def find_reseau_grid(fn_img, csize=361, tsize=300, nproc=1, return_val=False):
     :param int csize: the size of the cross template (default: 361 -> 361x361)
     :param int tsize: the search grid size for the Reseau mark.
     :param int nproc: the number of processors to use, via multiprocessing.Pool (default: 1).
-    :param return_val:
+    :param bool return_val: return a pandas DataFrame of the Reseau mark locations (default: False).
+    :return:
+        - **gcps_df** (*pandas.DataFrame*) -- a DataFrame of the Reseau mark locations (if return_val=True).
     """
     print('Reading {}'.format(fn_img))
     img = io.imread(fn_img)
