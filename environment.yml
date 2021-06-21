@@ -5,7 +5,7 @@ channels:
 dependencies:
   - python>=3.7
   - pyproj
-  - scikit-image
+  - scikit-image>=0.18
   - geopandas
   - matplotlib
   - sphinx
@@ -14,10 +14,11 @@ dependencies:
   - gdal
   - pyasn1
   - earthengine-api
-  - numba
+  - pip
   - pip:
-      - pybob>=0.25
-      - pymmaster
+      - llc
+      - pybob>0.25
+      - pymmaster>0.1
       - sphinx-argparse
       - sphinx-rtd-theme
       - usgs
