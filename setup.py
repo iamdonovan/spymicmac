@@ -1,13 +1,13 @@
 from setuptools import setup
 
-setup(name='sPyMicMac',
+setup(name='spymicmac',
       version='0.1',
       description='a python package for processing KH-9 imagery using MicMac',
       url='http://github.com/iamdonovan/sPyMicMac',
       author='Bob McNabb',
       author_email='robertmcnabb@gmail.com',
       license='GPL-3.0',
-      packages=['sPyMicMac'],
+      packages=['spymicmac'],
       install_requires=['numpy', 'scipy', 'matplotlib', 'lxml', 'pybob>0.25',
                         'shapely', 'opencv-python', 'pandas', 'geopandas', 'pymmaster>0.1',
                         'scikit-image>=0.18', 'gdal', 'llc',
