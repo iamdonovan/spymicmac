@@ -5,7 +5,7 @@ import os
 import subprocess
 import shutil
 import numpy as np
-import gdal
+from osgeo import gdal
 import pandas as pd
 import lxml.etree as etree
 import lxml.builder as builder

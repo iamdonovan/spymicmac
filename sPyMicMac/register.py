@@ -7,7 +7,7 @@ import subprocess
 import shutil
 import numpy as np
 import matplotlib.pyplot as plt
-import gdal
+from osgeo import gdal
 import pandas as pd
 import geopandas as gpd
 from PIL import Image

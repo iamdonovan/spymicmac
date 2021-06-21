@@ -9,7 +9,7 @@ from functools import partial
 from itertools import chain
 import PIL.Image
 import cv2
-import gdal
+from osgeo import gdal
 import matplotlib.pyplot as plt
 import pandas as pd
 import lxml.etree as etree
@@ -19,14 +19,13 @@ from skimage import exposure, transform, morphology, io, filters
 from skimage.morphology import binary_closing, binary_dilation, disk
 from skimage.measure import ransac
 from skimage.feature import peak_local_max
-from skimage.transform import match_histograms, warp, AffineTransform, EuclideanTransform
+from skimage.transform import warp, AffineTransform, EuclideanTransform
 from scipy.interpolate import RectBivariateSpline as RBS
 from scipy import ndimage
 import numpy as np
 from shapely.ops import cascaded_union
 from shapely.geometry import LineString
 import geopandas as gpd
-# import pyvips
 from llc import jit_filter_function
 from pybob.image_tools import match_hist, reshape_geoimg, create_mask_from_shapefile, nanmedian_filter
 from pybob.bob_tools import mkdir_p
