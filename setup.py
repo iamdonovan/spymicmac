@@ -12,8 +12,13 @@ setup(name='spymicmac',
                         'shapely', 'opencv-python', 'pandas', 'geopandas', 'pymmaster>0.1',
                         'scikit-image>=0.18', 'gdal', 'llc',
                         'sphinx-argparse', 'earthengine-api', 'pyasn1', 'usgs'],
-      scripts=['bin/balance_images.py', 'bin/combine_auto_measures.py', 'bin/find_reseau_grid.py',
+      scripts=['bin/balance_images.py', 'bin/combine_auto_measures.py',
                'bin/generate_micmac_measures.py', 'bin/get_autogcp_locations.sh',
                'bin/join_hexagon.py', 'bin/post_process_micmac.sh', 'bin/register_ortho.py',
                'bin/remove_crosses.py', 'bin/resample_hexagon.sh'],
+      entry_points = {
+          'console_scripts': [
+                'find_reseau_grid = spymicmac.tools.find_reseau_grid:main'
+          ],
+      },
       zip_safe=False)
