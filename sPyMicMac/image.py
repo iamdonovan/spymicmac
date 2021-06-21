@@ -124,9 +124,11 @@ def get_subpixel(res, how='min'):
 
 def highpass_filter(img):
     """
+    Subtract a low-pass from an image, to return a highpass filter.
 
-    :param img:
+    :param array-like img: the image to filter.
     :return:
+        - **highpass** (*array-like*) -- the highpass-filtered image
     """
     v = img.copy()
     v[np.isnan(img)] = 0
@@ -181,15 +183,18 @@ def get_subimg_offsets(split, shape, overlap=0):
     return rel_x.astype(int), rel_y.astype(int)
 
 
-def stretch_image(img, scale=(0,1), mult=255, outtype=np.uint8, mask=None):
+def stretch_image(img, scale=(0, 1), mult=255, outtype=np.uint8, mask=None):
     """
+    Apply a linear stretch to an image by clipping and stretching to quantiles.
 
-    :param img:
-    :param scale:
-    :param mult:
-    :param outtype:
-    :param mask:
+    :param array-like img: the image to stretch.
+    :param tuple scale: a the minimum and maximum quantile to stretch to. (default: (0, 1) - the minimum/maximum values
+        of the image)
+    :param int|float mult: a multiplier to scale the result to. (default: 255)
+    :param numpy.dtype outtype: the numpy datatype to return the stretched image as. (default: np.uint8)
+    :param array-like mask: a mask of pixels to ignore when calculating quantiles.
     :return:
+        - **stretched** (*array-like*) -- the stretched image.
     """
     if mask is None:
         maxval = np.nanquantile(img, max(scale))
@@ -206,13 +211,16 @@ def stretch_image(img, scale=(0,1), mult=255, outtype=np.uint8, mask=None):
 
 def contrast_enhance(fn_img, mask_value=None, qmin=0.02, qmax=0.98, gamma=1.25):
     """
+    Enhance image contrast in a three-step process. First, the image is processed with a median filter to reduce
+    noise. Next, a linear contrast stretch is applied, and finally, a gamma adjustment is applied.
 
-    :param fn_img:
-    :param mask_value:
-    :param qmin:
-    :param qmax:
-    :param gamma:
+    :param str fn_img: the image filename.
+    :param int|float mask_value: a mask value to use when filtering the image.
+    :param float qmin: the minimum quantile to use for the linear contrast stretch (default: 0.02)
+    :param float qmax: the maximum quantile to use for the linear contrast stretch (default: 0.98)
+    :param float gamma: the value to use for the gamma adjustment
     :return:
+        - **enhanced** (*array-like*) -- the contrast-enhanced image.
     """
     img = io.imread(fn_img)
     if mask_value is not None:
@@ -226,15 +234,19 @@ def contrast_enhance(fn_img, mask_value=None, qmin=0.02, qmax=0.98, gamma=1.25):
     return gamma
 
 
-def make_binary_mask(img, erode=0, mask_value=0):
+def make_binary_mask(img, mult_value=255, erode=0, mask_value=0):
     """
+    Create a binary mask for an image based on a given mask value. Values equal to mask_value will be given a value
+    of 0 in the mask, while all other values will be set equal to mult_value.
 
-    :param img:
-    :param erode:
-    :param mask_value:
+    :param array-like img: the image to create a mask for.
+    :param int|float mult_value: the value indicating a non-masked value (default: 255).
+    :param int erode: the size of the erosion operation to apply (default: 0).
+    :param int mask_value: the value to mask in the image (default: 0).
     :return:
+        - **mask** (*array-like*) the binary mask.
     """
-    _mask = 255 * np.ones(img.shape, dtype=np.uint8)
+    _mask = mult_value * np.ones(img.shape, dtype=np.uint8)
     if np.isfinite(mask_value):
         _mask[img == mask_value] = 0
     else:
@@ -249,9 +261,11 @@ def make_binary_mask(img, erode=0, mask_value=0):
 
 def balance_image(img):
     """
+    Apply contrast-limited adaptive histogram equalization (CLAHE) on an image, then apply a de-noising filter.
 
-    :param img:
+    :param array-like img: the image to balance.
     :return:
+        - **img_filt** (*array-like*) -- the balanced, filtered image.
     """
     img_eq = (255 * exposure.equalize_adapthist(img)).astype(np.uint8)
     img_filt = filters.median(img_eq, selem=disk(1))
@@ -272,13 +286,16 @@ def keypoint_grid(img, spacing=25, size=10):
 
 def get_dense_keypoints(img, mask, npix=100, nblocks=None, return_des=False):
     """
+    Find ORB keypoints by dividing an image into smaller parts.
 
-    :param img:
-    :param mask:
-    :param npix:
-    :param nblocks:
-    :param return_des:
+    :param array-like img: the image to use.
+    :param array-like mask: a mask to use for keypoint generation.
+    :param int npix: the block size (in pixels) to divide the image into.
+    :param int nblocks: the number of blocks to divide the image into. If set, overrides value given by npix.
+    :param bool return_des: return the keypoint descriptors, as well
     :return:
+        - **keypoints** (*list*) -- a list of keypoint locations
+        - **descriptors** (*list*) -- if requested, a list of keypoint descriptors.
     """
     orb = cv2.ORB_create()
     keypts = []
@@ -319,9 +336,11 @@ def get_dense_keypoints(img, mask, npix=100, nblocks=None, return_des=False):
 
 def get_footprint_overlap(fprints):
     """
+    Return the area where image footprints overlap.
 
-    :param fprints:
+    :param GeoDataFrame fprints: a GeoDataFrame of image footprints
     :return:
+        - **intersection** (*shapely.Polygon*) -- the overlapping area (cascaded union) of the images.
     """
     if fprints.shape[0] == 1:
         return fprints.geometry.values[0]
@@ -344,12 +363,15 @@ def get_footprint_overlap(fprints):
 
 def get_footprint_mask(shpfile, geoimg, filelist, fprint_out=False):
     """
+    Return a footprint mask for an image.
 
-    :param shpfile:
-    :param geoimg:
-    :param filelist:
-    :param fprint_out:
+    :param str|GeoDataFrame shpfile: a filename or a GeoDataFrame representation of the footprints.
+    :param GeoImg geoimg: the image to create a mask for.
+    :param list filelist: a list of image names to use to create the footprint mask.
+    :param bool fprint_out: return the polygon representation of the footprint mask.
     :return:
+        - **mask** (*array-like*) -- the footprint mask
+        - **fprint** (*shapely.Polygon*) -- the footprint polygon, if requested.
     """
     imlist = [im.split('OIS-Reech_')[-1].split('.tif')[0] for im in filelist]
     if isinstance(shpfile, str):
@@ -378,14 +400,18 @@ def get_footprint_mask(shpfile, geoimg, filelist, fprint_out=False):
 def get_rough_geotransform(img1, img2, landmask=None, footmask=None,
                            stretch=(0.05, 0.95), equalize=False):
     """
+    Search for a rough transformation between two images using ORB keypoint matching.
 
-    :param img1:
-    :param img2:
-    :param landmask:
-    :param footmask:
-    :param stretch:
-    :param equalize:
+    :param array-like img1: the image to be transformed.
+    :param array-like img2: the image to match to.
+    :param array-like landmask: an inclusion mask for img2.
+    :param array-like footmask: an exclusion mask for img2.
+    :param tuple stretch: the minimum and maximum quantiles to stretch img2 to.
+    :param bool equalize: apply CLAHE to img2.
     :return:
+        - **img1_tfm** (*array-like*) -- the transformed input image.
+        - **Minit** (*AffineTransform*) -- the estimated affine transformation between img1 and img2.
+        - **dst_pts**, **src_pts**, **inliers** (*array-like*) -- the matched points for img2, img1, and the inliers used to estimate Minit.
     """
     if equalize:
         img2_eq = (255 * exposure.equalize_adapthist(img2.img.astype(np.uint16),
@@ -422,16 +448,6 @@ def get_rough_geotransform(img1, img2, landmask=None, footmask=None,
 
 
 def get_initial_transformation(img1, img2, pRes=800, landmask=None, footmask=None, imlist=None):
-    """
-
-    :param img1:
-    :param img2:
-    :param pRes:
-    :param landmask:
-    :param footmask:
-    :param imlist:
-    :return:
-    """
     im2_lowres = reshape_geoimg(img2, pRes, pRes)
 
     im2_eq = match_hist(im2_lowres.img, np.array(img1))
@@ -516,15 +532,17 @@ def find_gcp_match(img, template, method=cv2.TM_CCORR_NORMED):
 
 def find_grid_matches(tfm_img, refgeo, mask, initM=None, spacing=200, srcwin=60, dstwin=600):
     """
+    Find matches between two images on a grid using normalized cross-correlation template matching.
 
-    :param tfm_img:
-    :param refgeo:
-    :param mask:
-    :param initM:
-    :param spacing:
-    :param srcwin:
-    :param dstwin:
+    :param array-like tfm_img: the image to use for matching.
+    :param GeoImg refgeo: the reference image to use for matching.
+    :param array-like mask: a mask indicating areas that should be used for matching.
+    :param initM: the model used for transforming the initial, non-georeferenced image.
+    :param int spacing: the grid spacing, in pixels (default: 200 pixels)
+    :param int srcwin: the half-size of the template window.
+    :param int dstwin: the half-size of the search window.
     :return:
+        - **gcps** (*pandas.DataFrame*) -- a DataFrame with GCP locations, match strength, and other information.
     """
     match_pts = []
     z_corrs = []
@@ -615,11 +633,13 @@ def find_grid_matches(tfm_img, refgeo, mask, initM=None, spacing=200, srcwin=60,
 
 def transform_from_fprint(img, geo, fprint):
     """
+    Using a georeferenced footprint for an image, estimate a Euclidean transform.
 
-    :param img:
-    :param geo:
-    :param fprint:
+    :param array-like img: the image to transform.
+    :param GeoImg geo: the reference image to transform the input image to.
+    :param shapely.Polygon fprint: the image footprint to use for transformation.
     :return:
+        - **transform** (*GeometricTransform*) -- the estimated euclidean transform for the input image.
     """
     oprint = orient_footprint(fprint)
     h, w = img.shape
@@ -635,6 +655,17 @@ def transform_from_fprint(img, geo, fprint):
 
 
 def find_cross(img, pt, cross, tsize=300):
+    """
+    Find the center of a Reseau mark (cross, or '+' shape).
+
+    :param array-like img: the image to use.
+    :param tuple pt: the initial search location.
+    :param array-like cross: the Reseau mark template to use.
+    :param int tsize: the search grid half-size (default: 300 -> 601x601)
+    :return:
+        - **center_i** (*float*) -- the row coordinate of the cross center.
+        - **center_j** (*float*) -- the column coordinate of the cross center.
+    """
     subimg, _, _ = make_template(img, pt, tsize)
     res, this_i, this_j = find_match(subimg, cross)
     inv_res = res.max() - res
@@ -686,7 +717,18 @@ def get_perp(corners):
     return np.array([-a[1], a[0]])
 
 
-def find_border(img, rough_ext, cross, tsize=300):
+def find_reseau_border(img, rough_ext, cross, tsize=300):
+    """
+    Find the rough edges of the Reseau field in a KH-9 image.
+
+    :param array-like img: the image to use.
+    :param array-like rough_ext: the rough location (left, right, top, bottom) of the image border.
+    :param array-like cross: a Reseau mark template.
+    :param int tsize: the search grid size for the Reseau mark.
+    :return:
+        - **left_edge** (*LineString*) -- the left-side Reseau field border
+        - **right_edge** (*LineString*) -- the right-side Reseau field border
+    """
     left, right, top, bot = rough_ext
 
     if np.isnan(right):
@@ -725,9 +767,11 @@ def downsample_image(img, fact=4):
 
 def get_rough_frame(img):
     """
+    Find the rough location of an image frame/border.
 
-    :param img:
+    :param array-like img: the image to find a border for
     :return:
+        - **xmin**, **xmax**, **ymin**, **ymax** (*float*) -- the left, right, top, and bottom indices for the rough border.
     """
     img_lowres = downsample_image(img, fact=10)
     img_seg = np.zeros(img_lowres.shape)
@@ -790,15 +834,14 @@ def _search_grid(left, right):
 
 def find_reseau_grid(fn_img, csize=361, tsize=300, nproc=1, return_val=False):
     """
+    Find the locations of the Reseau marks in a scanned KH-9 image. Locations are saved
+    to Ori-InterneScan/MeasuresIm-:fn_img:.xml.
 
-    :param fn_img:
-    :param csize:
-    :param tsize:
-    :param scanres:
-    :param scanres_y:
-    :param nproc:
+    :param str fn_img: the image filename.
+    :param int csize: the size of the cross template (default: 361 -> 361x361)
+    :param int tsize: the search grid size for the Reseau mark.
+    :param int nproc: the number of processors to use, via multiprocessing.Pool (default: 1).
     :param return_val:
-    :return:
     """
     print('Reading {}'.format(fn_img))
     img = io.imread(fn_img)
@@ -818,7 +861,7 @@ def find_reseau_grid(fn_img, csize=361, tsize=300, nproc=1, return_val=False):
     ax.set_yticks([])
 
     rough_border = get_rough_frame(img)
-    left_edge, right_edge = find_border(img, rough_border, cross, tsize=tsize)
+    left_edge, right_edge = find_reseau_border(img, rough_border, cross, tsize=tsize)
 
     II, JJ, search_grid = _search_grid(left_edge, right_edge)
     matched_grid = []
@@ -940,9 +983,9 @@ def _fix_cross(subimg):
 
 def remove_crosses(fn_img):
     """
+    Remove the Reseau marks from a KH-9 image before re-sampling.
 
-    :param fn_img:
-    :return:
+    :param str fn_img: the image filename.
     """
     fn_meas = os.path.join('Ori-InterneScan', 'MeasuresIm-{}.xml'.format(fn_img))
     img = io.imread(fn_img)
@@ -975,12 +1018,13 @@ def remove_crosses(fn_img):
 
 def join_hexagon(im_pattern, overlap=2000, blend=True, corona=False):
     """
+    Join two halves of a scanned KH-9 Hexagon image (or four parts of a scanned KH-4 Corona image).
 
-    :param im_pattern:
-    :param overlap:
-    :param blend:
-    :param corona:
-    :return:
+    :param str im_pattern: the base name of the image to use (e.g., DZB1216-500280L002001).
+    :param int overlap: the overlap, in pixels, between the image parts.
+    :param bool blend: apply a linear blend between the two scanned halves (default: True).
+    :param bool corona: image is a KH-4/4A Corona image. If True, looks for four image parts instead
+        of two (default: False).
     """
     if not corona:
         left = io.imread('{}_a.tif'.format(im_pattern))
@@ -1046,11 +1090,13 @@ def _blend(_left, _right, left_shape):
 
 def match_halves(left, right, overlap):
     """
+    Find a transformation to join the left and right halves of an image scan.
 
-    :param left:
-    :param right:
-    :param overlap:
+    :param array-like left: the left-hand image scan.
+    :param array-like right: the right-hand image scan.
+    :param int overlap: the estimated overlap between the two images, in pixels.
     :return:
+        - **model** (*EuclideanTransform*) -- the estimated Euclidean transformation between the two image halves.
     """
     src_pts = []
     dst_pts = []
