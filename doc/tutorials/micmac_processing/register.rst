@@ -2,7 +2,8 @@ automatically finding control points
 ====================================
 At this point, you should have successfully run ``mm3d Malt`` and ``mm3d Tawny`` to generate a relative orthophoto
 and DEM. You should also have run `mosaic_micmac_tiles.py <https://mmaster-workflows.readthedocs.io/en/v0.1/pymmaster/python/scripts/mosaic_micmac_tiles.html>`_
-if needed - otherwise, :py:meth:`spymicmac.register.register_ortho` will most likely fail.
+if needed - otherwise, :py:meth:`spymicmac.register.register_ortho` (or :doc:`../../spymicmac/scripts/register_ortho`)
+will most likely fail.
 
 In order to run :py:meth:`spymicmac.register.register_ortho`, you will need a number of files, detailed in the section
 below. After that, this document will describe the process that :py:meth:`spymicmac.register.register_ortho`

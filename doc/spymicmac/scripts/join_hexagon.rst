@@ -1,7 +1,7 @@
-join_hexagon.py
+join_hexagon
 =================================
 
 .. argparse::
-   :filename: ../bin/join_hexagon.py
+   :filename: ../spymicmac/tools/join_hexagon.py
    :func: _argparser
-   :prog: join_hexagon.py
+   :prog: join_hexagon

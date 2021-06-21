@@ -1,7 +1,7 @@
-balance_images.py
+balance_images
 =================================
 
 .. argparse::
-   :filename: ../bin/balance_images.py
+   :filename: ../spymicmac/tools/balance_images.py
    :func: _argparser
-   :prog: balance_images.py
+   :prog: balance_images
