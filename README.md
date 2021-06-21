@@ -33,5 +33,5 @@ conda env create -f environment.yml
 
 For more detailed information on using sPyMicMac, see the [readthedocs page](https://spymicmac.readthedocs.io).
 ```python
-import sPyMicMac.register as rt
+import spymicmac.register as rt
 ```
