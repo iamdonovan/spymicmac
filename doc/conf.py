@@ -16,6 +16,7 @@ import os
 import sys
 from unittest.mock import MagicMock
 
+
 class Mock(MagicMock):
     @classmethod
     def __getattr__(cls, name):
@@ -25,7 +26,10 @@ class Mock(MagicMock):
 autodoc_mock_imports = ['numpy', 'scipy', 'matplotlib', 'fiona', 'cv2', 'pyvips', 'lxml', 'matplotlib.pyplot',
                         'shapely', 'opencv-python', 'pandas', 'geopandas', 'fiona.crs', 'scipy.interpolate',
                         'shapely.geometry.polygon', 'shapely.geometry', 'shapely.ops',  'shapely.strtree',
-                        'skimage', 'gdal', 'h5py', 'pyproj', 'osgeo', 'llc', 'descartes', 'lxml.etree']
+                        'skimage', 'gdal', 'h5py', 'pyproj', 'osgeo', 'llc', 'descartes', 'lxml.etree', 'ee',
+                        'pybob.landsat_tools', 'skimage.feature', 'skimage.morphology', 'skimage.filters',
+                        'lxml.builder', 'rtree', 'ogr', 'skimage.measure', 'pybob.bob_tools', 'pybob.ddem_tools',
+                        'skimage.transform', 'skimage.io']
 
 sys.modules.update((mod_name, Mock()) for mod_name in autodoc_mock_imports)
 sys.path.insert(0, os.path.abspath('..'))
@@ -40,9 +44,8 @@ def setup(app):
     app.connect("autodoc-skip-member", skip)
 
 # -- Project information -----------------------------------------------------
-
 project = 'sPyMicMac'
-copyright = '2020, Robert McNabb'
+copyright = '2021, Robert McNabb'
 author = 'Robert McNabb'
 
 # The short X.Y version

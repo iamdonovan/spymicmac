@@ -1,10 +1,8 @@
-modules
+sPyMicMac modules
 =================================
-
-Modules
 
 .. toctree::
    :glob:
    :titlesonly:
-   
+
    *

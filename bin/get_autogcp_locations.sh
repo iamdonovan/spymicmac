@@ -1,10 +1,21 @@
 #!/bin/bash
+programname=$0
+
+function usage {
+      echo "Find location of automatically-detected control points in individual images using mm3d XYZ2Im."
+      echo "usage: $programname Dir-ORI GCP_MEASURES_FILE <Images>"
+      exit 0
+}
+
+if [ $# -lt 3 ]; then
+  usage
+fi
 
 ori=$1
 meas_file=$2
 shift 2
 
-cp -r $ori $ori-NoDist
+cp -rv $ori $ori-NoDist
 tmp_autocal=$(ls $ori-NoDist/AutoCal*)
 new_autocal=$(echo $tmp_autocal | sed 's_/_\\/_g')
 
