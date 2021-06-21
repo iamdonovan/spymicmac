@@ -1,4 +1,5 @@
 [![Documentation Status](https://readthedocs.org/projects/spymicmac/badge/?version=latest)](https://spymicmac.readthedocs.io/en/latest/?badge=latest)
+[![PyPI version](https://badge.fury.io/py/spymicmac.svg)](https://badge.fury.io/py/spymicmac)
 
 # sPyMicMac
 A python package to help in the processing of KH-9 and historical aerial imagery using
