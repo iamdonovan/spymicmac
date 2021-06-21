@@ -10,7 +10,7 @@ have very many images, you can use ``Tapioca`` to find the tie points by matchin
 When working with KH-9 images, this will usually be sufficient, and you can move on to the next step, :doc:`tapas`.
 
 With a large number of images, this will be a very slow process. If you have vector data (e.g., a shapefile) of
-the image footprints, you can use :py:meth:`sPyMicMac.micmac.write_neighbour_images` to narrow down the number of
+the image footprints, you can use :py:meth:`spymicmac.micmac.write_neighbour_images` to narrow down the number of
 image pairs where ``Tapioca`` will search for pairs. This will create a file, ``FileImagesNeighbour.xml``, that specifies
 which images overlap based on their footprints.
 

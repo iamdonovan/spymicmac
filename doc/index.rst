@@ -12,7 +12,7 @@ aerial imagery.
    setup
    examples/index
    tutorials/index
-   sPyMicMac/index
+   spymicmac/index
 
 Indices and tables
 ==================

@@ -9,7 +9,7 @@ contrast in the images, in order to help improve the final results.
 
 reseau field
 -------------
-To help correct some of the distortion in the images caused by film storage, :py:meth:`sPyMicMac.image` includes
+To help correct some of the distortion in the images caused by film storage, :py:meth:`spymicmac.image` includes
 a routine to automatically find the Reseau markers in the image and use their locations to resample the images using
 ``ReSampFid``. In the images below, you can see the difference between the expected location of each Reseau marker
 and the automatically detected locations:
@@ -23,26 +23,26 @@ and the automatically detected locations:
     :alt: a KH-9 image with the Reseau field warping shown
 
 
-To run the routine, use either :py:meth:`sPyMicMac.image.find_reseau_grid` or
-:doc:`../../sPyMicMac/scripts/find_reseau_grid`. This will produce a ``MeasuresIm`` file that will be read
+To run the routine, use either :py:meth:`spymicmac.image.find_reseau_grid` or
+:doc:`../../spymicmac/scripts/find_reseau_grid`. This will produce a ``MeasuresIm`` file that will be read
 by ``ReSampFid``.
 
 .. note::
-    Before running ``ReSampFid``, you will also need to run :doc:`../../sPyMicMac/scripts/generate_micmac_measures`
+    Before running ``ReSampFid``, you will also need to run :doc:`../../spymicmac/scripts/generate_micmac_measures`
     in order to generate the ``MeasuresCamera.xml`` file needed.
 
 
 cross removal
 --------------
 Once you have found the Reseau marks in each image half, you can "remove" the Reseau marks using either
-:py:meth:`sPyMicMac.image.remove_crosses` or :doc:`../../sPyMicMac/scripts/remove_crosses`.
+:py:meth:`spymicmac.image.remove_crosses` or :doc:`../../spymicmac/scripts/remove_crosses`.
 
 .. image:: ../../img/fixed_cross.png
     :width: 600
     :align: center
     :alt: an image showing a Reseau mark on the left, and the Reseau mark erased on the right.
 
-After this step, you can use :doc:`../../sPyMicMac/scripts/resample_hexagon`, or call ``mm3d ReSampFid`` directly,
+After this step, you can use :doc:`../../spymicmac/scripts/resample_hexagon`, or call ``mm3d ReSampFid`` directly,
 to re-sample the images before joining the two halves together.
 
 image joining
@@ -56,12 +56,12 @@ the example below.
 .. image:: ../../img/half_b.png
     :width: 49%
 
-In ``sPyMicMac``, the function to join the images is :py:meth:`sPyMicMac.image.join_hexagon`. Normally, the scans are
+In ``spymicmac``, the function to join the images is :py:meth:`spymicmac.image.join_hexagon`. Normally, the scans are
 labelled 'a' and 'b', with 'a' corresponding to the left-hand scan, and 'b' corresponding to the right-hand scan.
-This is what :py:meth:`sPyMicMac.image.join_hexagon` is expecting - that the overlap between the two halves is the
+This is what :py:meth:`spymicmac.image.join_hexagon` is expecting - that the overlap between the two halves is the
 right-hand side of image 'a', and the left-hand side of image 'b'.
 
-Once the images have been re-sampled using :doc:`../../sPyMicMac/scripts/resample_hexagon`, the border will be removed,
+Once the images have been re-sampled using :doc:`../../spymicmac/scripts/resample_hexagon`, the border will be removed,
 and the images will overlap by 2 mm:
 
 .. image:: ../../img/resamp_half_a.png
@@ -70,14 +70,14 @@ and the images will overlap by 2 mm:
 .. image:: ../../img/resamp_half_b.png
     :width: 49%
 
-After calling :py:meth:`sPyMicMac.image.join_hexagon`, the image should look something like this:
+After calling :py:meth:`spymicmac.image.join_hexagon`, the image should look something like this:
 
 .. image:: ../../img/joined.png
     :width: 98%
     :align: center
     :alt: a re-sampled and joined KH-9 image showing Hofsjökull, Iceland
 
-As there is sometimes a difference in brightness between the two halves, :py:meth:`sPyMicMac.image.join_hexagon` has the
+As there is sometimes a difference in brightness between the two halves, :py:meth:`spymicmac.image.join_hexagon` has the
 option to blend the two halves over the overlap by averaging the values from the two halves, starting from
 100% of the value of image 'a', linearly increasing to 100% of the value of image 'b' at the end of the
 overlapping part.
@@ -85,6 +85,6 @@ overlapping part.
 contrast enhancement
 ---------------------
 Most of the scanned KH-9 images provided by USGS do not have issues with striping. However, they can still be
-low contrast, and it can help to use either of :py:meth:`sPyMicMac.image.stretch_image` or
-:py:meth:`sPyMicMac.image.contrast_enhance` for this. For examples of these functions applied to a historical aerial
+low contrast, and it can help to use either of :py:meth:`spymicmac.image.stretch_image` or
+:py:meth:`spymicmac.image.contrast_enhance` for this. For examples of these functions applied to a historical aerial
 image, see :ref:`contrast-enhancement`.

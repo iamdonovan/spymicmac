@@ -1,5 +1,5 @@
 """
-sPyMicMac.micmac is a collection of tools for interfacing with MicMac
+spymicmac.micmac is a collection of tools for interfacing with MicMac
 """
 import os
 import subprocess
@@ -22,7 +22,7 @@ from skimage.transform import AffineTransform
 from pybob.bob_tools import mkdir_p
 from pybob.GeoImg import GeoImg
 from pybob.ddem_tools import nmad
-from sPyMicMac.usgs import get_usgs_footprints
+from spymicmac.usgs import get_usgs_footprints
 
 
 ######################################################################################################################

@@ -3,7 +3,7 @@ import argparse
 from glob import glob
 from skimage.io import imread, imsave
 from pybob.bob_tools import mkdir_p
-from sPyMicMac.image import balance_image
+from spymicmac.image import balance_image
 
 
 def _argparser():

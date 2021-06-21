@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 import argparse
-from sPyMicMac.register import register_ortho
+from spymicmac.register import register_ortho
 
 
 def _argparser():

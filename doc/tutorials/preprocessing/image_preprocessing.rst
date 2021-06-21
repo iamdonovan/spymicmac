@@ -43,8 +43,8 @@ images:
 .. image:: ../../img/bright.png
     :width: 49%
 
-``sPyMicMac`` has two main functions available for enhancing contrast: :py:meth:`sPyMicMac.image.stretch_image` and
-:py:meth:`sPyMicMac.image.contrast_enhance`. ``stretch_image()`` performs a linear contrast stretch on the
+``spymicmac`` has two main functions available for enhancing contrast: :py:meth:`spymicmac.image.stretch_image` and
+:py:meth:`spymicmac.image.contrast_enhance`. ``stretch_image()`` performs a linear contrast stretch on the
 image to a given quantile, while ``contrast_enhance()`` performs a median filter to de-noise, before
 calling ``stretch_image()`` and performing a gamma adjustment on the stretched image.
 

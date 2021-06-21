@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 import argparse
-from sPyMicMac.micmac import get_gcp_meas
+from spymicmac.micmac import get_gcp_meas
 import lxml.etree as etree
 import lxml.builder as builder
 

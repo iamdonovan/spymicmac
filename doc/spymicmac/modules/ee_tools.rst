@@ -1,4 +1,4 @@
-sPyMicMac.ee_tools
+spymicmac.ee_tools
 =================================
 
 .. note::
@@ -13,14 +13,14 @@ sPyMicMac.ee_tools
     an authorization code which you should then copy and paste into the prompt in the python terminal.
 
     After you have successfully authenticated, you should be able to use sPyMicMac.ee_tools normally (note that you
-    will need to explicitly import ``ee_tools`` - it is not loaded by ``sPyMicMac.__init__.py``, in order to prevent
+    will need to explicitly import ``ee_tools`` - it is not loaded by ``spymicmac.__init__.py``, in order to prevent
     authorization errors):
     ::
 
-        from sPyMicMac import ee_tools
+        from spymicmac import ee_tools
 
-    You won't need to do this every time you use :py:meth:`sPyMicMac.ee_tools`, but you may need to re-authorize from time
+    You won't need to do this every time you use :py:meth:`spymicmac.ee_tools`, but you may need to re-authorize from time
     to time.
 
-.. automodule:: sPyMicMac.ee_tools
+.. automodule:: spymicmac.ee_tools
     :members:

@@ -2,7 +2,7 @@ resample_hexagon.sh
 =================================
 
 ``resample_hexagon.sh`` is a shell script that will run ``mm3d ReSampFid`` on the two scanned halves of a KH-9
-Hexagon image, leaving a 2 mm overlap between the two images to aid in using :py:meth`sPyMicMac.image.join_hexagon`
+Hexagon image, leaving a 2 mm overlap between the two images to aid in using :py:meth`spymicmac.image.join_hexagon`
 to join the images together.
 ::
 

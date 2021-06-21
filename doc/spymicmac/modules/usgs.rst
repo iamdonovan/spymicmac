@@ -1,5 +1,5 @@
-sPyMicMac.image
+spymicmac.usgs
 =================================
 
-.. automodule:: sPyMicMac.image
+.. automodule:: spymicmac.usgs
     :members:

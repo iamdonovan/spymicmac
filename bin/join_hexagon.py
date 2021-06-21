@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 import argparse
 from glob import glob
-from sPyMicMac.image import join_hexagon
+from spymicmac.image import join_hexagon
 
 
 def _argparser():

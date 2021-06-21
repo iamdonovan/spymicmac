@@ -44,7 +44,7 @@ def setup(app):
     app.connect("autodoc-skip-member", skip)
 
 # -- Project information -----------------------------------------------------
-project = 'sPyMicMac'
+project = 'spymicmac'
 copyright = '2021, Robert McNabb'
 author = 'Robert McNabb'
 

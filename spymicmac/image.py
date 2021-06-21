@@ -1,5 +1,5 @@
 """
-sPyMicMac.image is a collection of tools for working with aerial images.
+spymicmac.image is a collection of tools for working with aerial images.
 """
 import os
 import shutil
@@ -30,7 +30,7 @@ from llc import jit_filter_function
 from pybob.image_tools import match_hist, reshape_geoimg, create_mask_from_shapefile, nanmedian_filter
 from pybob.bob_tools import mkdir_p
 from pymmaster.mmaster_tools import orient_footprint
-from sPyMicMac.micmac import get_im_meas, parse_im_meas
+from spymicmac.micmac import get_im_meas, parse_im_meas
 
 
 ######################################################################################################################

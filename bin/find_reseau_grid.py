@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 import argparse
 import numpy as np
-from sPyMicMac.image import find_reseau_grid
+from spymicmac.image import find_reseau_grid
 
 
 def _argparser():

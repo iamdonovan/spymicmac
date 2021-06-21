@@ -1,5 +1,5 @@
 """
-sPyMicMac.ee_tools is a collection of tools for getting GEE data for processing KH-9 Hexagon imagery.
+spymicmac.ee_tools is a collection of tools for getting GEE data for processing KH-9 Hexagon imagery.
 """
 import ee
 

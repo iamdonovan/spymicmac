@@ -1,5 +1,5 @@
 """
-sPyMicMac.register is a collection of tools for registering images and finding GCPs.
+spymicmac.register is a collection of tools for registering images and finding GCPs.
 """
 import os
 import re
@@ -22,9 +22,9 @@ from pybob.bob_tools import mkdir_p
 from pybob.ddem_tools import nmad
 from pybob.image_tools import create_mask_from_shapefile
 from pybob.GeoImg import GeoImg
-import sPyMicMac.image as imtools
-import sPyMicMac.micmac as mmtools
-from sPyMicMac.usgs import get_usgs_footprints
+import spymicmac.image as imtools
+import spymicmac.micmac as mmtools
+from spymicmac.usgs import get_usgs_footprints
 
 
 def sliding_window_filter(img_shape, pts_df, winsize, stepsize=None, mindist=2000, how='residual', is_ascending=True):

@@ -2,7 +2,7 @@ re-sampling the images
 ======================
 
 After you have found each of the fiducial marks in each image and generated a MeasuresIm file for each image,
-either using :doc:`../../sPyMicMac/scripts/find_reseau_grid` for KH-9 images, or by hand/using ``mm3d Kugelhupf``
+either using :doc:`../../spymicmac/scripts/find_reseau_grid` for KH-9 images, or by hand/using ``mm3d Kugelhupf``
 for historic aerial photographs, you can run ``ReSampFid``:
 ::
 
@@ -25,7 +25,7 @@ the images to 14 microns (0.014 mm):
     mm3d ReSampFid "DZB.*tif" 0.014
 
 .. note::
-    There is also a shell script, :doc:`../../sPyMicMac/scripts/resample_hexagon`, that will leave a 1 mm overlap
+    There is also a shell script, :doc:`../../spymicmac/scripts/resample_hexagon`, that will leave a 1 mm overlap
     between the two image halves, to aid in joining them together.
 
 

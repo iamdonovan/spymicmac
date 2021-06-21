@@ -6,7 +6,7 @@ The workflow and steps here are built partly from the steps outlined in the exce
 has been modified to include specific :doc:`../preprocessing/kh9_preprocessing`,
 as well as optional :doc:`../preprocessing/image_preprocessing` steps for historic air photos.
 
-The other main difference is the use of :doc:`../../sPyMicMac/modules/register` to find control points automatically,
+The other main difference is the use of :doc:`../../spymicmac/modules/register` to find control points automatically,
 using an orthorectified image and external DEM.
 
 .. toctree::
