@@ -4,7 +4,8 @@ from sPyMicMac.register import register_ortho
 
 
 def _argparser():
-    _parser = argparse.ArgumentParser(description="", formatter_class=argparse.RawDescriptionHelpFormatter)
+    _parser = argparse.ArgumentParser(description="Register a relative orthoimage and DEM to a reference orthorectified image and DEM.",
+                                      formatter_class=argparse.RawDescriptionHelpFormatter)
 
     _parser.add_argument('fn_ortho', action='store', type=str, help='non-referenced orthophoto mosaic')
     _parser.add_argument('fn_ref', action='store', type=str, help='georeferenced satellite image')

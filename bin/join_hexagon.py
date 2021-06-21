@@ -5,7 +5,8 @@ from sPyMicMac.image import join_hexagon
 
 
 def _argparser():
-    parser = argparse.ArgumentParser(description="", formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(description="Join two halves of a scanned KH-9 Hexagon image (or four parts of a scanned KH-4 Corona image).",
+                                     formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('-o', '--overlap', action='store', type=int, default=2000,
                         help='overlap search width between two images [2000]')
     parser.add_argument('-p', '--pattern', action='store', type=str, default='DZB',
