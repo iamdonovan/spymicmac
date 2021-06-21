@@ -1,7 +1,7 @@
 from setuptools import setup
 
 setup(name='spymicmac',
-      version='0.1',
+      version='0.1.1',
       description='a python package for processing KH-9 imagery using MicMac',
       url='http://github.com/iamdonovan/sPyMicMac',
       author='Bob McNabb',
