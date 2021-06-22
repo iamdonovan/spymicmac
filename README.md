@@ -15,7 +15,7 @@ MicMac used in developing sPyMicMac, check out the
 
 ```sh
 # Clone the repository
-git clone git@github.com:iamdonovan/sPyMicMac.git
+git clone https://github.com/iamdonovan/sPyMicMac.git
 
 # install the development verion in editing mode
 pip install -e [path2folder/sPyMicMac]
