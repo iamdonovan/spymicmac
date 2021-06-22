@@ -26,7 +26,8 @@ import numpy as np
 from shapely.ops import cascaded_union
 from shapely.geometry import LineString
 import geopandas as gpd
-from llc import jit_filter_function
+# from llc import jit_filter_function
+from numba import jit
 from pybob.image_tools import match_hist, reshape_geoimg, create_mask_from_shapefile, nanmedian_filter
 from pybob.bob_tools import mkdir_p
 from pymmaster.mmaster_tools import orient_footprint
@@ -36,7 +37,7 @@ from spymicmac.micmac import get_im_meas, parse_im_meas
 ######################################################################################################################
 # image filtering tools
 ######################################################################################################################
-@jit_filter_function
+@jit
 def nanstd(a):
     return np.nanstd(a)
 
