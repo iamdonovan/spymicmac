@@ -1,17 +1,34 @@
-from setuptools import setup
+from pathlib import Path
+from setuptools import find_packages, setup
+
+readme = Path(__file__).parent / 'README.md'
 
 setup(name='spymicmac',
       version='0.1.1',
-      description='a python package for processing KH-9 imagery using MicMac',
-      url='http://github.com/iamdonovan/sPyMicMac',
+      description='a python package for processing KH-9 and historical aerial imagery using MicMac',
+      long_description=readme.read_text(),
+      long_description_content_type='text/markdown',
+      url='https://github.com/iamdonovan/sPyMicMac',
+      doc_url='https://spymicmac.readthedocs.io/',
       author='Bob McNabb',
       author_email='robertmcnabb@gmail.com',
       license='GPL-3.0',
-      packages=['spymicmac'],
+      license_file='LICENSE',
+      classifiers=[
+          'Intended Audience :: Science/Research',
+          'License :: OSI Approved :: GNU General Public License v3 (GPLv3)',
+          'Natural Language :: English',
+          'Programming Language :: Python :: 3',
+          'Programming Language :: Python :: 3.7',
+          'Programming Language :: Python :: 3.8',
+          'Programming Language :: Python :: 3.9',
+      ],
+      python_requires='>=3.7',
       install_requires=['numpy', 'scipy', 'matplotlib', 'lxml', 'pybob>0.25',
                         'shapely', 'opencv-python', 'pandas', 'geopandas', 'pymmaster>0.1',
-                        'scikit-image>=0.18', 'gdal', 'llc',
+                        'scikit-image>=0.18', 'gdal>=3.2.0', 'llc',
                         'sphinx-argparse', 'earthengine-api', 'pyasn1', 'usgs'],
+      packages=find_packages(),
       scripts=['bin/get_autogcp_locations.sh',
                'bin/post_process_micmac.sh',
                'bin/resample_hexagon.sh'],
