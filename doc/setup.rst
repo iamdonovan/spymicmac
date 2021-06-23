@@ -132,9 +132,9 @@ Assuming that you haven't run into any errors, you should be set up. You can ver
 From the command line. You should see the following output (or something very similar):
 ::
 
-    usage: register_ortho [-h] [-glacmask GLACMASK] [-landmask LANDMASK] [-footprints FOOTPRINTS] [-im_subset IM_SUBSET [IM_SUBSET ...]]
-                          [-corr_thresh CORR_THRESH] [-tfm_pts TFM_PTS] [-b BLOCK] [-ori ORI]
-                          [-init_res INIT_RES] [-ortho_res ORTHO_RES] [-imgsource IMGSOURCE] [-density DENSITY]
+    usage: register_ortho [-h] [-glacmask GLACMASK] [-landmask LANDMASK] [-footprints FOOTPRINTS]
+                          [-im_subset IM_SUBSET [IM_SUBSET ...]] [-b BLOCK_NUM] [-ori ORI]
+                          [-ortho_res ORTHO_RES] [-imgsource IMGSOURCE] [-density DENSITY]
                           fn_ortho fn_ref fn_dem fn_reldem
 
     Register a relative orthoimage and DEM to a reference orthorectified image and DEM.
@@ -153,13 +153,9 @@ From the command line. You should see the following output (or something very si
                             path to shapefile of image outlines. If not set, will download from USGS.
       -im_subset IM_SUBSET [IM_SUBSET ...]
                             subset of raw images to work with (default all)
-      -corr_thresh CORR_THRESH
-                            minimum correlation value to use for accepting a match.
-      -tfm_pts TFM_PTS      CSV containing set of 4-5+ points to estimate a rough transform, in the form I,J,X,Y.
-      -b BLOCK, --block BLOCK
+      -b BLOCK_NUM, --block_num BLOCK_NUM
                             Block number to use if multiple image blocks exist in directory.
       -ori ORI              name of orientation directory (after Ori-) [Relative]
-      -init_res INIT_RES    initial resolution to get rough transformation [400 m gsd]
       -ortho_res ORTHO_RES  approx. ground sampling distance (pixel resolution) of ortho image. [8 m]
       -imgsource IMGSOURCE  USGS dataset name for images [DECLASSII]
       -density DENSITY      pixel spacing to look for GCPs [200]

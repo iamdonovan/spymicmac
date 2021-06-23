@@ -19,16 +19,10 @@ def _argparser():
                          help='path to shapefile of image outlines. If not set, will download from USGS.')
     _parser.add_argument('-im_subset', action='store', type=str, default=None, nargs='+',
                          help='subset of raw images to work with (default all)')
-    _parser.add_argument('-corr_thresh', action='store', type=float, default=0.5,
-                         help='minimum correlation value to use for accepting a match.')
-    _parser.add_argument('-tfm_pts', action='store', type=str, default=None,
-                         help='CSV containing set of 4-5+ points to estimate a rough transform, in the form I,J,X,Y.')
-    _parser.add_argument('-b', '--block', action='store', type=str, default=None,
+    _parser.add_argument('-b', '--block_num', action='store', type=str, default=None,
                          help='Block number to use if multiple image blocks exist in directory.')
     _parser.add_argument('-ori', action='store', type=str, default='Relative',
                          help='name of orientation directory (after Ori-) [Relative]')
-    _parser.add_argument('-init_res', action='store', type=int, default=400,
-                         help='initial resolution to get rough transformation [400 m gsd]')
     _parser.add_argument('-ortho_res', action='store', type=float, default=8,
                          help='approx. ground sampling distance (pixel resolution) of ortho image. [8 m]')
     _parser.add_argument('-imgsource', action='store', type=str, default='DECLASSII',
@@ -47,11 +41,8 @@ def main():
                    landmask=args.landmask,
                    footprints=args.footprints,
                    im_subset=args.im_subset,
-                   corr_thresh=args.corr_thresh,
-                   tfm_points=args.tfm_pts,
-                   block_num=args.block,
+                   block_num=args.block_num,
                    ori=args.ori,
-                   init_res=args.init_res,
                    ortho_res=args.ortho_res,
                    imgsource=args.imgsource,
                    density=args.density)
