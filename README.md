@@ -18,7 +18,7 @@ As of version 0.1, sPyMicMac is available via PyPI. To install the latest packag
 pip install spymicmac
 ```
 
-To install in your environment.
+to install sPyMicMac in your environment.
 
 ## Installing sPyMicMac from conda-forge
 As of version 0.1.1, sPyMicMac is available via conda-forge. To install the latest packaged version, 
@@ -28,12 +28,11 @@ simply run:
 pip install spymicmac
 ```
 
-To install in your environment.
+to install spymicmac in your environment.
 
+## Installing the latest version of sPyMicMac
 
-## Installing the latest sPyMicMac
-
-To install the latest version, first clone the GitHub repository:
+To install the latest version of sPyMicMac, first clone the GitHub repository:
 
 ```sh
 git clone git@github.com:iamdonovan/sPyMicMac.git
