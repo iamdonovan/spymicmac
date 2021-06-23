@@ -1,7 +1,7 @@
 Installation and Setup
 =======================
 
-The following is a (non-exhaustive) set of instructions for getting setup to run MMASTER on your own machine. Note
+The following is a (non-exhaustive) set of instructions for getting setup to run spymicmac on your own machine. Note
 that this can be an **extremely** computationally intensive process, so we don't really recommend trying to run this on your
 personal laptop.
 
@@ -61,8 +61,35 @@ installed by running the following:
 
 In a nutshell, the basic idea is: clone the MicMac git repository, then build the source code. Simple!
 
+Installing sPyMicMac
+#####################
+sPyMicMac is available in a number of ways - either installing from source or packaged via PyPI or conda-forge.
+
+via PyPI
+------------
+As of version 0.1, sPyMicMac is available via PyPI. To install the latest packaged version into your python environment,
+simply run:
+::
+
+    pip install spymicmac
+
+via conda-forge
+-----------------
+As of version 0.1.1, sPyMicMac is available via conda-forge. To install the latest version, run:
+::
+
+    conda install -c conda-forge spymicmac
+
+
+from source
+-------------
+To get started, clone the repository, then navigate to the directory where the repository is downloaded:
+::
+
+    git clone https://github.com/iamdonovan/sPyMicMac.git
+
 Optional: Preparing a python environment
-########################################
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 If you like, you can set up a dedicated python environment for your sPyMicMac needs. This can be handy, in case any
 packages required by sPyMicMac clash with packages in your default environment. Our personal preference
 is `conda <https://docs.conda.io/en/latest/>`_, but your preferences may differ.
@@ -82,24 +109,59 @@ necessary to run sPyMicMac. To activate the new environment, type:
 And you should be ready to go. Note that you will have to activate this environment any time you wish to run
 sPyMicMac scripts and tools, if it is not already activated in your terminal.
 
-Installing sPyMicMac
-####################
-Next, use ``pip`` to install the scripts and python modules:
+Installing via pip
+^^^^^^^^^^^^^^^^^^^^
+Once you have the environment prepared (or not), run pip from inside the ``sPyMicMac`` directory:
 ::
 
-    pip install -e sPyMicMac
+    pip install .
 
-from the repository folder. Note: the `-e` allows you to make changes to the code (for example, from git updates
-or through your own tinkering), that will then be updated within your python install. If you run `pip install`
-without this option, it will install a static version of the package, and any changes/updates will have to be
-explicitly re-installed.
+Alternatively, you can install a development version, which allows you to make changes to the code (either via git updates
+or your own tinkering) without having to re-install each time. To install a development version, use the ``-e`` option:
+::
 
+    pip install -e .
+
+Checking the installation
+--------------------------
 Assuming that you haven't run into any errors, you should be set up. You can verify this by running:
 ::
 
-    register_ortho.py -h
+    register_ortho -h
 
-From the command line (in a non-Windows environment; *Windows instructions coming soon-ish*).
+From the command line. You should see the following output (or something very similar):
+::
 
-You should see the following output (or something very similar):
+    usage: register_ortho [-h] [-glacmask GLACMASK] [-landmask LANDMASK] [-footprints FOOTPRINTS] [-im_subset IM_SUBSET [IM_SUBSET ...]]
+                          [-corr_thresh CORR_THRESH] [-tfm_pts TFM_PTS] [-b BLOCK] [-ori ORI]
+                          [-init_res INIT_RES] [-ortho_res ORTHO_RES] [-imgsource IMGSOURCE] [-density DENSITY]
+                          fn_ortho fn_ref fn_dem fn_reldem
+
+    Register a relative orthoimage and DEM to a reference orthorectified image and DEM.
+
+    positional arguments:
+      fn_ortho              non-referenced orthophoto mosaic
+      fn_ref                georeferenced satellite image
+      fn_dem                dem
+      fn_reldem             relative dem corresponding to ortho
+
+    optional arguments:
+      -h, --help            show this help message and exit
+      -glacmask GLACMASK    path to shapefile of glacier outlines (i.e., an exclusion mask)
+      -landmask LANDMASK    path to shapefile of land outlines (i.e., an inclusion mask)
+      -footprints FOOTPRINTS
+                            path to shapefile of image outlines. If not set, will download from USGS.
+      -im_subset IM_SUBSET [IM_SUBSET ...]
+                            subset of raw images to work with (default all)
+      -corr_thresh CORR_THRESH
+                            minimum correlation value to use for accepting a match.
+      -tfm_pts TFM_PTS      CSV containing set of 4-5+ points to estimate a rough transform, in the form I,J,X,Y.
+      -b BLOCK, --block BLOCK
+                            Block number to use if multiple image blocks exist in directory.
+      -ori ORI              name of orientation directory (after Ori-) [Relative]
+      -init_res INIT_RES    initial resolution to get rough transformation [400 m gsd]
+      -ortho_res ORTHO_RES  approx. ground sampling distance (pixel resolution) of ortho image. [8 m]
+      -imgsource IMGSOURCE  USGS dataset name for images [DECLASSII]
+      -density DENSITY      pixel spacing to look for GCPs [200]
+
 
