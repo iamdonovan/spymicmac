@@ -164,11 +164,11 @@ def transform_centers(img_gt, ref, imlist, footprints, ori):
     Use the camera centers in relative space provided by MicMac Orientation files, along with camera footprints,
     to estimate a transformation between the relative coordinate system and the absolute coordinate system.
 
-    :param array-like img_gt: the image GeoTransform (as provided by gdal.Dataset.GetGeoTransform)
+    :param array-like img_gt: the image GeoTransform (as read from a TFW file)
     :param GeoImg ref: the reference image to use to determine the output image shape
     :param list imlist: a list of of the images that were used for the relative orthophoto
     :param GeoDataFrame footprints: the (approximate) image footprints - the centroid will be used for the absolute camera positions.
-    :param str ori: name of orientation directory (after Ori-)
+    :param str ori: name of orientation directory
     :return:
         - **model** (*AffineTransform*) -- the estimated Affine Transformation between relative and absolute space
         - **inliers** (*array-like*) -- a list of the inliers returned by skimage.measure.ransac
@@ -644,13 +644,13 @@ def register_ortho(fn_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, landmask=
     xy = np.array([ref_img.ij2xy((pt[1], pt[0])) for pt in gcps[['search_j', 'search_i']].values]).reshape(-1, 2)
     gcps['geometry'] = [Point(pt) for pt in xy]
 
-    gcps = gcps[mask_full[gcps.search_i, gcps.search_j] == 255]
+    gcps = gcps[mask_full[gcps.search_i, gcps.search_j] == 255].copy()
 
     gcps['rel_x'] = ortho_gt[4] + gcps['orig_j'].values * ortho_gt[0]  # need the original image coordinates
     gcps['rel_y'] = ortho_gt[5] + gcps['orig_i'].values * ortho_gt[3]
 
     gcps['elevation'] = 0
-    gcps.crs = ref_img.proj4
+    gcps.set_crs(crs=ref_img.proj4, inplace=True)
 
     gcps.dropna(inplace=True)
     print('{} potential matches found'.format(gcps.shape[0]))
