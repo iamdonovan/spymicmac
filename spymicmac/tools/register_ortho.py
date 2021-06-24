@@ -9,8 +9,8 @@ def _argparser():
 
     _parser.add_argument('fn_ortho', action='store', type=str, help='non-referenced orthophoto mosaic')
     _parser.add_argument('fn_ref', action='store', type=str, help='georeferenced satellite image')
-    _parser.add_argument('fn_dem', action='store', type=str, help='dem')
     _parser.add_argument('fn_reldem', action='store', type=str, help='relative dem corresponding to ortho')
+    _parser.add_argument('fn_dem', action='store', type=str, help='dem')
     _parser.add_argument('-glacmask', action='store', type=str, default=None,
                          help='path to shapefile of glacier outlines (i.e., an exclusion mask)')
     _parser.add_argument('-landmask', action='store', type=str, default=None,
