@@ -159,5 +159,6 @@ From the command line. You should see the following output (or something very si
       -ortho_res ORTHO_RES  approx. ground sampling distance (pixel resolution) of ortho image. [8 m]
       -imgsource IMGSOURCE  USGS dataset name for images [DECLASSII]
       -density DENSITY      pixel spacing to look for GCPs [200]
+      -no_allfree           run Campari with AllFree set to False
 
 
