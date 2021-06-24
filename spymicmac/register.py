@@ -653,6 +653,7 @@ def register_ortho(fn_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, landmask=
     gcps.crs = ref_img.proj4
 
     gcps.dropna(inplace=True)
+    print('{} potential matches found'.format(gcps.shape[0]))
 
     print('loading dems')
     dem = GeoImg(fn_dem, dtype=np.float32)
@@ -665,7 +666,9 @@ def register_ortho(fn_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, landmask=
             gcps.loc[i, 'el_rel'] = rel_dem.raster_points([(row.rel_x, row.rel_y)], nsize=3, mode='linear')
 
     # drop any gcps where we don't have a DEM value or a valid match
+    gcps.loc[np.abs(gcps.elevation - dem.NDV) < 1, 'elevation'] = np.nan
     gcps.dropna(inplace=True)
+    print('{} matches with valid elevations'.format(gcps.shape[0]))
 
     # run ransac to find the matches between the transformed image and the master image make a coherent transformation
     # residual_threshold is 10 pixels to allow for some local distortions, but get rid of the big blunders
@@ -680,7 +683,7 @@ def register_ortho(fn_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, landmask=
                                 mindist=500, how='aff_resid', is_ascending=False)
     gcps = gcps.loc[out]
 
-    print('{} valid matches found'.format(gcps.shape[0]))
+    print('{} valid matches found after estimating transformation'.format(gcps.shape[0]))
 
     gcps.index = range(gcps.shape[0])  # make sure index corresponds to row we're writing out
     gcps['id'] = ['GCP{}'.format(i) for i in range(gcps.shape[0])]
