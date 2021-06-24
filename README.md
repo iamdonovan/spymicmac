@@ -47,7 +47,7 @@ cd path/to/repository
 conda env create -f environment.yml
 ```
 
-Once the environment is created successfully (this can take some time, so grab a coffee), activate it:
+Once the environment has been created successfully (this can take some time, so grab a coffee), activate it:
 
 ```sh
 conda activate spymicmac
