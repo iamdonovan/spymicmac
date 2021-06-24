@@ -29,6 +29,8 @@ def _argparser():
                          help='USGS dataset name for images [DECLASSII]')
     _parser.add_argument('-density', action='store', type=int, default=200,
                          help='pixel spacing to look for GCPs [200]')
+    _parser.add_argument('-no_allfree', action='store_false',
+                         help='run Campari with AllFree set to False')
     return _parser
 
 
@@ -45,7 +47,8 @@ def main():
                    ori=args.ori,
                    ortho_res=args.ortho_res,
                    imgsource=args.imgsource,
-                   density=args.density)
+                   density=args.density,
+                   allfree=args.no_allfree)
 
 
 if __name__ == "__main__":
