@@ -571,7 +571,7 @@ def register_ortho_old(fn_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, landm
 def _search_size(imshape):
     min_dst = 100
     dst = min(400, imshape[0] / 10, imshape[1] / 10)
-    return max(min_dst, dst)
+    return int(max(min_dst, dst))
 
 
 def register_ortho(fn_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, landmask=None, footprints=None,
