@@ -568,6 +568,12 @@ def register_ortho_old(fn_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, landm
     # embed()
 
 
+def _search_size(imshape):
+    min_dst = 100
+    dst = min(400, imshape[0] / 10, imshape[1] / 10)
+    return max(min_dst, dst)
+
+
 def register_ortho(fn_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, landmask=None, footprints=None,
                    im_subset=None, block_num=None, ori='Relative', ortho_res=8.,
                    imgsource='DECLASSII', density=200, out_dir=None, allfree=True):
@@ -639,12 +645,13 @@ def register_ortho(fn_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, landmask=
     plt.close(fig)
 
     # for each of these pairs (src, dst), find the precise subpixel match (or not...)
-    gcps = imtools.find_grid_matches(rough_tfm, ref_img, mask_full, Minit, spacing=density, dstwin=400)
+    gcps = imtools.find_grid_matches(rough_tfm, ref_img, mask_full, Minit,
+                                     spacing=density, dstwin=_search_size(rough_tfm.shape))
 
     xy = np.array([ref_img.ij2xy((pt[1], pt[0])) for pt in gcps[['search_j', 'search_i']].values]).reshape(-1, 2)
     gcps['geometry'] = [Point(pt) for pt in xy]
 
-    gcps = gcps[mask_full[gcps.search_i, gcps.search_j] == 255].copy()
+    gcps = gcps.loc[mask_full[gcps.search_i, gcps.search_j] == 255]
 
     gcps['rel_x'] = ortho_gt[4] + gcps['orig_j'].values * ortho_gt[0]  # need the original image coordinates
     gcps['rel_y'] = ortho_gt[5] + gcps['orig_i'].values * ortho_gt[3]
