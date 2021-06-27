@@ -46,7 +46,8 @@ setup(name='spymicmac',
               'join_hexagon = spymicmac.tools.join_hexagon:main',
               'move_bad_tapas = spymicmac.tools.move_bad_tapas:main',
               'register_ortho = spymicmac.tools.register_ortho:main',
-              'remove_crosses = spymicmac.tools.remove_crosses:main'
+              'remove_crosses = spymicmac.tools.remove_crosses:main',
+              'remove_measures = spymicmac.tools.remove_measures:main'
           ],
       },
       zip_safe=False)
