@@ -328,6 +328,24 @@ def write_auto_gcps(gcp_df, sub, outdir, utm_zone, outname='AutoGCPs'):
             print('{} {} {} {}'.format(row.id, row.geometry.x, row.geometry.y, row.elevation), file=f)
 
 
+def remove_measure(fn_meas, name):
+    """
+    Remove all instances of a given measure from an xml file.
+
+    :param str fn_meas: the xml file (e.g., AutoMeasures-S2D.xml)
+    :param str name: the measurement name (e.g., GCP0)
+    :return:
+    """
+    root = ET.parse(fn_meas).getroot()
+    for im in root.findall('MesureAppuiFlottant1Im'):
+        for mes in im.findall('OneMesureAF1I'):
+            if mes.find('NamePt').text == name:
+                im.remove(mes)
+
+    tree = ET.ElementTree(root)
+    tree.write(fn_meas, encoding="utf-8", xml_declaration=True)
+
+
 def get_bascule_residuals(fn_basc, gcp_df):
     """
     Read a given GCPBascule residual file, and add the residuals to a DataFrame with GCP information.
