@@ -334,7 +334,6 @@ def remove_measure(fn_meas, name):
 
     :param str fn_meas: the xml file (e.g., AutoMeasures-S2D.xml)
     :param str name: the measurement name (e.g., GCP0)
-    :return:
     """
     root = ET.parse(fn_meas).getroot()
     for im in root.findall('MesureAppuiFlottant1Im'):
