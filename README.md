@@ -1,5 +1,10 @@
 [![Documentation Status](https://readthedocs.org/projects/spymicmac/badge/?version=latest)](https://spymicmac.readthedocs.io/en/latest/?badge=latest)
 [![PyPI version](https://badge.fury.io/py/spymicmac.svg)](https://badge.fury.io/py/spymicmac)
+[![Anaconda-Server Badge](https://anaconda.org/conda-forge/spymicmac/badges/version.svg)](https://anaconda.org/conda-forge/spymicmac)
+[![Anaconda-Server Badge](https://anaconda.org/conda-forge/spymicmac/badges/license.svg)](https://anaconda.org/conda-forge/spymicmac)
+[![Anaconda-Server Badge](https://anaconda.org/conda-forge/spymicmac/badges/platforms.svg)](https://anaconda.org/conda-forge/spymicmac)
+[![Anaconda-Server Badge](https://anaconda.org/conda-forge/spymicmac/badges/installer/conda.svg)](https://conda.anaconda.org/conda-forge)
+
 
 # sPyMicMac
 A python package to help in the processing of KH-9 and historical aerial imagery using
@@ -12,7 +17,7 @@ MicMac used in developing sPyMicMac, check out the
 [readthedocs page](https://spymicmac.readthedocs.io/en/latest/setup.html) for sPyMicMac. 
 
 ## Installing sPyMicMac from PyPI
-As of version 0.1, sPyMicMac is available via PyPI. To install the latest packaged version, simply run:
+As of version 0.1, sPyMicMac is available via PyPI. To install the latest packaged version (0.1.1), simply run:
 
 ```sh
 pip install spymicmac
@@ -21,7 +26,7 @@ pip install spymicmac
 to install sPyMicMac in your environment.
 
 ## Installing sPyMicMac from conda-forge
-As of version 0.1.1, sPyMicMac is available via conda-forge. To install the latest packaged version, 
+As of version 0.1.1, sPyMicMac is available via conda-forge. To install the latest packaged version (0.1.1), 
 simply run:
 
 ```sh
