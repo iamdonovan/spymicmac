@@ -1,7 +1,7 @@
-combine_auto_measures.py
+combine_auto_measures
 =================================
 
 .. argparse::
-   :filename: ../bin/combine_auto_measures.py
+   :filename: ../spymicmac/tools/combine_auto_measures.py
    :func: _argparser
-   :prog: combine_auto_measures.py
+   :prog: combine_auto_measures

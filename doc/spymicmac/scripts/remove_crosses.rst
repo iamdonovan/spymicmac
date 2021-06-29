@@ -1,7 +1,7 @@
-remove_crosses.py
+remove_crosses
 =================================
 
 .. argparse::
-   :filename: ../bin/remove_crosses.py
+   :filename: ../spymicmac/tools/remove_crosses.py
    :func: _argparser
-   :prog: remove_crosses.py
+   :prog: remove_crosses

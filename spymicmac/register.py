@@ -164,11 +164,11 @@ def transform_centers(img_gt, ref, imlist, footprints, ori):
     Use the camera centers in relative space provided by MicMac Orientation files, along with camera footprints,
     to estimate a transformation between the relative coordinate system and the absolute coordinate system.
 
-    :param array-like img_gt: the image GeoTransform (as provided by gdal.Dataset.GetGeoTransform)
+    :param array-like img_gt: the image GeoTransform (as read from a TFW file)
     :param GeoImg ref: the reference image to use to determine the output image shape
     :param list imlist: a list of of the images that were used for the relative orthophoto
     :param GeoDataFrame footprints: the (approximate) image footprints - the centroid will be used for the absolute camera positions.
-    :param str ori: name of orientation directory (after Ori-)
+    :param str ori: name of orientation directory
     :return:
         - **model** (*AffineTransform*) -- the estimated Affine Transformation between relative and absolute space
         - **inliers** (*array-like*) -- a list of the inliers returned by skimage.measure.ransac
@@ -568,6 +568,12 @@ def register_ortho_old(fn_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, landm
     # embed()
 
 
+def _search_size(imshape):
+    min_dst = 100
+    dst = min(400, imshape[0] / 10, imshape[1] / 10)
+    return int(max(min_dst, dst))
+
+
 def register_ortho(fn_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, landmask=None, footprints=None,
                    im_subset=None, block_num=None, ori='Relative', ortho_res=8.,
                    imgsource='DECLASSII', density=200, out_dir=None, allfree=True):
@@ -639,20 +645,22 @@ def register_ortho(fn_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, landmask=
     plt.close(fig)
 
     # for each of these pairs (src, dst), find the precise subpixel match (or not...)
-    gcps = imtools.find_grid_matches(rough_tfm, ref_img, mask_full, Minit, spacing=density, dstwin=400)
+    gcps = imtools.find_grid_matches(rough_tfm, ref_img, mask_full, Minit,
+                                     spacing=density, dstwin=_search_size(rough_tfm.shape))
 
     xy = np.array([ref_img.ij2xy((pt[1], pt[0])) for pt in gcps[['search_j', 'search_i']].values]).reshape(-1, 2)
     gcps['geometry'] = [Point(pt) for pt in xy]
 
-    gcps = gcps[mask_full[gcps.search_i, gcps.search_j] == 255]
+    gcps = gcps.loc[mask_full[gcps.search_i, gcps.search_j] == 255]
 
     gcps['rel_x'] = ortho_gt[4] + gcps['orig_j'].values * ortho_gt[0]  # need the original image coordinates
     gcps['rel_y'] = ortho_gt[5] + gcps['orig_i'].values * ortho_gt[3]
 
     gcps['elevation'] = 0
-    gcps.crs = ref_img.proj4
+    gcps.set_crs(crs=ref_img.proj4, inplace=True)
 
     gcps.dropna(inplace=True)
+    print('{} potential matches found'.format(gcps.shape[0]))
 
     print('loading dems')
     dem = GeoImg(fn_dem, dtype=np.float32)
@@ -665,7 +673,9 @@ def register_ortho(fn_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, landmask=
             gcps.loc[i, 'el_rel'] = rel_dem.raster_points([(row.rel_x, row.rel_y)], nsize=3, mode='linear')
 
     # drop any gcps where we don't have a DEM value or a valid match
+    gcps.loc[np.abs(gcps.elevation - dem.NDV) < 1, 'elevation'] = np.nan
     gcps.dropna(inplace=True)
+    print('{} matches with valid elevations'.format(gcps.shape[0]))
 
     # run ransac to find the matches between the transformed image and the master image make a coherent transformation
     # residual_threshold is 10 pixels to allow for some local distortions, but get rid of the big blunders
@@ -680,7 +690,7 @@ def register_ortho(fn_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, landmask=
                                 mindist=500, how='aff_resid', is_ascending=False)
     gcps = gcps.loc[out]
 
-    print('{} valid matches found'.format(gcps.shape[0]))
+    print('{} valid matches found after estimating transformation'.format(gcps.shape[0]))
 
     gcps.index = range(gcps.shape[0])  # make sure index corresponds to row we're writing out
     gcps['id'] = ['GCP{}'.format(i) for i in range(gcps.shape[0])]

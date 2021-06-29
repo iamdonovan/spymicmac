@@ -1,7 +1,7 @@
-register_ortho.py
+register_ortho
 =================================
 
 .. argparse::
-   :filename: ../bin/register_ortho.py
+   :filename: ../spymicmac/tools/register_ortho.py
    :func: _argparser
-   :prog: register_ortho.py
+   :prog: register_ortho

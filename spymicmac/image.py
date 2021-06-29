@@ -26,7 +26,8 @@ import numpy as np
 from shapely.ops import cascaded_union
 from shapely.geometry import LineString
 import geopandas as gpd
-from llc import jit_filter_function
+# from llc import jit_filter_function
+from numba import jit
 from pybob.image_tools import match_hist, reshape_geoimg, create_mask_from_shapefile, nanmedian_filter
 from pybob.bob_tools import mkdir_p
 from pymmaster.mmaster_tools import orient_footprint
@@ -36,7 +37,7 @@ from spymicmac.micmac import get_im_meas, parse_im_meas
 ######################################################################################################################
 # image filtering tools
 ######################################################################################################################
-@jit_filter_function
+@jit
 def nanstd(a):
     return np.nanstd(a)
 
@@ -840,7 +841,9 @@ def find_reseau_grid(fn_img, csize=361, tsize=300, nproc=1, return_val=False):
     :param int csize: the size of the cross template (default: 361 -> 361x361)
     :param int tsize: the search grid size for the Reseau mark.
     :param int nproc: the number of processors to use, via multiprocessing.Pool (default: 1).
-    :param return_val:
+    :param bool return_val: return a pandas DataFrame of the Reseau mark locations (default: False).
+    :return:
+        - **gcps_df** (*pandas.DataFrame*) -- a DataFrame of the Reseau mark locations (if return_val=True).
     """
     print('Reading {}'.format(fn_img))
     img = io.imread(fn_img)

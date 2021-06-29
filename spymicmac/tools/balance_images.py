@@ -13,6 +13,9 @@ def _argparser():
 
 
 def main():
+    parser = _argparser()
+    args = parser.parse_args()
+
     mkdir_p('balanced')
 
     imlist = glob('OIS*.tif')
