@@ -22,7 +22,8 @@ def main():
 
     find_reseau_grid(args.fn_img,
                      csize=args.csize,
-                     tsize=args.tsize)
+                     tsize=args.tsize,
+                     nproc=args.nproc)
 
 
 if __name__ == "__main__":
