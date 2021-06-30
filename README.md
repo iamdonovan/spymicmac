@@ -30,7 +30,7 @@ As of version 0.1.1, sPyMicMac is available via conda-forge. To install the late
 simply run:
 
 ```sh
-pip install spymicmac
+conda install -c conda-forge spymicmac
 ```
 
 to install spymicmac in your environment.
