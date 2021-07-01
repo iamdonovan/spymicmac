@@ -809,14 +809,14 @@ def get_rough_frame(img):
         xmax = np.nan
 
     try:
-        ymin = 10 * peak_local_max(hori[:200], num_peaks=2, min_distance=10,
+        ymin = 10 * peak_local_max(hori[:100], num_peaks=2, min_distance=10,
                                    threshold_abs=hori_thresh, exclude_border=5).max()
     except ValueError:
         ymin = np.nan
 
     try:
-        ymax = 10 * (peak_local_max(hori[-200:], num_peaks=2, min_distance=10,
-                                    threshold_abs=hori_thresh, exclude_border=5).min() + img_lowres.shape[0] - 200)
+        ymax = 10 * (peak_local_max(hori[-100:], num_peaks=2, min_distance=10,
+                                    threshold_abs=hori_thresh, exclude_border=5).min() + img_lowres.shape[0] - 100)
     except ValueError:
         ymax = np.nan
 
