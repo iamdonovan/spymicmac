@@ -942,7 +942,7 @@ def find_reseau_grid(fn_img, csize=361, tsize=300, nproc=1, return_val=False, jo
     nomatch = np.isnan(gcps_df.match_j)
 
     ux = lsq_fit(gcps_df.search_j.values, gcps_df.search_i.values, gcps_df.match_j.values)
-    uy = lsq_fit(gcps_df.search_j.valgues, gcps_df.search_i.values, gcps_df.match_i.values)
+    uy = lsq_fit(gcps_df.search_j.values, gcps_df.search_i.values, gcps_df.match_i.values)
 
     gcps_df.loc[nomatch, 'match_j'] = ux[nomatch]
     gcps_df.loc[nomatch, 'match_i'] = uy[nomatch]
