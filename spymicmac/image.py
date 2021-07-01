@@ -733,8 +733,14 @@ def find_reseau_border(img, rough_ext, cross, tsize=300):
 
     if np.isnan(right):
         search_corners = [(bot-625, left+180), (top+625, left+180)]
-    else:
+        nx = 23
+    elif np.isnan(left):
         search_corners = [(bot-625, right-180), (top+625, right-180)]
+        nx = 23
+    else:
+        search_corners = [(bot-625, left+180), (top+625, left+180),
+                          (bot-625, right-180), (top+625, right-180)]
+        nx = 46
 
     grid_corners = []
     for c in search_corners:
@@ -744,7 +750,7 @@ def find_reseau_border(img, rough_ext, cross, tsize=300):
         else:
             grid_corners.append((_j, _i))
     pixres = (grid_corners[0][1] - grid_corners[1][1]) / 22
-    npix = 23 * pixres
+    npix = nx * pixres
 
     perp = get_perp(grid_corners)
 
@@ -752,10 +758,13 @@ def find_reseau_border(img, rough_ext, cross, tsize=300):
         left_edge = LineString([grid_corners[0], grid_corners[1]])
         right_edge = LineString([grid_corners[0] + npix * perp,
                                  grid_corners[1] + npix * perp])
-    else:
+    elif np.isnan(left):
         right_edge = LineString([grid_corners[0], grid_corners[1]])
         left_edge = LineString([grid_corners[0] - npix * perp,
                                 grid_corners[1] - npix * perp])
+    else:
+        left_edge = LineString([grid_corners[0], grid_corners[1]])
+        right_edge = LineString([grid_corners[2], grid_corners[3]])
 
     return left_edge, right_edge
 
