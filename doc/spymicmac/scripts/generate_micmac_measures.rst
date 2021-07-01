@@ -11,7 +11,15 @@ generate_micmac_measures
 
         cp Tmp-SL-Glob.xml Tmp-SaisieAppuis/Tmp-SL-Glob-MeasuresIm-DZB1215-500425L002001.tif.xml
 
-    You will also need MeasuresIm-DZB1215-500425L002001.tif.xml (or whatever the image name is) to exist in the directory.
+    You will also need MeasuresIm-DZB1215-500425L002001.tif-S2D.xml (or whatever the image name is) to exist in the directory:
+    ::
+
+        cp Ori-InterneScan/MeasuresIm-DZB1215-500425L002001.tif.xml MeasuresIm-DZB1215-500425L002001.tif-S2D.xml
+
+    and, you should remove any temporary files from ``Tmp-SaisieAppuis``:
+    ::
+
+        rm Tmp-SaisieAppuis/Tmp-SL-Im-MeasuresIm-MeasuresIm-DZB1215-500425L002001.tif.xml.*
 
 
 .. argparse::
