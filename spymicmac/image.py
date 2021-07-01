@@ -814,17 +814,21 @@ def get_rough_frame(img):
     return xmin, xmax, ymin, ymax
 
 
-def _search_grid(left, right):
+def _search_grid(left, right, joined=False):
     i_grid = []
     j_grid = []
     search_pts = []
 
+    if joined:
+        nj = 47
+    else:
+        nj = 24
     for ii in range(0, 23):
         this_left = left.interpolate(ii * left.length / 22)
         this_right = right.interpolate(ii * right.length / 22)
         this_line = LineString([this_left, this_right])
-        for jj in range(0, 24):
-            this_pt = this_line.interpolate(jj * this_line.length / 23)
+        for jj in range(0, nj):
+            this_pt = this_line.interpolate(jj * this_line.length / (nj- 1))
             i_grid.append(ii)
             j_grid.append(jj)
             search_pts.append((this_pt.y, this_pt.x))
@@ -832,7 +836,7 @@ def _search_grid(left, right):
     return i_grid, j_grid, search_pts
 
 
-def find_reseau_grid(fn_img, csize=361, tsize=300, nproc=1, return_val=False):
+def find_reseau_grid(fn_img, csize=361, tsize=300, nproc=1, return_val=False, joined=False):
     """
     Find the locations of the Reseau marks in a scanned KH-9 image. Locations are saved
     to Ori-InterneScan/MeasuresIm-:fn_img:.xml.
@@ -842,6 +846,7 @@ def find_reseau_grid(fn_img, csize=361, tsize=300, nproc=1, return_val=False):
     :param int tsize: the search grid size for the Reseau mark.
     :param int nproc: the number of processors to use, via multiprocessing.Pool (default: 1).
     :param bool return_val: return a pandas DataFrame of the Reseau mark locations (default: False).
+    :param bool joined: image represents a joined KH-9 image rather than a scanned half (default: False).
     :return:
         - **gcps_df** (*pandas.DataFrame*) -- a DataFrame of the Reseau mark locations (if return_val=True).
     """
@@ -865,7 +870,7 @@ def find_reseau_grid(fn_img, csize=361, tsize=300, nproc=1, return_val=False):
     rough_border = get_rough_frame(img)
     left_edge, right_edge = find_reseau_border(img, rough_border, cross, tsize=tsize)
 
-    II, JJ, search_grid = _search_grid(left_edge, right_edge)
+    II, JJ, search_grid = _search_grid(left_edge, right_edge, joined)
     matched_grid = []
 
     print('Finding grid points in {}...'.format(fn_img))
