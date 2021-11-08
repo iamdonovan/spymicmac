@@ -20,4 +20,5 @@ using an orthorectified image and external DEM.
    tapas
    relative
    register
+   blocks
    malt
