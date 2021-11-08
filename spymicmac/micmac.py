@@ -491,7 +491,8 @@ def move_bad_tapas(ori):
         shutil.move(im, 'bad')
 
 
-def run_bascule(in_gcps, outdir, img_pattern, sub, ori):
+def run_bascule(in_gcps, outdir, img_pattern, sub, ori, outori='TerrainRelAuto',
+                fn_gcp='AutoGCPs', fn_meas='AutoMeasures'):
     """
     Interface for running mm3d GCPBascule and reading the residuals from the resulting xml file.
 
@@ -500,17 +501,25 @@ def run_bascule(in_gcps, outdir, img_pattern, sub, ori):
     :param str img_pattern: the match pattern for the images being input to Campari (e.g., "OIS.*tif")
     :param str sub: the name of the block, if multiple blocks are being used (e.g., '_block1'). If not, use ''.
     :param str ori: the name of the orientation directory (e.g., Ori-Relative).
+    :param str outori: the name of the output orientation directory (default: TerrainRelAuto).
+    :param str fn_gcp: the filename pattern for the GCP file. The file that will be loaded will be
+        fn_gcp + sub + '.xml' (e.g., default: AutoGCPs -> AutoGCPs_block0.xml)
+    :param str fn_meas: the filename pattern for the measures file. The file that will be loaded will be
+        fn_meas + sub + '-S2D.xml' (e.g., default: AutoMeasures -> AutoMeasures_block0-S2D.xml)
     :return:
-        - **out_gcps** (*pandas.DataFrame*) -- the input gcps with the updated Campari residuals.
+        - **out_gcps** (*pandas.DataFrame*) -- the input gcps with the updated Bascule residuals.
     """
+    fn_gcp = fn_gcp + sub + '.xml'
+    fn_meas = fn_meas + sub + '-S2D.xml'
+
     echo = subprocess.Popen('echo', stdout=subprocess.PIPE)
     p = subprocess.Popen(['mm3d', 'GCPBascule', img_pattern, ori,
-                          'TerrainRelAuto{}'.format(sub),
-                          os.path.join(outdir, 'AutoGCPs{}.xml'.format(sub)),
-                          os.path.join(outdir, 'AutoMeasures{}-S2D.xml'.format(sub))], stdin=echo.stdout)
+                          outori + sub,
+                          os.path.join(outdir, fn_gcp),
+                          os.path.join(outdir, fn_meas)], stdin=echo.stdout)
     p.wait()
 
-    out_gcps = get_bascule_residuals(os.path.join('Ori-TerrainRelAuto{}'.format(sub),
+    out_gcps = get_bascule_residuals(os.path.join('Ori-{}{}'.format(outori, sub),
                                                   'Result-GCP-Bascule.xml'), in_gcps)
     return out_gcps
 
@@ -528,6 +537,12 @@ def run_campari(in_gcps, outdir, img_pattern, sub, dx, ortho_res, allfree=True,
     :param int|float dx: the pixel resolution of the reference image.
     :param int|float ortho_res: the pixel resolution of the orthoimage being used.
     :param bool allfree: run Campari with AllFree=1 (True), or AllFree=0 (False). (default: True)
+    :param str fn_gcp: the filename pattern for the GCP file. The file that will be loaded will be
+        fn_gcp + sub + '.xml' (e.g., default: AutoGCPs -> AutoGCPs_block0.xml)
+    :param str fn_meas: the filename pattern for the measures file. The file that will be loaded will be
+        fn_meas + sub + '-S2D.xml' (e.g., default: AutoMeasures -> AutoMeasures_block0-S2D.xml)
+    :param str inori: the input orientation to Campari (default: Ori-TerrainRelAuto -> TerrainRelAuto)
+    :param str outori: the output orientation from Campari (default: Ori-TerrainFirstPass -> TerrainFirstPass)
     :return:
         - **out_gcps** (*pandas.DataFrame*) -- the input gcps with the updated Campari residuals.
     """
@@ -553,6 +568,56 @@ def run_campari(in_gcps, outdir, img_pattern, sub, dx, ortho_res, allfree=True,
     out_gcps = get_campari_residuals('Ori-{}/Residus.xml'.format(outori + sub), in_gcps)
     # out_gcps.dropna(inplace=True)  # sometimes, campari can return no information for a gcp
     return out_gcps
+
+
+def iterate_campari(gcps, out_dir, match_pattern, subscript, dx, ortho_res, fn_gcp='AutoGCPs', fn_meas='AutoMeasures',
+                    rel_ori='Relative', inori='TerrainRelAuto', outori='TerrainFirstPass', allfree=True):
+    """
+    Run Campari iteratively, refining the orientation by removing outlier GCPs and Measures, based on their fit to the
+    estimated camera model.
+
+    :param pandas.DataFrame gcps: a DataFrame with the GCPs that are being input to Campari.
+    :param str out_dir: the output directory where the GCP and Measures files are located.
+    :param str match_pattern: the match pattern for the images being input to Campari (e.g., "OIS.*tif")
+    :param str subscript: the name of the block, if multiple blocks are being used (e.g., '_block1'). If not, use ''.
+    :param int|float dx: the pixel resolution of the reference image.
+    :param int|float ortho_res: the pixel resolution of the orthoimage being used.
+    :param str fn_gcp: the filename pattern for the GCP file. The file that will be loaded will be
+        fn_gcp + sub + '.xml' (e.g., default: AutoGCPs -> AutoGCPs_block0.xml)
+    :param str fn_meas: the filename pattern for the measures file. The file that will be loaded will be
+        fn_meas + sub + '-S2D.xml' (e.g., default: AutoMeasures -> AutoMeasures_block0-S2D.xml)
+    :param str rel_ori: the name of the relative orientation to input to GCPBascule (default: Relative -> Ori-Relative + sub)
+    :param str inori: the input orientation to Campari (default: Ori-TerrainRelAuto -> TerrainRelAuto)
+    :param str outori: the output orientation from Campari (default: Ori-TerrainFirstPass -> TerrainFirstPass)
+    :param bool allfree: run Campari with AllFree=1 (True), or AllFree=0 (False). (default: True)
+    :return:
+        - **gcps** (*pandas.DataFrame*) -- the gcps with updated residuals after the iterative process.
+    """
+    niter = 0
+
+    while any([np.any(gcps.camp_res > 4 * nmad(gcps.camp_res)),
+               np.any(gcps.camp_dist > 4 * nmad(gcps.camp_dist)),
+               gcps.camp_res.max() > 2]) and niter <= 5:
+        valid_inds = np.logical_and.reduce((gcps.camp_res < 4 * nmad(gcps.camp_res),
+                                            gcps.camp_res < gcps.camp_res.max(),
+                                            gcps.z_corr > gcps.z_corr.min()))
+        if np.count_nonzero(valid_inds) < 10:
+            break
+
+        gcps = gcps.loc[valid_inds]
+        save_gcps(gcps, out_dir, get_utm_str(gcps.crs.to_epsg), subscript)
+
+        gcps = run_bascule(gcps, out_dir, match_pattern, subscript, rel_ori, outori=inori)
+        gcps['res_dist'] = np.sqrt(gcps.xres ** 2 + gcps.yres ** 2)
+
+        gcps = run_campari(gcps, out_dir, match_pattern, subscript, dx, ortho_res,
+                           inori=inori, outori=outori, fn_gcp=fn_gcp, fn_meas=fn_meas,
+                           allfree=allfree)
+
+        gcps['camp_dist'] = np.sqrt(gcps.camp_xres ** 2 + gcps.camp_yres ** 2)
+        niter += 1
+
+    return gcps
 
 
 def save_gcps(in_gcps, outdir, utmstr, sub):
