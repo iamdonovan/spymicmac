@@ -4,9 +4,11 @@ spymicmac.micmac is a collection of tools for interfacing with MicMac
 import os
 import subprocess
 import shutil
+from collections import defaultdict
 import numpy as np
 from osgeo import gdal
 import pandas as pd
+import geopandas as gpd
 import lxml.etree as etree
 import lxml.builder as builder
 import difflib
@@ -23,6 +25,7 @@ from pybob.bob_tools import mkdir_p
 from pybob.GeoImg import GeoImg
 from pybob.ddem_tools import nmad
 from spymicmac.usgs import get_usgs_footprints
+from spymicmac.register import get_utm_str
 
 
 ######################################################################################################################
@@ -345,6 +348,39 @@ def remove_measure(fn_meas, name):
     tree.write(fn_meas, encoding="utf-8", xml_declaration=True)
 
 
+def rename_gcps(root, ngcp=0):
+    """
+    Rename all GCPs in order of their appearance in an (opened) xml file.
+
+    :param xml.etree.ElementTree.Element root: the root element of an xml tree
+    :param int ngcp: the number to start counting from (defaults to 0)
+
+    :return:
+        - **mes_dict** (*dict*) -- a dict containing image, gcp key/value pairs
+        - **gcp_dict** (*dict*) -- a dict containing old/new gcp name key/value pairs
+    """
+    mes_dict = dict()
+    gcp_dict = dict()
+
+    for im in root.findall('MesureAppuiFlottant1Im'):
+        this_name = im.find('NameIm').text
+        these_mes = im.findall('OneMesureAF1I')
+
+        for ii, mes in enumerate(these_mes):
+            old_name = mes.find('NamePt').text
+
+            if mes.find('NamePt').text not in gcp_dict.keys():
+                gcp_dict[old_name] = 'GCP{}'.format(ngcp)
+                ngcp += 1
+
+            mes.find('NamePt').text = gcp_dict[old_name]
+            these_mes[ii] = mes
+
+        mes_dict[this_name] = these_mes
+
+    return mes_dict, gcp_dict
+
+
 def get_bascule_residuals(fn_basc, gcp_df):
     """
     Read a given GCPBascule residual file, and add the residuals to a DataFrame with GCP information.
@@ -479,7 +515,9 @@ def run_bascule(in_gcps, outdir, img_pattern, sub, ori):
     return out_gcps
 
 
-def run_campari(in_gcps, outdir, img_pattern, sub, dx, ortho_res, allfree=True):
+def run_campari(in_gcps, outdir, img_pattern, sub, dx, ortho_res, allfree=True,
+                fn_gcp='AutoGCPs', fn_meas='AutoMeasures', inori='TerrainRelAuto',
+                outori='TerrainFirstPass'):
     """
     Interface for running mm3d Campari and reading the residuals from the residual xml file.
 
@@ -499,17 +537,20 @@ def run_campari(in_gcps, outdir, img_pattern, sub, dx, ortho_res, allfree=True):
     else:
         allfree_tag = 0
 
+    fn_gcp = fn_gcp + sub + '.xml'
+    fn_meas = fn_meas + sub + '-S2D.xml'
+
     p = subprocess.Popen(['mm3d', 'Campari', img_pattern,
-                          'TerrainRelAuto{}'.format(sub),
-                          'TerrainFirstPass{}'.format(sub),
-                          'GCP=[{},{},{},{}]'.format(os.path.join(outdir, 'AutoGCPs{}.xml'.format(sub)),
+                          inori + sub,
+                          outori + sub,
+                          'GCP=[{},{},{},{}]'.format(os.path.join(outdir, fn_gcp),
                                                      np.abs(dx),
-                                                     os.path.join(outdir, 'AutoMeasures{}-S2D.xml'.format(sub)),
+                                                     os.path.join(outdir, fn_meas),
                                                      np.abs(dx / ortho_res)),
                           'SH=Homol', 'AllFree={}'.format(allfree_tag)], stdin=echo.stdout)
     p.wait()
 
-    out_gcps = get_campari_residuals('Ori-TerrainFirstPass{}/Residus.xml'.format(sub), in_gcps)
+    out_gcps = get_campari_residuals('Ori-{}/Residus.xml'.format(outori + sub), in_gcps)
     # out_gcps.dropna(inplace=True)  # sometimes, campari can return no information for a gcp
     return out_gcps
 
@@ -548,6 +589,77 @@ def save_gcps(in_gcps, outdir, utmstr, sub):
     out_xml = ET.ElementTree(auto_root)
     out_xml.write(os.path.join(outdir, 'AutoMeasures{}-S2D.xml'.format(sub)),
                   encoding="utf-8", xml_declaration=True)
+
+
+def combine_block_measures(blocks, fn_out='CombinedAutoMeasures', fn_mes='AutoMeasures_block',
+                           fn_gcp='AutoGCPs_block', dirname='auto_gcps'):
+    """
+    Combine GCPs and Measures files from multiple sub-blocks into a single file.
+
+    :param list blocks: a list of the sub-block numbers to combine
+    :param str fn_out: the output filename (no extensions). (default: CombinedAutoMeasures)
+    :param str fn_mes: the name pattern of the measures files to combine (default: AutoMeasures_block)
+    :param str fn_gcp: the name pattern of the GCP files to combine (default: AutoGCPs_block)
+    :param str dirname: the output directory where the files are saved (default: auto_gcps)
+    """
+    ngcp = 0 # keep track of the number of GCPs
+
+    mes_dicts = list()
+    gcp_dicts = list()
+    gcp_shps = list()
+
+    for b in blocks:
+        # load dirname/AutoMeasures_block{b}-S2D.xml
+        this_root = ET.parse(os.path.join(dirname, fn_mes + '{}-S2D.xml'.format(b))).getroot()
+
+        this_mes_dict, this_gcp_dict = rename_gcps(this_root, ngcp=ngcp)
+        mes_dicts.append(this_mes_dict)
+        gcp_dicts.append(this_gcp_dict)
+
+        ngcp += len(this_gcp_dict)
+        # load dirname/AutoGCPs_block{b}.shp
+        this_gcp = gpd.read_file(os.path.join(dirname, fn_gcp + '{}.shp'.format(b)))
+
+        for ii, row in this_gcp.iterrows():
+            this_gcp.loc[ii, 'id'] = this_gcp_dict[row['id']]
+
+        gcp_shps.append(this_gcp)
+
+    out_gcp = gpd.GeoDataFrame(pd.concat(gcp_shps, ignore_index=True))
+    out_gcp.sort_values('id', ignore_index=True, inplace=True)
+
+    out_gcp.set_crs(gcp_shps[0].crs, inplace=True)
+    out_gcp.to_file(fn_out + '.shp')
+
+    write_auto_gcps(out_gcp, '', dirname, get_utm_str(out_gcp.crs.to_epsg), outname=fn_out)
+
+    echo = subprocess.Popen('echo', stdout=subprocess.PIPE)
+    p = subprocess.Popen(['mm3d', 'GCPConvert', 'AppInFile',
+                          os.path.join(dirname, fn_out + '.txt')], stdin=echo.stdout)
+    p.wait()
+
+    # now have to combine mes_dicts based on key names
+    comb_dict = defaultdict(list)
+
+    for d in mes_dicts:
+        for im, mes in d.items():
+            comb_dict[im].append(mes)
+
+    # now have to create new AutoMeasures file from comb_dict
+    E = builder.ElementMaker()
+    MesureSet = E.SetOfMesureAppuisFlottants()
+
+    # have to write combined measures to a single file
+    for im, mes in comb_dict.items():
+        this_im_mes = E.MesureAppuiFlottant1Im(E.NameIm(im))
+        for m in mes[0]:
+            this_mes = E.OneMesureAF1I(E.NamePt(m.find('NamePt').text), E.PtIm(m.find('PtIm').text))
+            this_im_mes.append(this_mes)
+
+        MesureSet.append(this_im_mes)
+
+    tree = etree.ElementTree(MesureSet)
+    tree.write(os.path.join(dirname, fn_out + '-S2D.xml'), pretty_print=True, xml_declaration=True, encoding="utf-8")
 
 
 ######################################################################################################################
@@ -713,6 +825,52 @@ def update_center(fn_img, ori, new_center):
                encoding="utf-8", xml_declaration=True)
 
 
+def update_pose(fn_img, ori, new_rot):
+    """
+    Update the camera pose (rotation matrix) in an Orientation file.
+
+    :param str fn_img: the name of the image to update the orientation for (e.g., 'OIS-Reech_ARCSEA000590122.tif')
+    :param str ori: the name of the orientation directory (e.g., 'Ori-Relative')
+    :param array-like new_rot: the new 3x3 rotation matrix
+    """
+    ori_root = ET.parse(os.path.join(ori, 'Orientation-{}.xml'.format(fn_img))).getroot()
+    if ori_root.tag != 'OrientationConique':
+        ori_coniq = ori_root.find('OrientationConique')
+    else:
+        ori_coniq = ori_root
+
+    for ii, row in enumerate(new_rot):
+        ori_coniq.find('Externe').find('ParamRotation')\
+            .find('CodageMatr').find('L{}'.format(ii+1)).text = ' '.join([str(f) for f in row])
+
+    tree = ET.ElementTree(ori_root)
+    tree.write(os.path.join(ori, 'Orientation-{}.xml'.format(fn_img)),
+               encoding="utf-8", xml_declaration=True)
+
+
+def update_params(fn_img, ori, profondeur, altisol):
+    """
+    Update the profondeur and altisol parameters in an orientation file.
+
+    :param str fn_img: the name of the image to update the orientation for (e.g., 'OIS-Reech_ARCSEA000590122.tif')
+    :param str ori: the name of the orientation directory (e.g., 'Ori-Relative')
+    :param float profondeur: the new profondeur value
+    :param float altisol: the new altisol value
+    """
+    ori_root = ET.parse(os.path.join(ori, 'Orientation-{}.xml'.format(fn_img))).getroot()
+    if ori_root.tag != 'OrientationConique':
+        ori_coniq = ori_root.find('OrientationConique')
+    else:
+        ori_coniq = ori_root
+
+    ori_coniq.find('Externe').find('AltiSol').text = str(altisol)
+    ori_coniq.find('Externe').find('Profondeur').text = str(profondeur)
+
+    tree = ET.ElementTree(ori_root)
+    tree.write(os.path.join(ori, 'Orientation-{}.xml'.format(fn_img)),
+               encoding="utf-8", xml_declaration=True)
+
+
 def fix_orientation(cameras, ori_df, ori, nsig=4):
     """
     Correct erroneous Tapas camera positions using an estimated affine transformation between the absolute camera locations
@@ -734,11 +892,11 @@ def fix_orientation(cameras, ori_df, ori, nsig=4):
     join = cameras.set_index('name').join(ori_df.set_index('name'), lsuffix='abs', rsuffix='rel')
 
     model = AffineTransform()
-    model.estimate(join[['xabs', 'yabs']].values, join[['xrel', 'yrel']].values)
+    model.estimate(join.dropna()[['xabs', 'yabs']].values, join.dropna()[['xrel', 'yrel']].values)
 
     res = model.residuals(join[['xabs', 'yabs']].values, join[['xrel', 'yrel']].values)
 
-    outliers = res - np.median(res) > nsig * nmad(res)
+    outliers = res - np.nanmedian(res) > nsig * nmad(res)
     if np.count_nonzero(outliers) > 0:
         interp = LinearNDInterpolator(join.loc[~outliers, ['xrel', 'yrel']].values, join.loc[~outliers, 'zrel'])
         print('found {} outliers using nsig={}'.format(np.count_nonzero(outliers), nsig))
