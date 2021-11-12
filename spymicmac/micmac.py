@@ -595,7 +595,7 @@ def iterate_campari(gcps, out_dir, match_pattern, subscript, dx, ortho_res, fn_g
     """
     niter = 0
 
-    gcps = run_bascule(gcps, out_dir, match_pattern, subscript, rel_ori, outori=inori)
+    gcps = run_bascule(gcps, out_dir, match_pattern, subscript, rel_ori, fn_gcp=fn_gcp, fn_meas=fn_meas, outori=inori)
 
     gcps['res_dist'] = np.sqrt(gcps.xres ** 2 + gcps.yres ** 2)
 
@@ -617,7 +617,8 @@ def iterate_campari(gcps, out_dir, match_pattern, subscript, dx, ortho_res, fn_g
         gcps = gcps.loc[valid_inds]
         save_gcps(gcps, out_dir, get_utm_str(gcps.crs.to_epsg), subscript, fn_gcp=fn_gcp, fn_meas=fn_meas)
 
-        gcps = run_bascule(gcps, out_dir, match_pattern, subscript, rel_ori, outori=inori)
+        gcps = run_bascule(gcps, out_dir, match_pattern, subscript, rel_ori, fn_gcp=fn_gcp,
+                           fn_meas=fn_meas, outori=inori)
         gcps['res_dist'] = np.sqrt(gcps.xres ** 2 + gcps.yres ** 2)
 
         gcps = run_campari(gcps, out_dir, match_pattern, subscript, dx, ortho_res,
