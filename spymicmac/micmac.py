@@ -595,10 +595,20 @@ def iterate_campari(gcps, out_dir, match_pattern, subscript, dx, ortho_res, fn_g
     """
     niter = 0
 
+    gcps = run_bascule(gcps, out_dir, match_pattern, subscript, rel_ori, outori=inori)
+
+    gcps['res_dist'] = np.sqrt(gcps.xres ** 2 + gcps.yres ** 2)
+
+    gcps = run_campari(gcps, out_dir, match_pattern, subscript, dx, ortho_res,
+                       inori=inori, outori=outori, fn_gcp=fn_gcp, fn_meas=fn_meas,
+                       allfree=allfree)
+
+    gcps['camp_dist'] = np.sqrt(gcps.camp_xres ** 2 + gcps.camp_yres ** 2)
+
     while any([np.any(gcps.camp_res > 4 * nmad(gcps.camp_res)),
                np.any(gcps.camp_dist > 4 * nmad(gcps.camp_dist)),
                gcps.camp_res.max() > 2]) and niter <= 5:
-        valid_inds = np.logical_and.reduce((gcps.camp_res < 4 * nmad(gcps.camp_res),
+        valid_inds = np.logixcal_and.reduce((gcps.camp_res < 4 * nmad(gcps.camp_res),
                                             gcps.camp_res < gcps.camp_res.max(),
                                             gcps.z_corr > gcps.z_corr.min()))
         if np.count_nonzero(valid_inds) < 10:
@@ -641,7 +651,7 @@ def save_gcps(in_gcps, outdir, utmstr, sub, fn_gcp='AutoGCPs', fn_meas='AutoMeas
         fn_meas + sub + '-S2D.xml' (e.g., default: AutoMeasures -> AutoMeasures_block0-S2D.xml)
     """
     in_gcps.to_file(os.path.join(outdir, fn_gcp + sub + '.shp'))
-    write_auto_gcps(in_gcps, sub, outdir, utmstr)
+    write_auto_gcps(in_gcps, sub, outdir, utmstr, outname=fn_gcp)
     echo = subprocess.Popen('echo', stdout=subprocess.PIPE)
     p = subprocess.Popen(['mm3d', 'GCPConvert', 'AppInFile',
                           os.path.join(outdir, fn_gcp + sub + '.txt')], stdin=echo.stdout)
