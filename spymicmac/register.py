@@ -196,11 +196,17 @@ def transform_centers(img_gt, ref, imlist, footprints, ori):
         model, inliers = ransac((ref_ij[:, ::-1], rel_ij), AffineTransform, min_samples=10,
                                 residual_threshold=100, max_trials=5000)
     else:
-        ref_ij = _get_points([Point(row.xabs, row.yabs) for ii, row in join.iterrows()])
-        rel_ij = _get_points([Point(row.xrel, row.yrel) for ii, row in join.iterrows()])
+        # if we only have 2 points, we add two (midpoint, perpendicular to midpoint) using _get_points()
+        # this ensures that we can actually get an affine transformation
+        ref_pts = _get_points([Point(row.xabs, row.yabs) for ii, row in join.iterrows()])
+        rel_pts = _get_points([Point(row.xrel, row.yrel) for ii, row in join.iterrows()])
+
+        ref_ij = np.array([ref.xy2ij(pt) for pt in ref_pts])
+        rel_ij = np.array([((pt[0] - img_gt[4]) / img_gt[0],
+                            (pt[1] - img_gt[5]) / img_gt[3]) for pt in rel_pts])
 
         model = AffineTransform()
-        model.estimate(ref_ij, rel_ij)
+        model.estimate(ref_ij[:, ::-1], rel_ij)
         residuals = model.residuals(ref_ij, rel_ij)
 
         inliers = residuals <= 1
