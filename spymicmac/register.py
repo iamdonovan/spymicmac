@@ -13,6 +13,7 @@ import geopandas as gpd
 from PIL import Image
 from glob import glob
 from shapely.geometry.point import Point
+from shapely.geometry import LineString
 from skimage.io import imread
 from skimage.measure import ransac
 from skimage.filters import median
@@ -187,13 +188,48 @@ def transform_centers(img_gt, ref, imlist, footprints, ori):
     join = footprints.set_index('name').join(rel_ori.set_index('name'), lsuffix='abs', rsuffix='rel')
     join.dropna(inplace=True)
 
-    ref_ij = np.array([ref.xy2ij((row.xabs, row.yabs)) for i, row in join.iterrows()])
-    rel_ij = np.array([((row.xrel - img_gt[4]) / img_gt[0],
-                        (row.yrel - img_gt[5]) / img_gt[3]) for i, row in join.iterrows()])
+    if join.shape[0] > 3:
+        ref_ij = np.array([ref.xy2ij((row.xabs, row.yabs)) for i, row in join.iterrows()])
+        rel_ij = np.array([((row.xrel - img_gt[4]) / img_gt[0],
+                            (row.yrel - img_gt[5]) / img_gt[3]) for i, row in join.iterrows()])
 
-    model, inliers = ransac((ref_ij[:, ::-1], rel_ij), AffineTransform, min_samples=10, residual_threshold=100, max_trials=5000)
+        model, inliers = ransac((ref_ij[:, ::-1], rel_ij), AffineTransform, min_samples=10,
+                                residual_threshold=100, max_trials=5000)
+    else:
+        ref_ij = _get_points([Point(row.xabs, row.yabs) for ii, row in join.iterrows()])
+        rel_ij = _get_points([Point(row.xrel, row.yrel) for ii, row in join.iterrows()])
+
+        model = AffineTransform()
+        model.estimate(ref_ij, rel_ij)
+        residuals = model.residuals(ref_ij, rel_ij)
+
+        inliers = residuals <= 1
+
     print('{} inliers for center transformation'.format(np.count_nonzero(inliers)))
     return model, inliers, join
+
+
+def _get_points(centers):
+    pt1 = centers[0]
+    pt2 = centers[1]
+
+    line = LineString([pt1, pt2])
+    norm = _norm_vector(line)
+
+    pt12 = line.centroid
+    endpt = Point(pt12.x + line.length * norm[0], pt12.y + line.length * norm[1])
+
+    pts = [(p.x, p.y) for p in [pt1, pt2, pt12, endpt]]
+
+    return np.array(pts)
+
+
+def _norm_vector(line):
+    x, y = line.xy
+    a = np.array([x[-1] - x[0], y[-1] - y[0]])
+    b = np.array([a[1], -a[0]])
+    b = b / np.linalg.norm(a)
+    return b
 
 
 def refine_lowres_tfm(rough_tfm, ref, mask, Minit):
