@@ -183,7 +183,7 @@ def get_subimg_offsets(split, shape, overlap=0):
     return rel_x.astype(int), rel_y.astype(int)
 
 
-def stretch_image(img, scale=(0, 1), mult=255, outtype=np.uint8, mask=None):
+def stretch_image(img, scale=(0, 1), mult=255, imgmin=0, outtype=np.uint8, mask=None):
     """
     Apply a linear stretch to an image by clipping and stretching to quantiles.
 
@@ -191,6 +191,7 @@ def stretch_image(img, scale=(0, 1), mult=255, outtype=np.uint8, mask=None):
     :param tuple scale: a the minimum and maximum quantile to stretch to. (default: (0, 1) - the minimum/maximum values
         of the image)
     :param int|float mult: a multiplier to scale the result to. (default: 255)
+    :param int|float imgmin: the minimum value in the output image (default: 0)
     :param numpy.dtype outtype: the numpy datatype to return the stretched image as. (default: np.uint8)
     :param array-like mask: a mask of pixels to ignore when calculating quantiles.
     :return:
@@ -206,10 +207,10 @@ def stretch_image(img, scale=(0, 1), mult=255, outtype=np.uint8, mask=None):
     img[img > maxval] = maxval
     img[img < minval] = minval
 
-    return (mult * (img - minval) / (maxval - minval)).astype(outtype)
+    return (mult * (img - minval) / (maxval - minval + imgmin)).astype(outtype)
 
 
-def contrast_enhance(fn_img, mask_value=None, qmin=0.02, qmax=0.98, gamma=1.25):
+def contrast_enhance(fn_img, mask_value=None, qmin=0.02, qmax=0.98, gamma=1.25, disksize=3, imgmin=0):
     """
     Enhance image contrast in a three-step process. First, the image is processed with a median filter to reduce
     noise. Next, a linear contrast stretch is applied, and finally, a gamma adjustment is applied.
@@ -219,6 +220,8 @@ def contrast_enhance(fn_img, mask_value=None, qmin=0.02, qmax=0.98, gamma=1.25):
     :param float qmin: the minimum quantile to use for the linear contrast stretch (default: 0.02)
     :param float qmax: the maximum quantile to use for the linear contrast stretch (default: 0.98)
     :param float gamma: the value to use for the gamma adjustment
+    :param int disksize: the filter disk size (input to skimage.morphology.disk; default: 3)
+    :param int|float imgmin: the minimum value in the output image (default: 0)
     :return:
         - **enhanced** (*array-like*) -- the contrast-enhanced image.
     """
@@ -227,10 +230,14 @@ def contrast_enhance(fn_img, mask_value=None, qmin=0.02, qmax=0.98, gamma=1.25):
         img = img.astype(np.float32)
         img[img == mask_value] = np.nan
 
-    filt = nanmedian_filter(img, footprint=disk(3))
+    filt = nanmedian_filter(img, footprint=disk(disksize))
 
-    stretch = stretch_image(filt, scale=(qmin, qmax))
+    stretch = stretch_image(filt, scale=(qmin, qmax), imgmin=imgmin)
     gamma = exposure.adjust_gamma(stretch, gamma=gamma)
+
+    if mask_value is not None:
+        gamma[img == mask_value] = mask_value
+
     return gamma
 
 
