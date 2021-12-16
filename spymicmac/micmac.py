@@ -78,6 +78,45 @@ def write_neighbour_images(imlist, fprints=None, nameField='ID', prefix='OIS-Ree
     tree.write('FileImagesNeighbour.xml', pretty_print=True, xml_declaration=True, encoding="utf-8")
 
 
+def write_xml(fn_img, fn_mask='./MEC-Malt/Masq_STD-MALT_DeZoom1.tif', geomname='eGeomMNTEuclid'):
+    """
+    Given a GDAL dataset, create a MicMac xml worldfile.
+
+    :param str fn_img: the filename of the image.
+    :param str fn_mask: the filename of the mask file (default: ./MEC-Malt/Masq_STD-MALT_DeZoom1.tif)
+    :param str geomname: the MicMac Geometry name to use (default: eGeomMNTEuclid)
+    """
+    ds = gdal.Open(fn_img)
+    ext = os.path.splitext(fn_img)[-1]
+    ulx, dx, _, uly, _, dy = ds.GetGeoTransform()
+
+    E = builder.ElementMaker()
+    FileOriMnt = E.FileOriMnt
+    NameFileMnt = E.NameFileMnt
+    NameFileMasque = E.NameFileMasque
+    NombrePixels = E.NombrePixels
+    OriginePlani = E.OriginePlani
+    ResolutionPlani = E.ResolutionPlani
+    OrigineAlti = E.OrigineAlti
+    ResolutionAlti = E.ResolutionAlti
+    Geometrie = E.Geometrie
+
+    outxml = FileOriMnt(
+        NameFileMnt(fn_img),
+        NameFileMasque(fn_mask),
+        NombrePixels(' '.join([str(ds.RasterXSize), str(ds.RasterYSize)])),
+        OriginePlani(' '.join([str(ulx), str(uly)])),
+        ResolutionPlani(' '.join([str(dx), str(dy)])),
+        OrigineAlti('0'),
+        ResolutionAlti('1'),
+        Geometrie(geomname)
+    )
+
+    tree = etree.ElementTree(outxml)
+    tree.write(fn_img.replace(ext, '.xml'), pretty_print=True,
+               xml_declaration=False, encoding="utf-8")
+
+
 def get_gcp_meas(im_name, meas_name, in_dir, E, nodist=None, gcp_name='GCP'):
     """
     Create an lxml.builder.ElementMaker object with a GCP name and the image (row, pixel) location.
