@@ -610,7 +610,7 @@ def run_campari(in_gcps, outdir, img_pattern, sub, dx, ortho_res, allfree=True,
 
 
 def iterate_campari(gcps, out_dir, match_pattern, subscript, dx, ortho_res, fn_gcp='AutoGCPs', fn_meas='AutoMeasures',
-                    rel_ori='Relative', inori='TerrainRelAuto', outori='TerrainFirstPass', allfree=True):
+                    rel_ori='Relative', inori='TerrainRelAuto', outori='TerrainFirstPass', allfree=True, max_iter=5):
     """
     Run Campari iteratively, refining the orientation by removing outlier GCPs and Measures, based on their fit to the
     estimated camera model.
@@ -629,6 +629,7 @@ def iterate_campari(gcps, out_dir, match_pattern, subscript, dx, ortho_res, fn_g
     :param str inori: the input orientation to Campari (default: Ori-TerrainRelAuto -> TerrainRelAuto)
     :param str outori: the output orientation from Campari (default: Ori-TerrainFirstPass -> TerrainFirstPass)
     :param bool allfree: run Campari with AllFree=1 (True), or AllFree=0 (False). (default: True)
+    :param int max_iter: the maximum number of iterations to run. (default: 5)
     :return:
         - **gcps** (*pandas.DataFrame*) -- the gcps with updated residuals after the iterative process.
     """
@@ -646,7 +647,7 @@ def iterate_campari(gcps, out_dir, match_pattern, subscript, dx, ortho_res, fn_g
 
     while any([np.any(gcps.camp_res > 4 * nmad(gcps.camp_res)),
                np.any(gcps.camp_dist > 4 * nmad(gcps.camp_dist)),
-               gcps.camp_res.max() > 2]) and niter <= 5:
+               gcps.camp_res.max() > 2]) and niter <= max_iter:
         valid_inds = np.logical_and.reduce((gcps.camp_res < 4 * nmad(gcps.camp_res),
                                             gcps.camp_res < gcps.camp_res.max(),
                                             gcps.z_corr > gcps.z_corr.min()))
