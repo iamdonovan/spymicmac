@@ -565,7 +565,7 @@ def run_bascule(in_gcps, outdir, img_pattern, sub, ori, outori='TerrainRelAuto',
 
 def run_campari(in_gcps, outdir, img_pattern, sub, dx, ortho_res, allfree=True,
                 fn_gcp='AutoGCPs', fn_meas='AutoMeasures', inori='TerrainRelAuto',
-                outori='TerrainFirstPass'):
+                outori='TerrainFirstPass', homol='Homol'):
     """
     Interface for running mm3d Campari and reading the residuals from the residual xml file.
 
@@ -582,6 +582,7 @@ def run_campari(in_gcps, outdir, img_pattern, sub, dx, ortho_res, allfree=True,
         fn_meas + sub + '-S2D.xml' (e.g., default: AutoMeasures -> AutoMeasures_block0-S2D.xml)
     :param str inori: the input orientation to Campari (default: Ori-TerrainRelAuto -> TerrainRelAuto)
     :param str outori: the output orientation from Campari (default: Ori-TerrainFirstPass -> TerrainFirstPass)
+    :param str homol: the Homologue directory to use (default: Homol)
     :return:
         - **out_gcps** (*pandas.DataFrame*) -- the input gcps with the updated Campari residuals.
     """
@@ -601,7 +602,8 @@ def run_campari(in_gcps, outdir, img_pattern, sub, dx, ortho_res, allfree=True,
                                                      np.abs(dx),
                                                      os.path.join(outdir, fn_meas),
                                                      np.abs(dx / ortho_res)),
-                          'SH=Homol', 'AllFree={}'.format(allfree_tag)], stdin=echo.stdout)
+                          'SH={}'.format(homol),
+                          'AllFree={}'.format(allfree_tag)], stdin=echo.stdout)
     p.wait()
 
     out_gcps = get_campari_residuals('Ori-{}/Residus.xml'.format(outori + sub), in_gcps)
@@ -610,7 +612,8 @@ def run_campari(in_gcps, outdir, img_pattern, sub, dx, ortho_res, allfree=True,
 
 
 def iterate_campari(gcps, out_dir, match_pattern, subscript, dx, ortho_res, fn_gcp='AutoGCPs', fn_meas='AutoMeasures',
-                    rel_ori='Relative', inori='TerrainRelAuto', outori='TerrainFirstPass', allfree=True, max_iter=5):
+                    rel_ori='Relative', inori='TerrainRelAuto', outori='TerrainFirstPass', homol='Homol',
+                    allfree=True, max_iter=5):
     """
     Run Campari iteratively, refining the orientation by removing outlier GCPs and Measures, based on their fit to the
     estimated camera model.
@@ -628,6 +631,7 @@ def iterate_campari(gcps, out_dir, match_pattern, subscript, dx, ortho_res, fn_g
     :param str rel_ori: the name of the relative orientation to input to GCPBascule (default: Relative -> Ori-Relative + sub)
     :param str inori: the input orientation to Campari (default: Ori-TerrainRelAuto -> TerrainRelAuto)
     :param str outori: the output orientation from Campari (default: Ori-TerrainFirstPass -> TerrainFirstPass)
+    :param str homol: the Homologue directory to use (default: Homol)
     :param bool allfree: run Campari with AllFree=1 (True), or AllFree=0 (False). (default: True)
     :param int max_iter: the maximum number of iterations to run. (default: 5)
     :return:
@@ -663,7 +667,7 @@ def iterate_campari(gcps, out_dir, match_pattern, subscript, dx, ortho_res, fn_g
 
         gcps = run_campari(gcps, out_dir, match_pattern, subscript, dx, ortho_res,
                            inori=inori, outori=outori, fn_gcp=fn_gcp, fn_meas=fn_meas,
-                           allfree=allfree)
+                           allfree=allfree, homol=homol)
 
         gcps['camp_dist'] = np.sqrt(gcps.camp_xres ** 2 + gcps.camp_yres ** 2)
         niter += 1
