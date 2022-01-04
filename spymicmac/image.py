@@ -1041,12 +1041,13 @@ def join_hexagon(im_pattern, overlap=2000, blend=True, corona=False):
 
         combined_right = warp(right, M, output_shape=out_shape, preserve_range=True, order=3)
 
-        combined_left = np.zeros(out_shape)
+        combined_left = np.zeros(out_shape, dtype=np.uint8)
         combined_left[:, :left.shape[1]] = left
 
         if blend:
             combined = _blend(combined_left, combined_right, left.shape)
         else:
+            combined_right[:, :left.shape[1]] = 0
             combined = combined_left + combined_right
 
         last_ind = np.where(np.sum(combined, axis=0) > 0)[0][-1]
@@ -1063,12 +1064,13 @@ def join_hexagon(im_pattern, overlap=2000, blend=True, corona=False):
 
             combined_right = warp(right, M, output_shape=out_shape, preserve_range=True, order=3)
 
-            combined_left = np.zeros(out_shape)
+            combined_left = np.zeros(out_shape, dtype=np.uint8)
             combined_left[:, :left.shape[1]] = left
 
             if blend:
                 combined = _blend(combined_left, combined_right, left.shape)
             else:
+                combined_right[:, :left.shape[1]] = 0
                 combined = combined_left + combined_right
 
             last_ind = np.where(np.sum(combined, axis=0) > 0)[0][-1]
