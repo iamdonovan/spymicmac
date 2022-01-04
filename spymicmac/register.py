@@ -87,7 +87,7 @@ def get_imlist(im_subset):
     Given either a list of filenames or a regex match pattern, return a list of filenames and a pattern to provide
     to MicMac.
 
-    :param list im_subset: a list of filenames or a match pattern (e.g., ['OIS.*tif']) representing filenames
+    :param list|str im_subset: a list of filenames or a match pattern (e.g., ['OIS.*tif']) representing filenames
     :return:
         - **imlist** (*list*) -- the list of filenames matching the provided pattern.
         - **match_pattern** (*str*) -- the match pattern to be provided to MicMac.
@@ -160,7 +160,7 @@ def get_utm_str(epsg):
     return utm_str
 
 
-def transform_centers(img_gt, ref, imlist, footprints, ori):
+def transform_centers(img_gt, ref, imlist, footprints, ori, imgeom=True):
     """
     Use the camera centers in relative space provided by MicMac Orientation files, along with camera footprints,
     to estimate a transformation between the relative coordinate system and the absolute coordinate system.
@@ -170,6 +170,7 @@ def transform_centers(img_gt, ref, imlist, footprints, ori):
     :param list imlist: a list of of the images that were used for the relative orthophoto
     :param GeoDataFrame footprints: the (approximate) image footprints - the centroid will be used for the absolute camera positions.
     :param str ori: name of orientation directory
+    :param bool imgeom: calculate a transformation between image ij locations (True)
     :return:
         - **model** (*AffineTransform*) -- the estimated Affine Transformation between relative and absolute space
         - **inliers** (*array-like*) -- a list of the inliers returned by skimage.measure.ransac
@@ -200,35 +201,93 @@ def transform_centers(img_gt, ref, imlist, footprints, ori):
             rel_pts = np.concatenate([join[['xrel', 'yrel']].values,
                                       _get_points([Point(join['xrel'].values[ind1], join['yrel'].values[ind1]),
                                                    Point(join['xrel'].values[ind2], join['yrel'].values[ind2])])])
-
-            ref_ij = np.array([ref.xy2ij(pt) for pt in ref_pts])
-            rel_ij = np.array([((pt[0] - img_gt[4]) / img_gt[0],
-                                (pt[1] - img_gt[5]) / img_gt[3]) for pt in rel_pts])
         else:
-            ref_ij = np.array([ref.xy2ij((row.xabs, row.yabs)) for i, row in join.iterrows()])
-            rel_ij = np.array([((row.xrel - img_gt[4]) / img_gt[0],
-                                (row.yrel - img_gt[5]) / img_gt[3]) for i, row in join.iterrows()])
+            ref_pts = join[['xabs', 'yabs']].values
+            rel_pts = join[['xrel', 'yrel']].values
 
-        model, inliers = ransac((ref_ij[:, ::-1], rel_ij), AffineTransform, min_samples=3,
-                                residual_threshold=100, max_trials=5000)
     else:
         # if we only have 2 points, we add two (midpoint, perpendicular to midpoint) using _get_points()
         # this ensures that we can actually get an affine transformation
         ref_pts = _get_points([Point(row.xabs, row.yabs) for ii, row in join.iterrows()])
         rel_pts = _get_points([Point(row.xrel, row.yrel) for ii, row in join.iterrows()])
 
-        ref_ij = np.array([ref.xy2ij(pt) for pt in ref_pts])
-        rel_ij = np.array([((pt[0] - img_gt[4]) / img_gt[0],
-                            (pt[1] - img_gt[5]) / img_gt[3]) for pt in rel_pts])
-
-        model = AffineTransform()
-        model.estimate(ref_ij[:, ::-1], rel_ij)
-        residuals = model.residuals(ref_ij, rel_ij)
-
-        inliers = residuals <= 1
+    if imgeom:
+        model, inliers = transform_points(ref, ref_pts, img_gt, rel_pts)
+    else:
+        model, inliers = _transform(ref_pts, rel_pts)
 
     print('{} inliers for center transformation'.format(np.count_nonzero(inliers)))
     return model, inliers, join
+
+
+def transform_points(ref, ref_pts, rel_gt, rel_pts):
+    """
+    Given x,y points and two "geo"-referenced images, finds an affine transformation between the two images.
+
+    :param GeoImg ref: the reference image
+    :param np.array ref_pts: an Mx2 array of the x,y points in the reference image
+    :param array-like rel_gt: the "geo" transform for the second image, as read from a .tfw file.
+    :param np.array rel_pts: an Mx2 array of the x,y points in the second image.
+    :returns:
+        - **model** (*AffineTransform*) -- the estimated Affine Transformation between relative and absolute space
+        - **inliers** (*array-like*) -- a list of the inliers returned by skimage.measure.ransac
+    """
+    ref_ij = np.array([ref.xy2ij(pt) for pt in ref_pts])
+    rel_ij = np.array([((pt[0] - rel_gt[4]) / rel_gt[0],
+                        (pt[1] - rel_gt[5]) / rel_gt[3]) for pt in rel_pts])
+
+    model, inliers = _transform(ref_ij[:, ::-1], rel_ij)
+
+    return model, inliers
+
+
+def _transform(ref_pts, rel_pts):
+    if ref_pts.shape[0] > 3:
+        model, inliers = ransac((ref_pts, rel_pts), AffineTransform, min_samples=3,
+                                residual_threshold=100, max_trials=5000)
+    else:
+        model = AffineTransform()
+        model.estimate(ref_pts, rel_pts)
+        residuals = model.residuals(ref_pts, rel_pts)
+        inliers = residuals <= 1
+
+    return model, inliers
+
+
+def warp_image(model, ref, img):
+    """
+    Given a transformation model between two coordinate systems, warp an image to a reference image
+
+    :param GeometricTransform model: the transformation model between the coordinate systems
+    :param GeoImg ref: the reference GeoImg
+    :param GeoImg img: the GeoImg to be transformed
+    :returns:
+        - **tfm_img** (*np.array*) -- the input image transformed to the same extent as the reference image
+        - **this_model** (*AffineTransform*) -- the estimated Affine Transformation between the two images
+        - **inliers** (*array-like*) -- a list of the inliers returned by skimage.measure.ransac
+    """
+
+    # get image points in rel coords
+    img_x, img_y = img.xy()
+    img_x = img_x[::100, ::100].flatten()
+    img_y = img_y[::100, ::100].flatten()
+
+    rel_pts = np.hstack((img_x.reshape(-1, 1), img_y.reshape(-1, 1)))
+    # get image corners, center in abs coords
+    ref_pts = model.inverse(rel_pts)
+
+    # get the new transformation - have to go from gdal geotransform to tfw geotransform first
+    this_model, inliers = transform_points(ref, ref_pts, _to_tfw(img.gt), rel_pts)
+
+    # transform the image
+    tfm_img = warp(img.img, this_model, output_shape=ref.img.shape, preserve_range=True)
+
+    return tfm_img, this_model, inliers
+
+
+def _to_tfw(gt):
+    # convert from gdal GeoTransform to TFW format
+    return [gt[1], gt[2], gt[4], gt[5], gt[0], gt[3]]
 
 
 def _find_add(pts):
@@ -861,3 +920,7 @@ def register_ortho(fn_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, landmask=
         os.remove(txtfile)
     print('end.')
     # embed()
+
+
+def register_individual():
+    pass
