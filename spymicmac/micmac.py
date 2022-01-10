@@ -24,6 +24,7 @@ from skimage.transform import AffineTransform
 from pybob.bob_tools import mkdir_p
 from pybob.GeoImg import GeoImg
 from pybob.ddem_tools import nmad
+from pybob.image_tools import create_mask_from_shapefile
 from spymicmac.usgs import get_usgs_footprints
 from spymicmac.register import get_utm_str
 
@@ -611,6 +612,44 @@ def run_campari(in_gcps, outdir, img_pattern, sub, dx, ortho_res, allfree=True,
     return out_gcps
 
 
+def remove_worst_mesures(fn_meas, ori):
+    """
+    Remove outlier measures from an xml file, given the output from Campari.
+
+    :param str fn_meas: the filename for the measures file.
+    :param str ori: the orientation directory output from Campari (e.g., Ori-TerrainFirstPass -> TerrainFirstPass)
+    :return:
+    """
+    camp_root = ET.parse('Ori-{}/Residus.xml'.format(ori)).getroot()
+    auto_root = ET.parse(fn_meas).getroot()
+
+    last_iter = camp_root.findall('Iters')[-1].findall('OneAppui')
+
+    resids_df = pd.DataFrame()
+
+    for ii, appui in enumerate(last_iter):
+        resids_df.loc[ii, 'id'] = appui.find('Name').text
+        if appui.find('EcartImMoy') is not None:
+            resids_df.loc[ii, 'errmoy'] = float(appui.find('EcartImMoy').text)
+        if appui.find('EcartImMax') is not None:
+            resids_df.loc[ii, 'errmax'] = float(appui.find('EcartImMax').text)
+        if appui.find('NameImMax') is not None:
+            resids_df.loc[ii, 'immax'] = appui.find('NameImMax').text
+
+    bad_meas = np.abs(resids_df.errmax - resids_df.errmax.median()) > nmad(resids_df.errmax)
+    bad_resids = resids_df[bad_meas].copy()
+
+    for im in auto_root.findall('MesureAppuiFlottant1Im'):
+        if im.find('NameIm').text in list(bad_resids.immax):
+            these_mes = bad_resids[bad_resids.immax == im.find('NameIm').text]
+            for pt in im.findall('OneMesureAF1I'):
+                if pt.find('NamePt').text in these_mes.id.values:
+                    im.remove(pt)
+
+    out_xml = ET.ElementTree(auto_root)
+    out_xml.write(fn_meas, encoding="utf-8", xml_declaration=True)
+
+
 def iterate_campari(gcps, out_dir, match_pattern, subscript, dx, ortho_res, fn_gcp='AutoGCPs', fn_meas='AutoMeasures',
                     rel_ori='Relative', inori='TerrainRelAuto', outori='TerrainFirstPass', homol='Homol',
                     allfree=True, max_iter=5):
@@ -649,10 +688,10 @@ def iterate_campari(gcps, out_dir, match_pattern, subscript, dx, ortho_res, fn_g
 
     gcps['camp_dist'] = np.sqrt(gcps.camp_xres ** 2 + gcps.camp_yres ** 2)
 
-    while any([np.any(gcps.camp_res > 4 * nmad(gcps.camp_res)),
-               np.any(gcps.camp_dist > 4 * nmad(gcps.camp_dist)),
-               gcps.camp_res.max() > 2]) and niter <= max_iter:
-        valid_inds = np.logical_and.reduce((gcps.camp_res < 4 * nmad(gcps.camp_res),
+    while any([np.any(np.abs(gcps.camp_res - gcps.camp_res.median()) > 4 * nmad(gcps.camp_res)),
+               np.any(np.abs(gcps.camp_dist - gcps.camp_dist.median()) > 4 * nmad(gcps.camp_dist)),
+               gcps.camp_res.max() > 2]) and niter <= 5:
+        valid_inds = np.logical_and.reduce((np.abs(gcps.camp_res - gcps.camp_res.median()) < 4 * nmad(gcps.camp_res),
                                             gcps.camp_res < gcps.camp_res.max(),
                                             gcps.z_corr > gcps.z_corr.min()))
         if np.count_nonzero(valid_inds) < 10:
@@ -673,6 +712,56 @@ def iterate_campari(gcps, out_dir, match_pattern, subscript, dx, ortho_res, fn_g
         niter += 1
 
     return gcps
+
+
+def mask_invalid_els(dir_mec, fn_dem, fn_mask, ori, match_pattern='OIS.*tif', zoomf=1):
+    """
+    Mask invalid elevations (e.g., water) in a DEM, then re-run the final step of mm3d Malt Ortho to make nicer
+    orthophotos.
+
+    :param str dir_mec: the MEC directory (e.g., MEC-Malt) to use
+    :param str fn_dem: the filename of the reference DEM
+    :param str fn_mask: filename for the mask vector file
+    :param str ori: the orientation directory used to run Malt
+    :param str match_pattern: the match pattern used to
+    :param int zoomf: the final zoom level to run Malt at (default: ZoomF=1)
+    """
+    zlist = glob(os.path.join(dir_mec, 'Z*.tif'))
+    zlist.sort()
+
+    etapes = [int(f.split('_')[1].replace('Num', '')) for f in zlist]
+
+    ind = np.argmax(etapes)
+    etape0 = max(etapes)
+
+    fn_auto = os.path.join(dir_mec, 'AutoMask_STD-MALT_Num_{}.tif'.format(etape0 - 1))
+
+    print(fn_auto)
+    print(zlist[ind])
+
+    dem = GeoImg(zlist[ind])
+
+    automask = GeoImg(os.path.join(dir_mec, 'AutoMask_STD-MALT_Num_{}.tif'.format(etape0 - 1)))
+
+    shutil.copy(zlist[ind].replace('tif', 'tfw'),
+                fn_auto.replace('tif', 'tfw'))
+
+    ref_dem = GeoImg(fn_dem).reproject(dem)
+
+    mask = create_mask_from_shapefile(dem, fn_mask)
+
+    dem.img[mask] = ref_dem.img[mask]
+    automask.img[mask] = 1
+
+    automask.write(fn_auto)
+    dem.write(zlist[ind])
+
+    echo = subprocess.Popen('echo', stdout=subprocess.PIPE)
+    p = subprocess.Popen(['mm3d', 'Malt', 'Ortho', match_pattern, ori, 'DirMEC={}'.format(dir_mec),
+                          'NbVI=2', 'MasqImGlob=filtre.tif', 'ZoomF={}'.format(zoomf),
+                          'DefCor=1', 'CostTrans=1', 'EZA=1', 'DoMEC=0', 'DoOrtho=1', 'Etape0={}'.format(etape0)],
+                         stdin=echo.stdout)
+    p.wait()
 
 
 def save_gcps(in_gcps, outdir, utmstr, sub, fn_gcp='AutoGCPs', fn_meas='AutoMeasures'):
