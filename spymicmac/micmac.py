@@ -692,8 +692,7 @@ def iterate_campari(gcps, out_dir, match_pattern, subscript, dx, ortho_res, fn_g
                np.any(np.abs(gcps.camp_dist - gcps.camp_dist.median()) > 4 * nmad(gcps.camp_dist)),
                gcps.camp_res.max() > 2]) and niter <= 5:
         valid_inds = np.logical_and.reduce((np.abs(gcps.camp_res - gcps.camp_res.median()) < 4 * nmad(gcps.camp_res),
-                                            gcps.camp_res < gcps.camp_res.max(),
-                                            gcps.z_corr > gcps.z_corr.min()))
+                                            gcps.camp_res < gcps.camp_res.max()))
         if np.count_nonzero(valid_inds) < 10:
             break
 
