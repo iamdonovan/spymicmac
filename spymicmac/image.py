@@ -537,6 +537,63 @@ def find_gcp_match(img, template, method=cv2.TM_CCORR_NORMED):
     return res, maxi + i_off + sp_dely, maxj + j_off + sp_delx
 
 
+def do_match(dest_img, ref_img, mask, pt, srcwin, dstwin):
+    """
+    Find a match between two images using normalized cross-correlation template matching.
+
+    :param array-like dest_img: the image to search for the matching point in.
+    :param array-like ref_img: the reference image to use for matching.
+    :param array-like mask: a mask indicating areas that should be used for matching.
+    :param array-like pt: the index (i, j) to search for a match for.
+    :param int srcwin: the half-size of the template window.
+    :param int dstwin: the half-size of the search window.
+    :returns:
+        - **match_pt** (*tuple*) -- the matching point (j, i) found in dest_img
+        - **z_corr** (*float*) -- number of standard deviations (z-score) above other potential matches
+        - **peak_corr** (*float*) -- the correlation value of the matched point
+    """
+    _i, _j = pt
+    submask, _, _ = make_template(mask, pt, srcwin)
+
+    if np.count_nonzero(submask) / submask.size < 0.05:
+        return (np.nan, np.nan), np.nan, np.nan
+
+    try:
+        testchip, _, _ = make_template(ref_img, pt, srcwin)
+        dst_chip, _, _ = make_template(dest_img, pt, dstwin)
+
+        testchip[np.isnan(testchip)] = 0
+        dst_chip[np.isnan(dst_chip)] = 0
+
+        test = highpass_filter(testchip)
+        dest = highpass_filter(dst_chip)
+
+        testmask = binary_dilation(testchip == 0, selem=disk(8))
+        destmask = binary_dilation(dst_chip == 0, selem=disk(8))
+
+        test[testmask] = np.random.rand(test.shape[0], test.shape[1])[testmask]
+        dest[destmask] = np.random.rand(dest.shape[0], dest.shape[1])[destmask]
+
+        corr_res, this_i, this_j = find_gcp_match(dest.astype(np.float32), test.astype(np.float32))
+        peak_corr = cv2.minMaxLoc(corr_res)[1]
+
+        pks = peak_local_max(corr_res, min_distance=5, num_peaks=2)
+        this_z_corrs = []
+        for pk in pks:
+            max_ = corr_res[pk[0], pk[1]]
+            this_z_corrs.append((max_ - corr_res.mean()) / corr_res.std())
+        dz_corr = max(this_z_corrs) / min(this_z_corrs)
+        z_corr = max(this_z_corrs)
+
+        # if the correlation peak is very high, or very unique, add it as a match
+        out_i, out_j = this_i - dstwin + _i, this_j - dstwin + _j
+
+    except Exception as e:
+        return (np.nan, np.nan), np.nan, np.nan
+
+    return (out_j, out_i), z_corr, peak_corr
+
+
 def find_grid_matches(tfm_img, refgeo, mask, initM=None, spacing=200, srcwin=60, dstwin=600):
     """
     Find matches between two images on a grid using normalized cross-correlation template matching.
@@ -554,7 +611,6 @@ def find_grid_matches(tfm_img, refgeo, mask, initM=None, spacing=200, srcwin=60,
     match_pts = []
     z_corrs = []
     peak_corrs = []
-    res_imgs = []
 
     jj = np.arange(srcwin, spacing * np.ceil((refgeo.img.shape[1]-srcwin) / spacing) + 1, spacing).astype(int)
     ii = np.arange(srcwin, spacing * np.ceil((refgeo.img.shape[0]-srcwin) / spacing) + 1, spacing).astype(int)
@@ -564,53 +620,10 @@ def find_grid_matches(tfm_img, refgeo, mask, initM=None, spacing=200, srcwin=60,
     for _i in ii:
         for _j in jj:
             search_pts.append((_j, _i))
-            # for pt in search_pts:
-            # if mask[pt[1], pt[0]] == 0:
-            submask, _, _ = make_template(mask, (_i, _j), srcwin)
-            if np.count_nonzero(submask) / submask.size < 0.05:
-                match_pts.append((-1, -1))
-                z_corrs.append(np.nan)
-                peak_corrs.append(np.nan)
-                res_imgs.append(np.nan)
-                continue
-            try:
-                testchip, _, _ = make_template(refgeo.img, (_i, _j), srcwin)
-                dst_chip, _, _ = make_template(tfm_img, (_i, _j), dstwin)
-
-                testchip[np.isnan(testchip)] = 0
-                dst_chip[np.isnan(dst_chip)] = 0
-
-                test = highpass_filter(testchip)
-                dest = highpass_filter(dst_chip)
-
-                testmask = binary_dilation(testchip == 0, selem=disk(8))
-                destmask = binary_dilation(dst_chip == 0, selem=disk(8))
-
-                test[testmask] = np.random.rand(test.shape[0], test.shape[1])[testmask]
-                dest[destmask] = np.random.rand(dest.shape[0], dest.shape[1])[destmask]
-
-                corr_res, this_i, this_j = find_gcp_match(dest.astype(np.float32), test.astype(np.float32))
-                peak_corr = cv2.minMaxLoc(corr_res)[1]
-
-                pks = peak_local_max(corr_res, min_distance=5, num_peaks=2)
-                this_z_corrs = []
-                for pk in pks:
-                    max_ = corr_res[pk[0], pk[1]]
-                    this_z_corrs.append((max_ - corr_res.mean()) / corr_res.std())
-                dz_corr = max(this_z_corrs) / min(this_z_corrs)
-                z_corr = max(this_z_corrs)
-
-                # if the correlation peak is very high, or very unique, add it as a match
-                out_i, out_j = this_i - dstwin + _i, this_j - dstwin + _j
-                z_corrs.append(z_corr)
-                peak_corrs.append(peak_corr)
-                match_pts.append([out_j, out_i])
-                res_imgs.append(corr_res)
-            except:
-                match_pts.append((-1, -1))
-                z_corrs.append(np.nan)
-                peak_corrs.append(np.nan)
-                res_imgs.append(np.nan)
+            match, z_corr, peak_corr = do_match(tfm_img, refgeo.img, mask, (_i, _j), srcwin, dstwin)
+            match_pts.append(match)
+            z_corrs.append(z_corr)
+            peak_corrs.append(peak_corr)
 
     search_pts = np.array(search_pts)
     _dst = np.array(match_pts)
