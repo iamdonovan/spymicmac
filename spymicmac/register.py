@@ -10,6 +10,8 @@ import matplotlib.pyplot as plt
 from osgeo import gdal
 import pandas as pd
 import geopandas as gpd
+import lxml.etree as etree
+import lxml.builder as builder
 from PIL import Image
 from glob import glob
 from shapely.geometry.point import Point
@@ -82,7 +84,7 @@ def sliding_window_filter(img_shape, pts_df, winsize, stepsize=None, mindist=200
     return np.array(_out_inds)
 
 
-def get_imlist(im_subset):
+def get_imlist(im_subset, dirname='.', strip_text=None):
     """
     Given either a list of filenames or a regex match pattern, return a list of filenames and a pattern to provide
     to MicMac.
@@ -781,6 +783,9 @@ def register_ortho(fn_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, landmask=
     Minit, _, centers = transform_centers(ortho_gt, ref_img, imlist, footprints, 'Ori-{}'.format(ori))
     rough_tfm = warp(ortho, Minit, output_shape=ref_img.shape, preserve_range=True)
 
+    rough_geo = ref_img.copy(new_raster=rough_tfm)
+    rough_geo.write('Orthophoto{}_geo.tif'.format(subscript), dtype=np.uint8)
+
     fig, ax = plt.subplots(1, 2, figsize=(7, 5))
     ax[0].imshow(rough_tfm[::10, ::10], extent=[0, rough_tfm.shape[1], rough_tfm.shape[0], 0], cmap='gray')
     ax[1].imshow(ref_img.img[::10, ::10], extent=[0, ref_img.shape[1], ref_img.shape[0], 0], cmap='gray')
@@ -823,18 +828,20 @@ def register_ortho(fn_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, landmask=
 
     # run ransac to find the matches between the transformed image and the master image make a coherent transformation
     # residual_threshold is 10 pixels to allow for some local distortions, but get rid of the big blunders
-    Mref, inliers_ref = ransac((gcps[['search_j', 'search_i']].values, gcps[['match_j', 'match_i']].values),
-                               AffineTransform, min_samples=6, residual_threshold=10, max_trials=5000)
+    # Mref, inliers_ref = ransac((gcps[['search_j', 'search_i']].values, gcps[['match_j', 'match_i']].values),
+    #                            AffineTransform, min_samples=6, residual_threshold=10, max_trials=5000)
+    # gcps['aff_resid'] = Mref.residuals(gcps[['search_j', 'search_i']].values,
+    #                                    gcps[['match_j', 'match_i']].values)
 
-    gcps['aff_resid'] = Mref.residuals(gcps[['search_j', 'search_i']].values,
-                                       gcps[['match_j', 'match_i']].values)
+    # valid = np.abs(gcps.aff_resid - gcps.aff_resid.median()) < nmad(gcps.aff_resid)
+    # gcps = gcps.loc[valid]
 
-    out = sliding_window_filter([ortho.shape[1], ortho.shape[0]], gcps,
-                                min(1000, ortho.shape[1] / 4, ortho.shape[0] / 4),
-                                mindist=500, how='aff_resid', is_ascending=False)
-    gcps = gcps.loc[out]
+    # out = sliding_window_filter([ortho.shape[1], ortho.shape[0]], gcps,
+    #                             min(1000, ortho.shape[1] / 4, ortho.shape[0] / 4),
+    #                             mindist=500, how='aff_resid', is_ascending=False)
+    # gcps = gcps.loc[out]
 
-    print('{} valid matches found after estimating transformation'.format(gcps.shape[0]))
+    # print('{} valid matches found after estimating transformation'.format(gcps.shape[0]))
 
     gcps.index = range(gcps.shape[0])  # make sure index corresponds to row we're writing out
     gcps['id'] = ['GCP{}'.format(i) for i in range(gcps.shape[0])]
@@ -862,13 +869,16 @@ def register_ortho(fn_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, landmask=
     gcps = mmtools.run_bascule(gcps, out_dir, match_pattern, subscript, ori)
     gcps['res_dist'] = np.sqrt(gcps.xres ** 2 + gcps.yres ** 2)
 
-    gcps = gcps[gcps.res_dist < 4 * nmad(gcps.res_dist)]
+    gcps = gcps[np.abs(gcps.res_dist - gcps.res_dist.median()) < 2 * nmad(gcps.res_dist)]
+    # gcps = gcps[np.logical_and(np.abs(gcps.xres - gcps.xres.median()) < 2 * nmad(gcps.xres),
+    #                            np.abs(gcps.yres - gcps.yres.median()) < 2 * nmad(gcps.yres))]
 
     mmtools.save_gcps(gcps, out_dir, utm_str, subscript)
     gcps = mmtools.run_bascule(gcps, out_dir, match_pattern, subscript, ori)
     gcps['res_dist'] = np.sqrt(gcps.xres ** 2 + gcps.yres ** 2)
-
-    gcps = gcps[gcps.res_dist < 4 * nmad(gcps.res_dist)]
+    gcps = gcps[np.abs(gcps.res_dist - gcps.res_dist.median()) < 2 * nmad(gcps.res_dist)]
+    # gcps = gcps[np.logical_and(np.abs(gcps.xres - gcps.xres.median()) < 2 * nmad(gcps.xres),
+    #                            np.abs(gcps.yres - gcps.yres.median()) < 2 * nmad(gcps.yres))]
 
     mmtools.save_gcps(gcps, out_dir, utm_str, subscript)
 
@@ -877,10 +887,10 @@ def register_ortho(fn_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, landmask=
     gcps['camp_dist'] = np.sqrt(gcps.camp_xres ** 2 + gcps.camp_yres ** 2)
 
     niter = 0
-    while any([np.any(gcps.camp_res > 4 * nmad(gcps.camp_res)),
-               np.any(gcps.camp_dist > 4 * nmad(gcps.camp_dist)),
+    while any([np.any(np.abs(gcps.camp_res - gcps.camp_res.median()) > 2 * nmad(gcps.camp_res)),
+               np.any(np.abs(gcps.camp_dist - gcps.camp_dist.median()) > 2 * nmad(gcps.camp_dist)),
                gcps.camp_res.max() > 2]) and niter <= 5:
-        valid_inds = np.logical_and.reduce((gcps.camp_res < 4 * nmad(gcps.camp_res),
+        valid_inds = np.logical_and.reduce((np.abs(gcps.camp_res - gcps.camp_res.median()) < 2 * nmad(gcps.camp_res),
                                             gcps.camp_res < gcps.camp_res.max(),
                                             gcps.z_corr > gcps.z_corr.min()))
         if np.count_nonzero(valid_inds) < 10:
@@ -922,5 +932,216 @@ def register_ortho(fn_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, landmask=
     # embed()
 
 
-def register_individual():
-    pass
+def register_individual(dir_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, landmask=None, footprints=None,
+                        im_subset=None, block_num=None, ori='Relative', ortho_res=8., imgsource='DECLASSII', density=200,
+                        out_dir='auto_gcps', allfree=True, is_geo=False):
+    """
+    IN DEVELOPMENT: Register individual orthoimages to a reference orthorectified image and DEM.
+
+    :param str dir_ortho: directory containing orthoimages (e.g., Ortho-MEC-Relative)
+    :param str fn_ref: path to reference orthorectified image
+    :param str fn_reldem: path to relative DEM
+    :param str fn_dem: path to reference DEM
+    :param str glacmask: path to file of glacier outlines (i.e., an exclusion mask)
+    :param str landmask: path to file of land outlines (i.e., an inclusion mask)
+    :param str footprints: path to shapefile of image outlines. If not set, will download from USGS.
+    :param str im_subset: subset of raw images to work with
+    :param str block_num: block number to use if processing multiple image blocks
+    :param str ori: name of orientation directory (after Ori-) (default: Relative)
+    :param float ortho_res: approx. ground sampling distance (pixel resolution) of ortho image (default: 8 m)
+    :param str imgsource: USGS dataset name for images (default: DECLASSII)
+    :param int density: pixel spacing to look for GCPs (default: 200)
+    :param str out_dir: output directory to save auto GCP files to (default: auto_gcps)
+    :param bool allfree: run Campari setting all parameters free (default: True)
+    :param bool is_geo: True if orthoimages are already in absolute coordinates (default: False)
+    """
+
+    if block_num is not None:
+        subscript = '_block{}'.format(block_num)
+    else:
+        subscript = ''
+
+    # TODO: fix this
+    if im_subset is None:
+        imlist = [os.path.basename(fn).split('Ort_')[1] for fn in glob(os.path.join(dir_ortho, 'Ort_*.tif'))]
+        match_pattern = 'OIS.*tif'
+    else:
+        imlist = [os.path.basename(fn).split('Ort_')[1] for fn in glob(os.path.join(dir_ortho, 'Ort_*.tif')) if fn in im_subset]
+
+    os.makedirs('TmpMeasures{}'.format(subscript), exist_ok=True)
+    if out_dir is not None:
+        os.makedirs(out_dir, exist_ok=True)
+    else:
+        out_dir = '.'
+
+    ref_img = GeoImg(fn_ref)
+    ref_dem = GeoImg(fn_dem)
+
+    utm_str = get_utm_str(ref_img.epsg)
+
+    rel_dem = GeoImg(fn_reldem)
+
+    if footprints is None:
+        clean_imlist = [im.split('OIS-Reech_')[-1].split('.tif')[0] for im in imlist]
+        print('Attempting to get image footprints from USGS EarthExplorer.')
+        footprints = get_usgs_footprints(clean_imlist, dataset=imgsource)
+    else:
+        footprints = gpd.read_file(footprints)
+
+    mask_full, _, ref_img = get_mask(footprints, ref_img, imlist, landmask, glacmask)
+    mask_geo = ref_img.copy(new_raster=mask_full)
+
+    if not is_geo:
+        with open(os.path.join(dir_ortho, 'Orthophotomosaic.tfw'), 'r') as f:
+            ortho_gt = [float(l.strip()) for l in f.readlines()]
+        model, _, centers = transform_centers(ortho_gt, ref_img, imlist, footprints, 'Ori-{}'.format(ori), imgeom=False)
+
+    # get a grid of points from the reference image, spaced by $density
+    x, y = ref_img.xy()
+    x = x[::density, ::density].flatten()
+    y = y[::density, ::density].flatten()
+    mask_pts = mask_full[::density, ::density].flatten()
+
+    x = x[mask_pts != 0]
+    y = y[mask_pts != 0]
+
+    all_pts = np.hstack((x.reshape(-1, 1), y.reshape(-1, 1)))
+    all_geom = [Point(pt) for pt in all_pts]
+    pt_names = np.array(['GCP{}'.format(ii) for ii in range(len(all_pts))])
+
+    gcps = gpd.GeoDataFrame()
+    gcps['id'] = pt_names
+    gcps['geometry'] = all_geom
+    gcps.set_crs(epsg=ref_img.epsg, inplace=True)
+
+    for ii, row in gcps.to_crs(crs=ref_dem.proj4).iterrows():
+        gcps.loc[ii, 'elevation'] = ref_dem.raster_points([(row.geometry.x, row.geometry.y)], nsize=3, mode='linear')
+
+    gcps.to_file(os.path.join(out_dir, 'AutoGCPs{}.shp'.format(subscript)))
+
+    print('writing AutoGCPs.txt')
+    mmtools.write_auto_gcps(gcps, subscript, out_dir, utm_str)
+
+    print('converting AutoGCPs.txt to AutoGCPs.xml')
+    subprocess.Popen(['mm3d', 'GCPConvert', 'AppInFile',
+                      os.path.join(out_dir, 'AutoGCPs{}.txt'.format(subscript))]).wait()
+
+    E = builder.ElementMaker()
+    MesureSet = E.SetOfMesureAppuisFlottants()
+
+    for im in imlist:
+        print(im)
+        # have to reproject image if needed
+        this_img = GeoImg('{}/Ort_{}'.format(dir_ortho, im))
+
+        if is_geo:
+            this_ref = ref_img.reproject(this_img)
+            this_mask = mask_geo.reproject(this_img)
+            this_mask.img[this_img.img == 0] = 0
+        else:
+            this_ext = np.array([(this_img.xmin, this_img.ymin),
+                                 (this_img.xmax, this_img.ymin),
+                                 (this_img.xmax, this_img.ymax),
+                                 (this_img.xmin, this_img.ymax)])
+            warp_ext = model.inverse(this_ext)
+            this_x = warp_ext[:, 0]
+            this_y = warp_ext[:, 1]
+
+            this_ref = ref_img.crop_to_extent([min(this_x), max(this_x), min(this_y), max(this_y)])
+            tfm_img, this_model, _ = warp_image(model, this_ref, this_img)
+
+            orig_img = this_img.copy()
+            this_img = this_ref.copy(new_raster=tfm_img)
+            this_mask = mask_geo.reproject(this_img)
+            this_mask.img[this_img.img == 0] = 0
+
+        # only use grid points that are within this image
+        isin = np.array([not this_img.outside_image(pt, index=False) for pt in all_pts])
+        these_pts = all_pts[isin]
+        these_names = pt_names[isin]
+
+        these_meas = pd.DataFrame()
+        these_meas['id'] = these_names
+        these_meas['x'] = these_pts[:, 0]
+        these_meas['y'] = these_pts[:, 1]
+
+        for ii, row in these_meas.iterrows():
+            pt = np.array(this_ref.xy2ij((row.x, row.y))).astype(int)
+            these_meas.loc[ii, 'search_j'] = pt[1]
+            these_meas.loc[ii, 'search_i'] = pt[0]
+
+            # TODO: choose src, dstwin size based on image size, "goodness" of transform
+            match_pt, this_z_corr, this_peak_corr = imtools.do_match(this_img.img, this_ref.img,
+                                                                     this_mask.img, pt, srcwin=20, dstwin=25)
+            these_meas.loc[ii, 'match_j'] = match_pt[0]
+            these_meas.loc[ii, 'match_i'] = match_pt[1]
+
+            if is_geo:
+                ix, iy = this_img.ij2xy(match_pt)
+            else:
+                # _x, _y = this_img.ij2xy(match_pt)
+                j, i = this_model(match_pt)[0]
+                ix, iy = orig_img.ij2xy((i, j))
+
+            # will need to use xyz2im to transform this point to the original image
+            these_meas.loc[ii, 'img_x'] = ix
+            these_meas.loc[ii, 'img_y'] = iy
+            if np.isfinite(ix) and np.isfinite(iy):
+                these_meas.loc[ii, 'img_z'] = rel_dem.raster_points([(ix, iy)], nsize=3, mode='linear')
+            else:
+                these_meas.loc[ii, 'img_z'] = np.nan
+            these_meas.loc[ii, 'z_corr'] = this_z_corr
+            these_meas.loc[ii, 'pk_corr'] = this_peak_corr
+
+        if these_meas.shape[0] > 0:
+            these_meas['dj'] = these_meas['match_j'] - these_meas['search_j']
+            these_meas['di'] = these_meas['match_i'] - these_meas['search_i']
+
+            these_meas.dropna(how='any', inplace=True)
+            these_meas.index = range(these_meas.shape[0])
+            # valid = np.logical_and.reduce([these_meas['match_j'] > 0,
+            #                                these_meas['match_j'] < this_img.npix_x,
+            #                                these_meas['match_i'] > 0,
+            #                                these_meas['match_i'] < this_img.npix_y])
+            # these_meas = these_meas.loc[valid]
+
+            with open('TmpAutoMeasures.txt', 'w') as f:
+                for ii, row in these_meas.iterrows():
+                    print('{} {} {}'.format(row.img_x, row.img_y, row.img_z), file=f)
+
+            subprocess.Popen(['mm3d', 'XYZ2Im', 'Ori-{}/Orientation-{}.xml'.format(ori, im),
+                              'TmpAutoMeasures.txt', 'Auto-{}.txt'.format(im)]).wait()
+
+            # now have to read the output
+            impts = pd.read_csv('Auto-{}.txt'.format(im), sep=' ', names=['j', 'i'])
+            these_meas['j'] = impts['j']
+            these_meas['i'] = impts['i']
+
+            this_im_mes = E.MesureAppuiFlottant1Im(E.NameIm(im))
+            raw_img = imread(im)
+            maxi, maxj = raw_img.shape
+
+            for ii, row in these_meas.iterrows():
+                if np.logical_and.reduce([np.isfinite(row.j), np.isfinite(row.i),
+                                          0 < row.j < maxj, 0 < row.i < maxi]):
+                    this_mes = E.OneMesureAF1I(E.NamePt(these_meas.loc[ii, 'id']),
+                                               E.PtIm('{} {}'.format(row.j, row.i)))
+                    this_im_mes.append(this_mes)
+
+            these_meas.to_csv('TmpMeasures{}/{}.csv'.format(subscript, im), index=False)
+            MesureSet.append(this_im_mes)
+
+            os.remove('Auto-{}.txt'.format(im))
+            os.remove('TmpAutoMeasures.txt')
+
+    tree = etree.ElementTree(MesureSet)
+    tree.write(os.path.join(out_dir, 'AutoMeasures{}-S2D.xml'.format(subscript)),
+               pretty_print=True, xml_declaration=True, encoding="utf-8")
+
+    for ii in range(2):
+        gcps = mmtools.run_bascule(gcps, out_dir, match_pattern, subscript, ori)
+
+        valid = np.abs(gcps.residual - gcps.residual.median()) < nmad(gcps.residual)
+        gcps = gcps.loc[valid]
+
+        mmtools.save_gcps(gcps, out_dir, utm_str, subscript)
