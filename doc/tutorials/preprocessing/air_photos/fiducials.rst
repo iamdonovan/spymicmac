@@ -3,26 +3,28 @@ fiducial marks
 
 Once you have finished pre-processing the images, you need to resample them to a common geometry using
 `mm3d ReSampFid <https://micmac.ensg.eu/index.php/ReSampFid>`_. For historical aerial images, follow the steps below to
-find the fiducial markers for resampling. For KH-9 images, use :doc:`../../spymicmac/scripts/find_reseau_grid`.
+find the fiducial markers for resampling.
 
 SaisieAppuisInitQT
 ------------------
 Depending on the camera setup, there will be between 4 and 8 (or more) fiducial markers. They may look like
 a crosshairs:
 
-.. image:: ../../img/fiducial_target.png
+.. image:: ../../../img/fiducial_target.png
     :width: 200
     :align: center
     :alt: an example of a fiducial marker
 
 They may also be something like this:
 
-.. image:: ../../img/fiducial_mark.png
+.. image:: ../../../img/fiducial_mark.png
     :width: 200
     :align: center
     :alt: another example of a fiducial marker
 
-Or any number of other alternatives. The MicMac program for inputting fiducial mark locations is ``SaisieAppuisInitQT``
+Or any number of other alternatives. To see examples of fiducial patterns for some common camera types, check out :doc:
+
+The MicMac program for inputting fiducial mark locations is ``SaisieAppuisInitQT``
 (or just ``SaisieAppuisInit`` if you don't have the QT version set up). For each image, you'll need to run the following:
 ::
 
@@ -30,7 +32,7 @@ Or any number of other alternatives. The MicMac program for inputting fiducial m
 
 This will open a window like the following:
 
-.. image:: ../../img/saisieappuisinit.png
+.. image:: ../../../img/saisieappuisinit.png
     :width: 600
     :align: center
     :alt: the SaisieAppuisInitQT window

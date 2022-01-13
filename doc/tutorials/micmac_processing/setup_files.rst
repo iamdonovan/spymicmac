@@ -13,8 +13,8 @@ You will need to set the image size (in mm) by changing the values in ``SzCaptMm
 example). You will also need to set the image matching pattern (``PatternTransform``, line 29 of the example) and focal
 length in mm (``CalcName``, line 30) for each set of images - if, for example, different focal lengths were used.
 
-To improve tie point density and matching, especially in low-contrast images, you can try changing ``CalcName`` (line 18)
-to ``SFS``, and ``Key`` (line 21) to ``NKS-Assoc-SFS``:
+To improve tie point density and matching, especially in low-contrast images, you can try copying the block below
+into your ``MicMac-LocalChantierDescripteur.xml`` file:
 ::
 
     <KeyedNamesAssociations>
@@ -27,6 +27,13 @@ to ``SFS``, and ``Key`` (line 21) to ``NKS-Assoc-SFS``:
          </Calcs>
          <Key> NKS-Assoc-SFS </Key>
     </KeyedNamesAssociations>
+
+.. note::
+
+    Be sure that when you paste the block, you paste it so that it is in between the ``ChantierDescripteur`` tags
+    (lines 2, 36 in the provided example file), and also not within one of the existing  ``KeyedNamesAssociations``
+    blocks. (i.e., paste it at line 23 of the provided example file).
+
 
 MeasuresCamera.xml
 -------------------

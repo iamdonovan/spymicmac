@@ -1,8 +1,7 @@
 image pre-processing
 =======================
 
-This section describes a few of the different tools available for pre-processing scanned images, including
-de-striping, contrast enhancement, and de-noising.
+This section describes a few of the different tools available for pre-processing scanned images.
 
 .. note::
     For working with KH-9 images, the reseau field re-sampling and image joining steps are required.
@@ -11,4 +10,4 @@ de-striping, contrast enhancement, and de-noising.
    :maxdepth: 2
 
    kh9_preprocessing
-   image_preprocessing
+   air_photos/index
