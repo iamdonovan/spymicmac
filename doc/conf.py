@@ -23,13 +23,20 @@ class Mock(MagicMock):
         return MagicMock()
 
 
-autodoc_mock_imports = ['numpy', 'scipy', 'matplotlib', 'fiona', 'cv2', 'pyvips', 'lxml', 'matplotlib.pyplot',
-                        'shapely', 'opencv-python', 'pandas', 'geopandas', 'fiona.crs', 'scipy.interpolate',
-                        'shapely.geometry.polygon', 'shapely.geometry', 'shapely.ops',  'shapely.strtree',
-                        'skimage', 'gdal', 'h5py', 'pyproj', 'osgeo', 'llc', 'descartes', 'lxml.etree', 'ee',
-                        'pybob.landsat_tools', 'skimage.feature', 'skimage.morphology', 'skimage.filters',
-                        'lxml.builder', 'rtree', 'ogr', 'skimage.measure', 'pybob.bob_tools', 'pybob.ddem_tools',
-                        'skimage.transform', 'skimage.io', 'numba']
+autodoc_mock_imports = ['numpy',  'cv2', 'ee', 'usgs', 'rtree', 'osgeo', 'pyproj', 'h5py', 'llc', 'numba',
+                        'scipy', 'scipy.interpolate',
+                        'PIL', 'PIL.Image',
+                        'matplotlib', 'matplotlib.pyplot',
+                        'lxml', 'lxml.builder', 'lxml.etree', 'xml.etree.ElementTree',
+                        'shapely', 'shapely.geometry', 'shapely.ops', 'shapely.geometry.point',
+                        'shapely.geometry.polygon', 'shapely.strtree',
+                        'fiona', 'fiona.crs',
+                        'opencv-python', 'pandas', 'geopandas',
+                        'skimage', 'skimage.io', 'skimage.feature', 'skimage.filters', 'skimage.measure',
+                        'skimage.morphology', 'skimage.transform',
+                        'pymmaster.mmaster_tools',
+                        'pybob.bob_tools', 'pybob.ddem_tools', 'pybob.GeoImg', 'pybob.image_tools', 'pybob.landsat_tools',
+]
 
 sys.modules.update((mod_name, Mock()) for mod_name in autodoc_mock_imports)
 sys.path.insert(0, os.path.abspath('..'))
