@@ -4,9 +4,11 @@ spymicmac.micmac is a collection of tools for interfacing with MicMac
 import os
 import subprocess
 import shutil
+from collections import defaultdict
 import numpy as np
 from osgeo import gdal
 import pandas as pd
+import geopandas as gpd
 import lxml.etree as etree
 import lxml.builder as builder
 import difflib
@@ -22,7 +24,9 @@ from skimage.transform import AffineTransform
 from pybob.bob_tools import mkdir_p
 from pybob.GeoImg import GeoImg
 from pybob.ddem_tools import nmad
+from pybob.image_tools import create_mask_from_shapefile
 from spymicmac.usgs import get_usgs_footprints
+from spymicmac.register import get_utm_str
 
 
 ######################################################################################################################
@@ -73,6 +77,45 @@ def write_neighbour_images(imlist, fprints=None, nameField='ID', prefix='OIS-Ree
 
     tree = etree.ElementTree(NamedRel)
     tree.write('FileImagesNeighbour.xml', pretty_print=True, xml_declaration=True, encoding="utf-8")
+
+
+def write_xml(fn_img, fn_mask='./MEC-Malt/Masq_STD-MALT_DeZoom1.tif', geomname='eGeomMNTEuclid'):
+    """
+    Given a GDAL dataset, create a MicMac xml worldfile.
+
+    :param str fn_img: the filename of the image.
+    :param str fn_mask: the filename of the mask file (default: ./MEC-Malt/Masq_STD-MALT_DeZoom1.tif)
+    :param str geomname: the MicMac Geometry name to use (default: eGeomMNTEuclid)
+    """
+    ds = gdal.Open(fn_img)
+    ext = os.path.splitext(fn_img)[-1]
+    ulx, dx, _, uly, _, dy = ds.GetGeoTransform()
+
+    E = builder.ElementMaker()
+    FileOriMnt = E.FileOriMnt
+    NameFileMnt = E.NameFileMnt
+    NameFileMasque = E.NameFileMasque
+    NombrePixels = E.NombrePixels
+    OriginePlani = E.OriginePlani
+    ResolutionPlani = E.ResolutionPlani
+    OrigineAlti = E.OrigineAlti
+    ResolutionAlti = E.ResolutionAlti
+    Geometrie = E.Geometrie
+
+    outxml = FileOriMnt(
+        NameFileMnt(fn_img),
+        NameFileMasque(fn_mask),
+        NombrePixels(' '.join([str(ds.RasterXSize), str(ds.RasterYSize)])),
+        OriginePlani(' '.join([str(ulx), str(uly)])),
+        ResolutionPlani(' '.join([str(dx), str(dy)])),
+        OrigineAlti('0'),
+        ResolutionAlti('1'),
+        Geometrie(geomname)
+    )
+
+    tree = etree.ElementTree(outxml)
+    tree.write(fn_img.replace(ext, '.xml'), pretty_print=True,
+               xml_declaration=False, encoding="utf-8")
 
 
 def get_gcp_meas(im_name, meas_name, in_dir, E, nodist=None, gcp_name='GCP'):
@@ -345,6 +388,39 @@ def remove_measure(fn_meas, name):
     tree.write(fn_meas, encoding="utf-8", xml_declaration=True)
 
 
+def rename_gcps(root, ngcp=0):
+    """
+    Rename all GCPs in order of their appearance in an (opened) xml file.
+
+    :param xml.etree.ElementTree.Element root: the root element of an xml tree
+    :param int ngcp: the number to start counting from (defaults to 0)
+
+    :return:
+        - **mes_dict** (*dict*) -- a dict containing image, gcp key/value pairs
+        - **gcp_dict** (*dict*) -- a dict containing old/new gcp name key/value pairs
+    """
+    mes_dict = dict()
+    gcp_dict = dict()
+
+    for im in root.findall('MesureAppuiFlottant1Im'):
+        this_name = im.find('NameIm').text
+        these_mes = im.findall('OneMesureAF1I')
+
+        for ii, mes in enumerate(these_mes):
+            old_name = mes.find('NamePt').text
+
+            if mes.find('NamePt').text not in gcp_dict.keys():
+                gcp_dict[old_name] = 'GCP{}'.format(ngcp)
+                ngcp += 1
+
+            mes.find('NamePt').text = gcp_dict[old_name]
+            these_mes[ii] = mes
+
+        mes_dict[this_name] = these_mes
+
+    return mes_dict, gcp_dict
+
+
 def get_bascule_residuals(fn_basc, gcp_df):
     """
     Read a given GCPBascule residual file, and add the residuals to a DataFrame with GCP information.
@@ -455,7 +531,8 @@ def move_bad_tapas(ori):
         shutil.move(im, 'bad')
 
 
-def run_bascule(in_gcps, outdir, img_pattern, sub, ori):
+def run_bascule(in_gcps, outdir, img_pattern, sub, ori, outori='TerrainRelAuto',
+                fn_gcp='AutoGCPs', fn_meas='AutoMeasures'):
     """
     Interface for running mm3d GCPBascule and reading the residuals from the resulting xml file.
 
@@ -464,22 +541,32 @@ def run_bascule(in_gcps, outdir, img_pattern, sub, ori):
     :param str img_pattern: the match pattern for the images being input to Campari (e.g., "OIS.*tif")
     :param str sub: the name of the block, if multiple blocks are being used (e.g., '_block1'). If not, use ''.
     :param str ori: the name of the orientation directory (e.g., Ori-Relative).
+    :param str outori: the name of the output orientation directory (default: TerrainRelAuto).
+    :param str fn_gcp: the filename pattern for the GCP file. The file that will be loaded will be
+        fn_gcp + sub + '.xml' (e.g., default: AutoGCPs -> AutoGCPs_block0.xml)
+    :param str fn_meas: the filename pattern for the measures file. The file that will be loaded will be
+        fn_meas + sub + '-S2D.xml' (e.g., default: AutoMeasures -> AutoMeasures_block0-S2D.xml)
     :return:
-        - **out_gcps** (*pandas.DataFrame*) -- the input gcps with the updated Campari residuals.
+        - **out_gcps** (*pandas.DataFrame*) -- the input gcps with the updated Bascule residuals.
     """
+    fn_gcp = fn_gcp + sub + '.xml'
+    fn_meas = fn_meas + sub + '-S2D.xml'
+
     echo = subprocess.Popen('echo', stdout=subprocess.PIPE)
     p = subprocess.Popen(['mm3d', 'GCPBascule', img_pattern, ori,
-                          'TerrainRelAuto{}'.format(sub),
-                          os.path.join(outdir, 'AutoGCPs{}.xml'.format(sub)),
-                          os.path.join(outdir, 'AutoMeasures{}-S2D.xml'.format(sub))], stdin=echo.stdout)
+                          outori + sub,
+                          os.path.join(outdir, fn_gcp),
+                          os.path.join(outdir, fn_meas)], stdin=echo.stdout)
     p.wait()
 
-    out_gcps = get_bascule_residuals(os.path.join('Ori-TerrainRelAuto{}'.format(sub),
+    out_gcps = get_bascule_residuals(os.path.join('Ori-{}{}'.format(outori, sub),
                                                   'Result-GCP-Bascule.xml'), in_gcps)
     return out_gcps
 
 
-def run_campari(in_gcps, outdir, img_pattern, sub, dx, ortho_res, allfree=True):
+def run_campari(in_gcps, outdir, img_pattern, sub, dx, ortho_res, allfree=True,
+                fn_gcp='AutoGCPs', fn_meas='AutoMeasures', inori='TerrainRelAuto',
+                outori='TerrainFirstPass', homol='Homol'):
     """
     Interface for running mm3d Campari and reading the residuals from the residual xml file.
 
@@ -490,6 +577,13 @@ def run_campari(in_gcps, outdir, img_pattern, sub, dx, ortho_res, allfree=True):
     :param int|float dx: the pixel resolution of the reference image.
     :param int|float ortho_res: the pixel resolution of the orthoimage being used.
     :param bool allfree: run Campari with AllFree=1 (True), or AllFree=0 (False). (default: True)
+    :param str fn_gcp: the filename pattern for the GCP file. The file that will be loaded will be
+        fn_gcp + sub + '.xml' (e.g., default: AutoGCPs -> AutoGCPs_block0.xml)
+    :param str fn_meas: the filename pattern for the measures file. The file that will be loaded will be
+        fn_meas + sub + '-S2D.xml' (e.g., default: AutoMeasures -> AutoMeasures_block0-S2D.xml)
+    :param str inori: the input orientation to Campari (default: Ori-TerrainRelAuto -> TerrainRelAuto)
+    :param str outori: the output orientation from Campari (default: Ori-TerrainFirstPass -> TerrainFirstPass)
+    :param str homol: the Homologue directory to use (default: Homol)
     :return:
         - **out_gcps** (*pandas.DataFrame*) -- the input gcps with the updated Campari residuals.
     """
@@ -499,46 +593,204 @@ def run_campari(in_gcps, outdir, img_pattern, sub, dx, ortho_res, allfree=True):
     else:
         allfree_tag = 0
 
+    fn_gcp = fn_gcp + sub + '.xml'
+    fn_meas = fn_meas + sub + '-S2D.xml'
+
     p = subprocess.Popen(['mm3d', 'Campari', img_pattern,
-                          'TerrainRelAuto{}'.format(sub),
-                          'TerrainFirstPass{}'.format(sub),
-                          'GCP=[{},{},{},{}]'.format(os.path.join(outdir, 'AutoGCPs{}.xml'.format(sub)),
+                          inori + sub,
+                          outori + sub,
+                          'GCP=[{},{},{},{}]'.format(os.path.join(outdir, fn_gcp),
                                                      np.abs(dx),
-                                                     os.path.join(outdir, 'AutoMeasures{}-S2D.xml'.format(sub)),
+                                                     os.path.join(outdir, fn_meas),
                                                      np.abs(dx / ortho_res)),
-                          'SH=Homol', 'AllFree={}'.format(allfree_tag)], stdin=echo.stdout)
+                          'SH={}'.format(homol),
+                          'AllFree={}'.format(allfree_tag)], stdin=echo.stdout)
     p.wait()
 
-    out_gcps = get_campari_residuals('Ori-TerrainFirstPass{}/Residus.xml'.format(sub), in_gcps)
+    out_gcps = get_campari_residuals('Ori-{}/Residus.xml'.format(outori + sub), in_gcps)
     # out_gcps.dropna(inplace=True)  # sometimes, campari can return no information for a gcp
     return out_gcps
 
 
-def save_gcps(in_gcps, outdir, utmstr, sub):
+def remove_worst_mesures(fn_meas, ori):
+    """
+    Remove outlier measures from an xml file, given the output from Campari.
+
+    :param str fn_meas: the filename for the measures file.
+    :param str ori: the orientation directory output from Campari (e.g., Ori-TerrainFirstPass -> TerrainFirstPass)
+    :return:
+    """
+    camp_root = ET.parse('Ori-{}/Residus.xml'.format(ori)).getroot()
+    auto_root = ET.parse(fn_meas).getroot()
+
+    last_iter = camp_root.findall('Iters')[-1].findall('OneAppui')
+
+    resids_df = pd.DataFrame()
+
+    for ii, appui in enumerate(last_iter):
+        resids_df.loc[ii, 'id'] = appui.find('Name').text
+        if appui.find('EcartImMoy') is not None:
+            resids_df.loc[ii, 'errmoy'] = float(appui.find('EcartImMoy').text)
+        if appui.find('EcartImMax') is not None:
+            resids_df.loc[ii, 'errmax'] = float(appui.find('EcartImMax').text)
+        if appui.find('NameImMax') is not None:
+            resids_df.loc[ii, 'immax'] = appui.find('NameImMax').text
+
+    bad_meas = np.abs(resids_df.errmax - resids_df.errmax.median()) > nmad(resids_df.errmax)
+    bad_resids = resids_df[bad_meas].copy()
+
+    for im in auto_root.findall('MesureAppuiFlottant1Im'):
+        if im.find('NameIm').text in list(bad_resids.immax):
+            these_mes = bad_resids[bad_resids.immax == im.find('NameIm').text]
+            for pt in im.findall('OneMesureAF1I'):
+                if pt.find('NamePt').text in these_mes.id.values:
+                    im.remove(pt)
+
+    out_xml = ET.ElementTree(auto_root)
+    out_xml.write(fn_meas, encoding="utf-8", xml_declaration=True)
+
+
+def iterate_campari(gcps, out_dir, match_pattern, subscript, dx, ortho_res, fn_gcp='AutoGCPs', fn_meas='AutoMeasures',
+                    rel_ori='Relative', inori='TerrainRelAuto', outori='TerrainFirstPass', homol='Homol',
+                    allfree=True, max_iter=5):
+    """
+    Run Campari iteratively, refining the orientation by removing outlier GCPs and Measures, based on their fit to the
+    estimated camera model.
+
+    :param pandas.DataFrame gcps: a DataFrame with the GCPs that are being input to Campari.
+    :param str out_dir: the output directory where the GCP and Measures files are located.
+    :param str match_pattern: the match pattern for the images being input to Campari (e.g., "OIS.*tif")
+    :param str subscript: the name of the block, if multiple blocks are being used (e.g., '_block1'). If not, use ''.
+    :param int|float dx: the pixel resolution of the reference image.
+    :param int|float ortho_res: the pixel resolution of the orthoimage being used.
+    :param str fn_gcp: the filename pattern for the GCP file. The file that will be loaded will be
+        fn_gcp + sub + '.xml' (e.g., default: AutoGCPs -> AutoGCPs_block0.xml)
+    :param str fn_meas: the filename pattern for the measures file. The file that will be loaded will be
+        fn_meas + sub + '-S2D.xml' (e.g., default: AutoMeasures -> AutoMeasures_block0-S2D.xml)
+    :param str rel_ori: the name of the relative orientation to input to GCPBascule (default: Relative -> Ori-Relative + sub)
+    :param str inori: the input orientation to Campari (default: Ori-TerrainRelAuto -> TerrainRelAuto)
+    :param str outori: the output orientation from Campari (default: Ori-TerrainFirstPass -> TerrainFirstPass)
+    :param str homol: the Homologue directory to use (default: Homol)
+    :param bool allfree: run Campari with AllFree=1 (True), or AllFree=0 (False). (default: True)
+    :param int max_iter: the maximum number of iterations to run. (default: 5)
+    :return:
+        - **gcps** (*pandas.DataFrame*) -- the gcps with updated residuals after the iterative process.
+    """
+    niter = 0
+
+    gcps = run_bascule(gcps, out_dir, match_pattern, subscript, rel_ori, fn_gcp=fn_gcp, fn_meas=fn_meas, outori=inori)
+
+    gcps['res_dist'] = np.sqrt(gcps.xres ** 2 + gcps.yres ** 2)
+
+    gcps = run_campari(gcps, out_dir, match_pattern, subscript, dx, ortho_res,
+                       inori=inori, outori=outori, fn_gcp=fn_gcp, fn_meas=fn_meas,
+                       allfree=allfree)
+
+    gcps['camp_dist'] = np.sqrt(gcps.camp_xres ** 2 + gcps.camp_yres ** 2)
+
+    while any([np.any(np.abs(gcps.camp_res - gcps.camp_res.median()) > 4 * nmad(gcps.camp_res)),
+               np.any(np.abs(gcps.camp_dist - gcps.camp_dist.median()) > 4 * nmad(gcps.camp_dist)),
+               gcps.camp_res.max() > 2]) and niter <= 5:
+        valid_inds = np.logical_and.reduce((np.abs(gcps.camp_res - gcps.camp_res.median()) < 4 * nmad(gcps.camp_res),
+                                            gcps.camp_res < gcps.camp_res.max()))
+        if np.count_nonzero(valid_inds) < 10:
+            break
+
+        gcps = gcps.loc[valid_inds]
+        save_gcps(gcps, out_dir, get_utm_str(gcps.crs.to_epsg), subscript, fn_gcp=fn_gcp, fn_meas=fn_meas)
+
+        gcps = run_bascule(gcps, out_dir, match_pattern, subscript, rel_ori, fn_gcp=fn_gcp,
+                           fn_meas=fn_meas, outori=inori)
+        gcps['res_dist'] = np.sqrt(gcps.xres ** 2 + gcps.yres ** 2)
+
+        gcps = run_campari(gcps, out_dir, match_pattern, subscript, dx, ortho_res,
+                           inori=inori, outori=outori, fn_gcp=fn_gcp, fn_meas=fn_meas,
+                           allfree=allfree, homol=homol)
+
+        gcps['camp_dist'] = np.sqrt(gcps.camp_xres ** 2 + gcps.camp_yres ** 2)
+        niter += 1
+
+    return gcps
+
+
+def mask_invalid_els(dir_mec, fn_dem, fn_mask, ori, match_pattern='OIS.*tif', zoomf=1):
+    """
+    Mask invalid elevations (e.g., water) in a DEM, then re-run the final step of mm3d Malt Ortho to make nicer
+    orthophotos.
+
+    :param str dir_mec: the MEC directory (e.g., MEC-Malt) to use
+    :param str fn_dem: the filename of the reference DEM
+    :param str fn_mask: filename for the mask vector file
+    :param str ori: the orientation directory used to run Malt
+    :param str match_pattern: the match pattern used to
+    :param int zoomf: the final zoom level to run Malt at (default: ZoomF=1)
+    """
+    zlist = glob(os.path.join(dir_mec, 'Z*.tif'))
+    zlist.sort()
+
+    etapes = [int(f.split('_')[1].replace('Num', '')) for f in zlist]
+
+    ind = np.argmax(etapes)
+    etape0 = max(etapes)
+
+    fn_auto = os.path.join(dir_mec, 'AutoMask_STD-MALT_Num_{}.tif'.format(etape0 - 1))
+
+    print(fn_auto)
+    print(zlist[ind])
+
+    dem = GeoImg(zlist[ind])
+
+    automask = GeoImg(os.path.join(dir_mec, 'AutoMask_STD-MALT_Num_{}.tif'.format(etape0 - 1)))
+
+    shutil.copy(zlist[ind].replace('tif', 'tfw'),
+                fn_auto.replace('tif', 'tfw'))
+
+    ref_dem = GeoImg(fn_dem).reproject(dem)
+
+    mask = create_mask_from_shapefile(dem, fn_mask)
+
+    dem.img[mask] = ref_dem.img[mask]
+    automask.img[mask] = 1
+
+    automask.write(fn_auto)
+    dem.write(zlist[ind])
+
+    echo = subprocess.Popen('echo', stdout=subprocess.PIPE)
+    p = subprocess.Popen(['mm3d', 'Malt', 'Ortho', match_pattern, ori, 'DirMEC={}'.format(dir_mec),
+                          'NbVI=2', 'MasqImGlob=filtre.tif', 'ZoomF={}'.format(zoomf),
+                          'DefCor=1', 'CostTrans=1', 'EZA=1', 'DoMEC=0', 'DoOrtho=1', 'Etape0={}'.format(etape0)],
+                         stdin=echo.stdout)
+    p.wait()
+
+
+def save_gcps(in_gcps, outdir, utmstr, sub, fn_gcp='AutoGCPs', fn_meas='AutoMeasures'):
     """
     Save a GeoDataFrame of GCP information to shapefile, txt, and xml formats.
 
     After running, the following new files will be created:
 
-        - outdir/AutoGCPs.shp (+ associated files)
-        - outdir/AutoGCPs.txt
-        - outdir/AutoGCPs.xml (output from mm3d GCPConvert)
-        - outdir/AutoMeasures.xml (a file with image locations for each GCP)
+        - outdir/fn_gcp.shp (+ associated files)
+        - outdir/fn_gcp.txt
+        - outdir/fn_gcp.xml (output from mm3d GCPConvert)
+        - outdir/fn_meas.xml (a file with image locations for each GCP)
 
     :param GeoDataFrame in_gcps: the gcps GeoDataFrame to save
     :param str outdir: the output directory to save the files to
     :param str utmstr: a UTM string generated by register.get_utm_str()
     :param str sub: the name of the block, if multiple blocks are being used (e.g., '_block1'). If not, use ''.
-
+    :param str fn_gcp: the filename pattern for the GCP file. The file that will be loaded will be
+        fn_gcp + sub + '.xml' (e.g., default: AutoGCPs -> AutoGCPs_block0.xml)
+    :param str fn_meas: the filename pattern for the measures file. The file that will be loaded will be
+        fn_meas + sub + '-S2D.xml' (e.g., default: AutoMeasures -> AutoMeasures_block0-S2D.xml)
     """
-    in_gcps.to_file(os.path.join(outdir, 'AutoGCPs{}.shp'.format(sub)))
-    write_auto_gcps(in_gcps, sub, outdir, utmstr)
+    in_gcps.to_file(os.path.join(outdir, fn_gcp + sub + '.shp'))
+    write_auto_gcps(in_gcps, sub, outdir, utmstr, outname=fn_gcp)
     echo = subprocess.Popen('echo', stdout=subprocess.PIPE)
     p = subprocess.Popen(['mm3d', 'GCPConvert', 'AppInFile',
-                          os.path.join(outdir, 'AutoGCPs{}.txt'.format(sub))], stdin=echo.stdout)
+                          os.path.join(outdir, fn_gcp + sub + '.txt')], stdin=echo.stdout)
     p.wait()
 
-    auto_root = ET.parse(os.path.join(outdir, 'AutoMeasures{}-S2D.xml'.format(sub))).getroot()
+    auto_root = ET.parse(os.path.join(outdir, fn_meas + sub + '-S2D.xml')).getroot()
     for im in auto_root.findall('MesureAppuiFlottant1Im'):
         for pt in im.findall('OneMesureAF1I'):
             if pt.find('NamePt').text not in in_gcps.id.values:
@@ -546,8 +798,79 @@ def save_gcps(in_gcps, outdir, utmstr, sub):
 
     # save AutoMeasures
     out_xml = ET.ElementTree(auto_root)
-    out_xml.write(os.path.join(outdir, 'AutoMeasures{}-S2D.xml'.format(sub)),
+    out_xml.write(os.path.join(outdir, fn_meas + sub + '-S2D.xml'),
                   encoding="utf-8", xml_declaration=True)
+
+
+def combine_block_measures(blocks, fn_out='CombinedAutoMeasures', fn_mes='AutoMeasures_block',
+                           fn_gcp='AutoGCPs_block', dirname='auto_gcps'):
+    """
+    Combine GCPs and Measures files from multiple sub-blocks into a single file.
+
+    :param list blocks: a list of the sub-block numbers to combine
+    :param str fn_out: the output filename (no extensions). (default: CombinedAutoMeasures)
+    :param str fn_mes: the name pattern of the measures files to combine (default: AutoMeasures_block)
+    :param str fn_gcp: the name pattern of the GCP files to combine (default: AutoGCPs_block)
+    :param str dirname: the output directory where the files are saved (default: auto_gcps)
+    """
+    ngcp = 0 # keep track of the number of GCPs
+
+    mes_dicts = list()
+    gcp_dicts = list()
+    gcp_shps = list()
+
+    for b in blocks:
+        # load dirname/AutoMeasures_block{b}-S2D.xml
+        this_root = ET.parse(os.path.join(dirname, fn_mes + '{}-S2D.xml'.format(b))).getroot()
+
+        this_mes_dict, this_gcp_dict = rename_gcps(this_root, ngcp=ngcp)
+        mes_dicts.append(this_mes_dict)
+        gcp_dicts.append(this_gcp_dict)
+
+        ngcp += len(this_gcp_dict)
+        # load dirname/AutoGCPs_block{b}.shp
+        this_gcp = gpd.read_file(os.path.join(dirname, fn_gcp + '{}.shp'.format(b)))
+
+        for ii, row in this_gcp.iterrows():
+            this_gcp.loc[ii, 'id'] = this_gcp_dict[row['id']]
+
+        gcp_shps.append(this_gcp)
+
+    out_gcp = gpd.GeoDataFrame(pd.concat(gcp_shps, ignore_index=True))
+    out_gcp.sort_values('id', ignore_index=True, inplace=True)
+
+    out_gcp.set_crs(gcp_shps[0].crs, inplace=True)
+    out_gcp.to_file(fn_out + '.shp')
+
+    write_auto_gcps(out_gcp, '', dirname, get_utm_str(out_gcp.crs.to_epsg), outname=fn_out)
+
+    echo = subprocess.Popen('echo', stdout=subprocess.PIPE)
+    p = subprocess.Popen(['mm3d', 'GCPConvert', 'AppInFile',
+                          os.path.join(dirname, fn_out + '.txt')], stdin=echo.stdout)
+    p.wait()
+
+    # now have to combine mes_dicts based on key names
+    comb_dict = defaultdict(list)
+
+    for d in mes_dicts:
+        for im, mes in d.items():
+            comb_dict[im].append(mes)
+
+    # now have to create new AutoMeasures file from comb_dict
+    E = builder.ElementMaker()
+    MesureSet = E.SetOfMesureAppuisFlottants()
+
+    # have to write combined measures to a single file
+    for im, mes in comb_dict.items():
+        this_im_mes = E.MesureAppuiFlottant1Im(E.NameIm(im))
+        for m in mes[0]:
+            this_mes = E.OneMesureAF1I(E.NamePt(m.find('NamePt').text), E.PtIm(m.find('PtIm').text))
+            this_im_mes.append(this_mes)
+
+        MesureSet.append(this_im_mes)
+
+    tree = etree.ElementTree(MesureSet)
+    tree.write(os.path.join(dirname, fn_out + '-S2D.xml'), pretty_print=True, xml_declaration=True, encoding="utf-8")
 
 
 ######################################################################################################################
@@ -713,6 +1036,52 @@ def update_center(fn_img, ori, new_center):
                encoding="utf-8", xml_declaration=True)
 
 
+def update_pose(fn_img, ori, new_rot):
+    """
+    Update the camera pose (rotation matrix) in an Orientation file.
+
+    :param str fn_img: the name of the image to update the orientation for (e.g., 'OIS-Reech_ARCSEA000590122.tif')
+    :param str ori: the name of the orientation directory (e.g., 'Ori-Relative')
+    :param array-like new_rot: the new 3x3 rotation matrix
+    """
+    ori_root = ET.parse(os.path.join(ori, 'Orientation-{}.xml'.format(fn_img))).getroot()
+    if ori_root.tag != 'OrientationConique':
+        ori_coniq = ori_root.find('OrientationConique')
+    else:
+        ori_coniq = ori_root
+
+    for ii, row in enumerate(new_rot):
+        ori_coniq.find('Externe').find('ParamRotation')\
+            .find('CodageMatr').find('L{}'.format(ii+1)).text = ' '.join([str(f) for f in row])
+
+    tree = ET.ElementTree(ori_root)
+    tree.write(os.path.join(ori, 'Orientation-{}.xml'.format(fn_img)),
+               encoding="utf-8", xml_declaration=True)
+
+
+def update_params(fn_img, ori, profondeur, altisol):
+    """
+    Update the profondeur and altisol parameters in an orientation file.
+
+    :param str fn_img: the name of the image to update the orientation for (e.g., 'OIS-Reech_ARCSEA000590122.tif')
+    :param str ori: the name of the orientation directory (e.g., 'Ori-Relative')
+    :param float profondeur: the new profondeur value
+    :param float altisol: the new altisol value
+    """
+    ori_root = ET.parse(os.path.join(ori, 'Orientation-{}.xml'.format(fn_img))).getroot()
+    if ori_root.tag != 'OrientationConique':
+        ori_coniq = ori_root.find('OrientationConique')
+    else:
+        ori_coniq = ori_root
+
+    ori_coniq.find('Externe').find('AltiSol').text = str(altisol)
+    ori_coniq.find('Externe').find('Profondeur').text = str(profondeur)
+
+    tree = ET.ElementTree(ori_root)
+    tree.write(os.path.join(ori, 'Orientation-{}.xml'.format(fn_img)),
+               encoding="utf-8", xml_declaration=True)
+
+
 def fix_orientation(cameras, ori_df, ori, nsig=4):
     """
     Correct erroneous Tapas camera positions using an estimated affine transformation between the absolute camera locations
@@ -734,11 +1103,11 @@ def fix_orientation(cameras, ori_df, ori, nsig=4):
     join = cameras.set_index('name').join(ori_df.set_index('name'), lsuffix='abs', rsuffix='rel')
 
     model = AffineTransform()
-    model.estimate(join[['xabs', 'yabs']].values, join[['xrel', 'yrel']].values)
+    model.estimate(join.dropna()[['xabs', 'yabs']].values, join.dropna()[['xrel', 'yrel']].values)
 
     res = model.residuals(join[['xabs', 'yabs']].values, join[['xrel', 'yrel']].values)
 
-    outliers = res - np.median(res) > nsig * nmad(res)
+    outliers = res - np.nanmedian(res) > nsig * nmad(res)
     if np.count_nonzero(outliers) > 0:
         interp = LinearNDInterpolator(join.loc[~outliers, ['xrel', 'yrel']].values, join.loc[~outliers, 'zrel'])
         print('found {} outliers using nsig={}'.format(np.count_nonzero(outliers), nsig))

@@ -12,6 +12,8 @@ def _argparser():
     _parser.add_argument('-tsize', action='store', type=int, default=300, help='half-size of search window [300 pixels]')
     _parser.add_argument('-nproc', action='store', type=int, default=1,
                          help='Number of processors to use [1].')
+    _parser.add_argument('-j', '--joined', action='store_true',
+                        help='Image is a joined KH-9 scan, rather than half of a scanned image.')
     return _parser
 
 
@@ -22,7 +24,9 @@ def main():
 
     find_reseau_grid(args.fn_img,
                      csize=args.csize,
-                     tsize=args.tsize)
+                     tsize=args.tsize,
+                     nproc=args.nproc,
+                     joined=args.joined)
 
 
 if __name__ == "__main__":

@@ -4,7 +4,7 @@ from setuptools import find_packages, setup
 readme = Path(__file__).parent / 'README.md'
 
 setup(name='spymicmac',
-      version='0.1.1',
+      version='0.1.2-dev',
       description='a python package for processing KH-9 and historical aerial imagery using MicMac',
       long_description=readme.read_text(),
       long_description_content_type='text/markdown',
@@ -47,7 +47,8 @@ setup(name='spymicmac',
               'move_bad_tapas = spymicmac.tools.move_bad_tapas:main',
               'register_ortho = spymicmac.tools.register_ortho:main',
               'remove_crosses = spymicmac.tools.remove_crosses:main',
-              'remove_measures = spymicmac.tools.remove_measures:main'
+              'remove_measures = spymicmac.tools.remove_measures:main',
+              'write_micmac_xml = spymicmac.tools.write_micmac_xml:main'
           ],
       },
       zip_safe=False)

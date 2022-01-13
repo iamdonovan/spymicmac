@@ -183,7 +183,7 @@ def get_subimg_offsets(split, shape, overlap=0):
     return rel_x.astype(int), rel_y.astype(int)
 
 
-def stretch_image(img, scale=(0, 1), mult=255, outtype=np.uint8, mask=None):
+def stretch_image(img, scale=(0, 1), mult=255, imgmin=0, outtype=np.uint8, mask=None):
     """
     Apply a linear stretch to an image by clipping and stretching to quantiles.
 
@@ -191,6 +191,7 @@ def stretch_image(img, scale=(0, 1), mult=255, outtype=np.uint8, mask=None):
     :param tuple scale: a the minimum and maximum quantile to stretch to. (default: (0, 1) - the minimum/maximum values
         of the image)
     :param int|float mult: a multiplier to scale the result to. (default: 255)
+    :param int|float imgmin: the minimum value in the output image (default: 0)
     :param numpy.dtype outtype: the numpy datatype to return the stretched image as. (default: np.uint8)
     :param array-like mask: a mask of pixels to ignore when calculating quantiles.
     :return:
@@ -206,10 +207,10 @@ def stretch_image(img, scale=(0, 1), mult=255, outtype=np.uint8, mask=None):
     img[img > maxval] = maxval
     img[img < minval] = minval
 
-    return (mult * (img - minval) / (maxval - minval)).astype(outtype)
+    return (mult * (img - minval) / (maxval - minval + imgmin)).astype(outtype)
 
 
-def contrast_enhance(fn_img, mask_value=None, qmin=0.02, qmax=0.98, gamma=1.25):
+def contrast_enhance(fn_img, mask_value=None, qmin=0.02, qmax=0.98, gamma=1.25, disksize=3, imgmin=0):
     """
     Enhance image contrast in a three-step process. First, the image is processed with a median filter to reduce
     noise. Next, a linear contrast stretch is applied, and finally, a gamma adjustment is applied.
@@ -219,6 +220,8 @@ def contrast_enhance(fn_img, mask_value=None, qmin=0.02, qmax=0.98, gamma=1.25):
     :param float qmin: the minimum quantile to use for the linear contrast stretch (default: 0.02)
     :param float qmax: the maximum quantile to use for the linear contrast stretch (default: 0.98)
     :param float gamma: the value to use for the gamma adjustment
+    :param int disksize: the filter disk size (input to skimage.morphology.disk; default: 3)
+    :param int|float imgmin: the minimum value in the output image (default: 0)
     :return:
         - **enhanced** (*array-like*) -- the contrast-enhanced image.
     """
@@ -227,10 +230,14 @@ def contrast_enhance(fn_img, mask_value=None, qmin=0.02, qmax=0.98, gamma=1.25):
         img = img.astype(np.float32)
         img[img == mask_value] = np.nan
 
-    filt = nanmedian_filter(img, footprint=disk(3))
+    filt = nanmedian_filter(img, footprint=disk(disksize))
 
-    stretch = stretch_image(filt, scale=(qmin, qmax))
+    stretch = stretch_image(filt, scale=(qmin, qmax), imgmin=imgmin)
     gamma = exposure.adjust_gamma(stretch, gamma=gamma)
+
+    if mask_value is not None:
+        gamma[img == mask_value] = mask_value
+
     return gamma
 
 
@@ -530,6 +537,63 @@ def find_gcp_match(img, template, method=cv2.TM_CCORR_NORMED):
     return res, maxi + i_off + sp_dely, maxj + j_off + sp_delx
 
 
+def do_match(dest_img, ref_img, mask, pt, srcwin, dstwin):
+    """
+    Find a match between two images using normalized cross-correlation template matching.
+
+    :param array-like dest_img: the image to search for the matching point in.
+    :param array-like ref_img: the reference image to use for matching.
+    :param array-like mask: a mask indicating areas that should be used for matching.
+    :param array-like pt: the index (i, j) to search for a match for.
+    :param int srcwin: the half-size of the template window.
+    :param int dstwin: the half-size of the search window.
+    :returns:
+        - **match_pt** (*tuple*) -- the matching point (j, i) found in dest_img
+        - **z_corr** (*float*) -- number of standard deviations (z-score) above other potential matches
+        - **peak_corr** (*float*) -- the correlation value of the matched point
+    """
+    _i, _j = pt
+    submask, _, _ = make_template(mask, pt, srcwin)
+
+    if np.count_nonzero(submask) / submask.size < 0.05:
+        return (np.nan, np.nan), np.nan, np.nan
+
+    try:
+        testchip, _, _ = make_template(ref_img, pt, srcwin)
+        dst_chip, _, _ = make_template(dest_img, pt, dstwin)
+
+        testchip[np.isnan(testchip)] = 0
+        dst_chip[np.isnan(dst_chip)] = 0
+
+        test = highpass_filter(testchip)
+        dest = highpass_filter(dst_chip)
+
+        testmask = binary_dilation(testchip == 0, selem=disk(8))
+        destmask = binary_dilation(dst_chip == 0, selem=disk(8))
+
+        test[testmask] = np.random.rand(test.shape[0], test.shape[1])[testmask]
+        dest[destmask] = np.random.rand(dest.shape[0], dest.shape[1])[destmask]
+
+        corr_res, this_i, this_j = find_gcp_match(dest.astype(np.float32), test.astype(np.float32))
+        peak_corr = cv2.minMaxLoc(corr_res)[1]
+
+        pks = peak_local_max(corr_res, min_distance=5, num_peaks=2)
+        this_z_corrs = []
+        for pk in pks:
+            max_ = corr_res[pk[0], pk[1]]
+            this_z_corrs.append((max_ - corr_res.mean()) / corr_res.std())
+        dz_corr = max(this_z_corrs) / min(this_z_corrs)
+        z_corr = max(this_z_corrs)
+
+        # if the correlation peak is very high, or very unique, add it as a match
+        out_i, out_j = this_i - dstwin + _i, this_j - dstwin + _j
+
+    except Exception as e:
+        return (np.nan, np.nan), np.nan, np.nan
+
+    return (out_j, out_i), z_corr, peak_corr
+
+
 def find_grid_matches(tfm_img, refgeo, mask, initM=None, spacing=200, srcwin=60, dstwin=600):
     """
     Find matches between two images on a grid using normalized cross-correlation template matching.
@@ -547,7 +611,6 @@ def find_grid_matches(tfm_img, refgeo, mask, initM=None, spacing=200, srcwin=60,
     match_pts = []
     z_corrs = []
     peak_corrs = []
-    res_imgs = []
 
     jj = np.arange(srcwin, spacing * np.ceil((refgeo.img.shape[1]-srcwin) / spacing) + 1, spacing).astype(int)
     ii = np.arange(srcwin, spacing * np.ceil((refgeo.img.shape[0]-srcwin) / spacing) + 1, spacing).astype(int)
@@ -557,53 +620,10 @@ def find_grid_matches(tfm_img, refgeo, mask, initM=None, spacing=200, srcwin=60,
     for _i in ii:
         for _j in jj:
             search_pts.append((_j, _i))
-            # for pt in search_pts:
-            # if mask[pt[1], pt[0]] == 0:
-            submask, _, _ = make_template(mask, (_i, _j), srcwin)
-            if np.count_nonzero(submask) / submask.size < 0.05:
-                match_pts.append((-1, -1))
-                z_corrs.append(np.nan)
-                peak_corrs.append(np.nan)
-                res_imgs.append(np.nan)
-                continue
-            try:
-                testchip, _, _ = make_template(refgeo.img, (_i, _j), srcwin)
-                dst_chip, _, _ = make_template(tfm_img, (_i, _j), dstwin)
-
-                testchip[np.isnan(testchip)] = 0
-                dst_chip[np.isnan(dst_chip)] = 0
-
-                test = highpass_filter(testchip)
-                dest = highpass_filter(dst_chip)
-
-                testmask = binary_dilation(testchip == 0, selem=disk(8))
-                destmask = binary_dilation(dst_chip == 0, selem=disk(8))
-
-                test[testmask] = np.random.rand(test.shape[0], test.shape[1])[testmask]
-                dest[destmask] = np.random.rand(dest.shape[0], dest.shape[1])[destmask]
-
-                corr_res, this_i, this_j = find_gcp_match(dest.astype(np.float32), test.astype(np.float32))
-                peak_corr = cv2.minMaxLoc(corr_res)[1]
-
-                pks = peak_local_max(corr_res, min_distance=5, num_peaks=2)
-                this_z_corrs = []
-                for pk in pks:
-                    max_ = corr_res[pk[0], pk[1]]
-                    this_z_corrs.append((max_ - corr_res.mean()) / corr_res.std())
-                dz_corr = max(this_z_corrs) / min(this_z_corrs)
-                z_corr = max(this_z_corrs)
-
-                # if the correlation peak is very high, or very unique, add it as a match
-                out_i, out_j = this_i - dstwin + _i, this_j - dstwin + _j
-                z_corrs.append(z_corr)
-                peak_corrs.append(peak_corr)
-                match_pts.append([out_j, out_i])
-                res_imgs.append(corr_res)
-            except:
-                match_pts.append((-1, -1))
-                z_corrs.append(np.nan)
-                peak_corrs.append(np.nan)
-                res_imgs.append(np.nan)
+            match, z_corr, peak_corr = do_match(tfm_img, refgeo.img, mask, (_i, _j), srcwin, dstwin)
+            match_pts.append(match)
+            z_corrs.append(z_corr)
+            peak_corrs.append(peak_corr)
 
     search_pts = np.array(search_pts)
     _dst = np.array(match_pts)
@@ -733,8 +753,14 @@ def find_reseau_border(img, rough_ext, cross, tsize=300):
 
     if np.isnan(right):
         search_corners = [(bot-625, left+180), (top+625, left+180)]
-    else:
+        nx = 23
+    elif np.isnan(left):
         search_corners = [(bot-625, right-180), (top+625, right-180)]
+        nx = 23
+    else:
+        search_corners = [(bot-625, left+180), (top+625, left+180),
+                          (bot-625, right-180), (top+625, right-180)]
+        nx = 46
 
     grid_corners = []
     for c in search_corners:
@@ -744,7 +770,7 @@ def find_reseau_border(img, rough_ext, cross, tsize=300):
         else:
             grid_corners.append((_j, _i))
     pixres = (grid_corners[0][1] - grid_corners[1][1]) / 22
-    npix = 23 * pixres
+    npix = nx * pixres
 
     perp = get_perp(grid_corners)
 
@@ -752,10 +778,13 @@ def find_reseau_border(img, rough_ext, cross, tsize=300):
         left_edge = LineString([grid_corners[0], grid_corners[1]])
         right_edge = LineString([grid_corners[0] + npix * perp,
                                  grid_corners[1] + npix * perp])
-    else:
+    elif np.isnan(left):
         right_edge = LineString([grid_corners[0], grid_corners[1]])
         left_edge = LineString([grid_corners[0] - npix * perp,
                                 grid_corners[1] - npix * perp])
+    else:
+        left_edge = LineString([grid_corners[0], grid_corners[1]])
+        right_edge = LineString([grid_corners[2], grid_corners[3]])
 
     return left_edge, right_edge
 
@@ -814,17 +843,21 @@ def get_rough_frame(img):
     return xmin, xmax, ymin, ymax
 
 
-def _search_grid(left, right):
+def _search_grid(left, right, joined=False):
     i_grid = []
     j_grid = []
     search_pts = []
 
+    if joined:
+        nj = 47
+    else:
+        nj = 24
     for ii in range(0, 23):
         this_left = left.interpolate(ii * left.length / 22)
         this_right = right.interpolate(ii * right.length / 22)
         this_line = LineString([this_left, this_right])
-        for jj in range(0, 24):
-            this_pt = this_line.interpolate(jj * this_line.length / 23)
+        for jj in range(0, nj):
+            this_pt = this_line.interpolate(jj * this_line.length / (nj- 1))
             i_grid.append(ii)
             j_grid.append(jj)
             search_pts.append((this_pt.y, this_pt.x))
@@ -832,7 +865,7 @@ def _search_grid(left, right):
     return i_grid, j_grid, search_pts
 
 
-def find_reseau_grid(fn_img, csize=361, tsize=300, nproc=1, return_val=False):
+def find_reseau_grid(fn_img, csize=361, tsize=300, nproc=1, return_val=False, joined=False):
     """
     Find the locations of the Reseau marks in a scanned KH-9 image. Locations are saved
     to Ori-InterneScan/MeasuresIm-:fn_img:.xml.
@@ -842,6 +875,7 @@ def find_reseau_grid(fn_img, csize=361, tsize=300, nproc=1, return_val=False):
     :param int tsize: the search grid size for the Reseau mark.
     :param int nproc: the number of processors to use, via multiprocessing.Pool (default: 1).
     :param bool return_val: return a pandas DataFrame of the Reseau mark locations (default: False).
+    :param bool joined: image represents a joined KH-9 image rather than a scanned half (default: False).
     :return:
         - **gcps_df** (*pandas.DataFrame*) -- a DataFrame of the Reseau mark locations (if return_val=True).
     """
@@ -865,7 +899,7 @@ def find_reseau_grid(fn_img, csize=361, tsize=300, nproc=1, return_val=False):
     rough_border = get_rough_frame(img)
     left_edge, right_edge = find_reseau_border(img, rough_border, cross, tsize=tsize)
 
-    II, JJ, search_grid = _search_grid(left_edge, right_edge)
+    II, JJ, search_grid = _search_grid(left_edge, right_edge, joined)
     matched_grid = []
 
     print('Finding grid points in {}...'.format(fn_img))
@@ -921,7 +955,8 @@ def find_reseau_grid(fn_img, csize=361, tsize=300, nproc=1, return_val=False):
     gcps_df['match_i'] = matched_grid[:, 0]
 
     model = AffineTransform()
-    model.estimate(gcps_df[['search_j', 'search_i']].values, gcps_df[['match_j', 'match_i']].values)
+    model.estimate(gcps_df.dropna()[['search_j', 'search_i']].values,
+                   gcps_df.dropna()[['match_j', 'match_i']].values)
     dst = model(gcps_df[['search_j', 'search_i']].values)
 
     nomatch = np.isnan(gcps_df.match_j)
