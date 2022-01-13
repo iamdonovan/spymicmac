@@ -36,8 +36,34 @@ Fairchild F224, K17B (Metrogon Lens)
     than the tips of the "wings"
 
 
+Fairchild KC-1, KC-1B, T-11 (Metrogon Lens)
+-------------------------------------------
+
+.. image:: ../../img/fairchild_kc1b.png
+    :width: 400
+    :align: center
+    :alt: a diagram of a Fairchild KC-1B with fiducial markers labeled
+
++----+-----+-------+
+|    | x   | y     |
++----+-----+-------+
+| P1 | 0   | 117.5 |
++----+-----+-------+
+| P2 | 238 | 117.5 |
++----+-----+-------+
+| P3 | 120 | 0     |
++----+-----+-------+
+| P4 | 120 | 235   |
++----+-----+-------+
+
+.. note::
+
+    These cameras may have different fiducial patterns.
+
+
+
 Wild RC5, RC8 (Aviogon Lens)
-=============================
+-----------------------------
 
 .. image:: ../../img/wild_rc5.png
     :width: 400
@@ -58,7 +84,7 @@ Wild RC5, RC8 (Aviogon Lens)
 
 
 Wild RC10 (Aviogon Lens)
-=========================
+-------------------------
 
 .. image:: ../../img/wild_rc10.png
     :width: 400
@@ -85,8 +111,8 @@ Wild RC10 (Aviogon Lens)
 | P8 | 110 | 220 |
 +----+-----+-----+
 
-Zeiss RMK (Pleogon Lens)
-=========================
+Zeiss RMK 15/23 (Pleogon Lens)
+-------------------------------
 
 .. image:: ../../img/zeiss.png
     :width: 400
@@ -96,7 +122,7 @@ Zeiss RMK (Pleogon Lens)
 +----+-----+-----+
 |    | x   | y   |
 +----+-----+-----+
-| P1 | 1   | 113 |
+| P1 | 0   | 113 |
 +----+-----+-----+
 | P2 | 226 | 113 |
 +----+-----+-----+
@@ -108,3 +134,37 @@ Zeiss RMK (Pleogon Lens)
 .. note::
 
     The coordinates above correspond to the center of the small dot near the tip of the fiducial marker.
+
+
+Zeiss RMK A 15/23 (Pleogon Lens)
+---------------------------------
+
+.. image:: ../../img/zeiss_rmka.png
+    :width: 400
+    :align: center
+    :alt: a diagram of a Zeiss RMK with fiducial markers labeled
+
++----+-------+-------+
+|    | x     | y     |
++----+-------+-------+
+| P1 | 9     | 217   |
++----+-------+-------+
+| P2 | 217   | 9     |
++----+-------+-------+
+| P3 | 9     | 9     |
++----+-------+-------+
+| P4 | 217   | 217   |
++----+-------+-------+
+| P5 | 0     | 113   |
++----+-------+-------+
+| P6 | 226   | 113   |
++----+-------+-------+
+| P7 | 113   | 0     |
++----+-------+-------+
+| P8 | 113   | 226   |
++----+-------+-------+
+
+.. note::
+
+    The coordinates for P5-P8 above correspond to the center of the small dot near the tip of the fiducial marker.
+
