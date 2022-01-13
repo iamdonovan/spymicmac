@@ -1,12 +1,1 @@
 sphinx-argparse
-sphinx
-sphinx_rtd_theme
-scipy
-matplotlib
-geopandas
-pyproj
-lxml
-scikit-image
-h5py
-llc
-pybob
