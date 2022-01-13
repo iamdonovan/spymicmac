@@ -1,4 +1,4 @@
-Example Camera Models
+example camera models
 =======================
 
 This section is a list of different camera models that have acquired historical aerial photos, what their fiducial marks
