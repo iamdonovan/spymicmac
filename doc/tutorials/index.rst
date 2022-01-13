@@ -3,9 +3,15 @@ Tutorials
 
 Here, you will find information about the workflow for using sPyMicMac to process KH-9 and historic air photos.
 
+.. image:: ../img/workflow.png
+    :width: 600
+    :align: center
+    :alt: a flow diagram showing the steps involved in spymicmac processing
+
 .. toctree::
+   :glob:
    :maxdepth: 2
 
-   cameras/index
    preprocessing/index
    micmac_processing/index
+
