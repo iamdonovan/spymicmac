@@ -21,7 +21,6 @@ from skimage.measure import ransac
 from skimage.filters import median
 from skimage.morphology import disk, binary_dilation
 from skimage.transform import EuclideanTransform, AffineTransform, warp
-from pybob.bob_tools import mkdir_p
 from pybob.ddem_tools import nmad
 from pybob.image_tools import create_mask_from_shapefile
 from pybob.GeoImg import GeoImg
@@ -423,7 +422,7 @@ def register_ortho_old(fn_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, landm
     if out_dir is None:
         out_dir = 'auto_gcps'
 
-    mkdir_p(out_dir)
+    os.makedirs(out_dir, exist_ok=True)
 
     if block_num is not None:
         subscript = '_block{}'.format(block_num)
@@ -747,7 +746,7 @@ def register_ortho(fn_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, landmask=
     if out_dir is None:
         out_dir = 'auto_gcps'
 
-    mkdir_p(out_dir)
+    os.makedirs(out_dir, exist_ok=True)
 
     if block_num is not None:
         subscript = '_block{}'.format(block_num)
