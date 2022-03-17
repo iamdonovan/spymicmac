@@ -29,7 +29,6 @@ import geopandas as gpd
 # from llc import jit_filter_function
 from numba import jit
 from pybob.image_tools import match_hist, reshape_geoimg, create_mask_from_shapefile, nanmedian_filter
-from pybob.bob_tools import mkdir_p
 from pymmaster.mmaster_tools import orient_footprint
 from spymicmac.micmac import get_im_meas, parse_im_meas
 
@@ -803,42 +802,22 @@ def get_rough_frame(img):
         - **xmin**, **xmax**, **ymin**, **ymax** (*float*) -- the left, right, top, and bottom indices for the rough border.
     """
     img_lowres = downsample_image(img, fact=10)
-    img_seg = np.zeros(img_lowres.shape)
-    img_seg[img_lowres > filters.threshold_local(img_lowres, 101)] = 1
-    img_seg = binary_closing(img_seg, selem=disk(1))
 
-    v_sob = filters.sobel_v(img_seg)**2
-    h_sob = filters.sobel_h(img_seg)**2
+    rowmean = img_lowres.mean(axis=0)
+    colmean = img_lowres.mean(axis=1)
 
-    vert = np.count_nonzero(v_sob > 0.5, axis=0)
-    hori = np.count_nonzero(h_sob > 0.5, axis=1)
+    xmin = 10 * np.where(rowmean > np.percentile(rowmean, 10))[0][0]
 
-    vert_thresh = 0.3 * vert.max()
-    hori_thresh = 0.3 * hori.max()
-
-    try:
-        xmin = 10 * peak_local_max(vert[:200], num_peaks=2, min_distance=20,
-                                   threshold_abs=vert_thresh, exclude_border=10).max()
-    except ValueError:
+    if xmin / img.shape[1] < 0.001:
         xmin = np.nan
 
-    try:
-        xmax = 10 * (peak_local_max(vert[-200:], num_peaks=2, min_distance=20,
-                                    threshold_abs=vert_thresh, exclude_border=10).min() + img_lowres.shape[1] - 200)
-    except ValueError:
+    xmax = 10 * np.where(rowmean > np.percentile(rowmean, 10))[0][-1]
+
+    if xmax / img.shape[1] > 0.999:
         xmax = np.nan
 
-    try:
-        ymin = 10 * peak_local_max(hori[:200], num_peaks=2, min_distance=10,
-                                   threshold_abs=hori_thresh, exclude_border=5).max()
-    except ValueError:
-        ymin = np.nan
-
-    try:
-        ymax = 10 * (peak_local_max(hori[-200:], num_peaks=2, min_distance=10,
-                                    threshold_abs=hori_thresh, exclude_border=5).min() + img_lowres.shape[0] - 200)
-    except ValueError:
-        ymax = np.nan
+    ymin = 10 * np.where(colmean > np.percentile(colmean, 10))[0][0]
+    ymax = 10 * np.where(colmean > np.percentile(colmean, 10))[0][-1]
 
     return xmin, xmax, ymin, ymax
 
@@ -857,7 +836,7 @@ def _search_grid(left, right, joined=False):
         this_right = right.interpolate(ii * right.length / 22)
         this_line = LineString([this_left, this_right])
         for jj in range(0, nj):
-            this_pt = this_line.interpolate(jj * this_line.length / (nj- 1))
+            this_pt = this_line.interpolate(jj * this_line.length / (nj - 1))
             i_grid.append(ii)
             j_grid.append(jj)
             search_pts.append((this_pt.y, this_pt.x))
@@ -974,7 +953,7 @@ def find_reseau_grid(fn_img, csize=361, tsize=300, nproc=1, return_val=False, jo
     gcps_df['im_col'] = gcps_df['match_j']
 
     print('Grid points found.')
-    mkdir_p('match_imgs')
+    os.makedirs('match_imgs', exist_ok=True)
 
     ax.quiver(gcps_df.search_j, gcps_df.search_i, gcps_df.dj, gcps_df.di, color='r')
     ax.plot(gcps_df.search_j[nomatch], gcps_df.search_i[nomatch], 'b+')
@@ -987,7 +966,7 @@ def find_reseau_grid(fn_img, csize=361, tsize=300, nproc=1, return_val=False, jo
     pt_els = get_im_meas(gcps_df, E)
     for p in pt_els:
         ImMes.append(p)
-    mkdir_p('Ori-InterneScan')
+    os.makedirs('Ori-InterneScan', exist_ok=True)
 
     outxml = E.SetOfMesureAppuisFlottants(ImMes)
     tree = etree.ElementTree(outxml)
@@ -1048,7 +1027,7 @@ def remove_crosses(fn_img):
         subim, row_, col_ = make_template(img, pt, 200)
         img[pt[0] - row_[0]:pt[0] + row_[1] + 1, pt[1] - col_[0]:pt[1] + col_[1] + 1] = _fix_cross(subim)
 
-    mkdir_p('original')
+    os.makedirs('original', exist_ok=True)
     shutil.move(fn_img, 'original')
     io.imsave(fn_img, img.astype(np.uint8))
 
