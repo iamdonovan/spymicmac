@@ -21,7 +21,6 @@ from shapely.strtree import STRtree
 from skimage.io import imread
 from skimage.measure import ransac
 from skimage.transform import AffineTransform
-from pybob.bob_tools import mkdir_p
 from pybob.GeoImg import GeoImg
 from pybob.ddem_tools import nmad
 from pybob.image_tools import create_mask_from_shapefile
@@ -525,7 +524,7 @@ def move_bad_tapas(ori):
     res_df['pct_ok'] = [float(a.find('PercOk').text) for a in root.findall('Iters')[ind].findall('OneIm')]
     res_df['npts'] = [float(a.find('NbPts').text) for a in root.findall('Iters')[ind].findall('OneIm')]
 
-    mkdir_p('bad')
+    os.makedirs('bad', exist_ok=True)
     for im in res_df['name'][np.isnan(res_df.residual)]:
         print('{} -> bad/{}'.format(im, im))
         shutil.move(im, 'bad')
