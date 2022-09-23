@@ -806,18 +806,22 @@ def get_rough_frame(img):
     rowmean = img_lowres.mean(axis=0)
     colmean = img_lowres.mean(axis=1)
 
-    xmin = 10 * np.where(rowmean > np.percentile(rowmean, 10))[0][0]
+    # xmin = 10 * np.where(rowmean > np.percentile(rowmean, 10))[0][0]
+    xmin = 10 * (np.argmax(np.diff(rowmean)) + 1)
 
     if xmin / img.shape[1] < 0.001:
         xmin = np.nan
 
-    xmax = 10 * np.where(rowmean > np.percentile(rowmean, 10))[0][-1]
+    # xmax = 10 * np.where(rowmean > np.percentile(rowmean, 10))[0][-1]
+    xmax = 10 * (np.argmin(np.diff(rowmean)) + 1)
 
     if xmax / img.shape[1] > 0.999:
         xmax = np.nan
 
-    ymin = 10 * np.where(colmean > np.percentile(colmean, 10))[0][0]
-    ymax = 10 * np.where(colmean > np.percentile(colmean, 10))[0][-1]
+    # ymin = 10 * np.where(colmean > np.percentile(colmean, 10))[0][0]
+    # ymax = 10 * np.where(colmean > np.percentile(colmean, 10))[0][-1]
+    ymin = 10 * (np.argmax(np.diff(colmean)) + 1)
+    ymax = 10 * (np.argmin(np.diff(colmean)) + 1)
 
     return xmin, xmax, ymin, ymax
 
