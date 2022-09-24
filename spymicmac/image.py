@@ -723,6 +723,8 @@ def lsq_fit(x, y, z):
     return out_lsq
 
 
+# thanks to SO user Jamie for this answer
+# https://stackoverflow.com/a/14314054
 def _moving_average(a, n=5):
     ret = np.cumsum(a)
     ret[n:] = ret[n:] - ret[:-n]
