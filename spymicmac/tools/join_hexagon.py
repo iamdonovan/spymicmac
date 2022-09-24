@@ -15,6 +15,8 @@ def _argparser():
                         help='Blend across image halves to prevent a sharp line at edge.')
     parser.add_argument('-c', '--corona', action='store_true',
                         help='Images are Corona KH-4/KH-4A scans (i.e., there are 4 parts).')
+    parser.add_argument('-m', '--main', action='store_true',
+                        help='Images are from KH-9 main camera (i.e., there are 8 parts).')
     return parser
 
 
@@ -28,7 +30,8 @@ def main():
         join_hexagon(im,
                      overlap=args.overlap,
                      blend=args.blend,
-                     corona=args.corona)
+                     corona=args.corona,
+                     main=args.main)
 
 
 if __name__ == "__main__":

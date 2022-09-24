@@ -1041,7 +1041,7 @@ def remove_crosses(fn_img):
     io.imsave(fn_img, img.astype(np.uint8))
 
 
-def join_hexagon(im_pattern, overlap=2000, blend=True, corona=False):
+def join_hexagon(im_pattern, overlap=2000, blend=True, corona=False, main=False):
     """
     Join two halves of a scanned KH-9 Hexagon image (or four parts of a scanned KH-4 Corona image).
 
@@ -1050,8 +1050,56 @@ def join_hexagon(im_pattern, overlap=2000, blend=True, corona=False):
     :param bool blend: apply a linear blend between the two scanned halves (default: True).
     :param bool corona: image is a KH-4/4A Corona image. If True, looks for four image parts instead
         of two (default: False).
+    :param bool main: image is from the KH-9 main camera, instead of the mapping camera. If True, looks for
+        eight image parts instead of two (default: False).
     """
-    if not corona:
+    if main:
+        left = io.imread('{}_a.tif'.format(im_pattern))
+        for right_img in ['b', 'c', 'd', 'e', 'f', 'g', 'h']:
+            right = io.imread('{}_{}.tif'.format(im_pattern, right_img))
+
+            M = match_halves(left, right, overlap=overlap)
+            out_shape = (left.shape[0], left.shape[1] + right.shape[1])
+
+            combined_right = warp(right, M, output_shape=out_shape, preserve_range=True, order=3)
+
+            combined_left = np.zeros(out_shape, dtype=np.uint8)
+            combined_left[:, :left.shape[1]] = left
+
+            if blend:
+                combined = _blend(combined_left, combined_right, left.shape)
+            else:
+                combined_right[:, :left.shape[1]] = 0
+                combined = combined_left + combined_right
+
+            last_ind = np.where(np.sum(combined, axis=0) > 0)[0][-1]
+            left = combined[:, :last_ind + 1]
+
+        io.imsave('{}.tif'.format(im_pattern), combined.astype(np.uint8))
+    elif corona:
+        left = io.imread('{}_d.tif'.format(im_pattern))
+        for right_img in ['c', 'b', 'a']:
+            right = io.imread('{}_{}.tif'.format(im_pattern, right_img))
+
+            M = match_halves(left, right, overlap=overlap)
+            out_shape = (left.shape[0], left.shape[1] + right.shape[1])
+
+            combined_right = warp(right, M, output_shape=out_shape, preserve_range=True, order=3)
+
+            combined_left = np.zeros(out_shape, dtype=np.uint8)
+            combined_left[:, :left.shape[1]] = left
+
+            if blend:
+                combined = _blend(combined_left, combined_right, left.shape)
+            else:
+                combined_right[:, :left.shape[1]] = 0
+                combined = combined_left + combined_right
+
+            last_ind = np.where(np.sum(combined, axis=0) > 0)[0][-1]
+            left = combined[:, :last_ind + 1]
+
+        io.imsave('{}.tif'.format(im_pattern), combined.astype(np.uint8))
+    else:
         left = io.imread('{}_a.tif'.format(im_pattern))
         right = io.imread('{}_b.tif'.format(im_pattern))
 
@@ -1075,29 +1123,6 @@ def join_hexagon(im_pattern, overlap=2000, blend=True, corona=False):
 
         last_ind = np.where(np.sum(combined, axis=0) > 0)[0][-1]
         combined = combined[:, :last_ind+1]
-
-        io.imsave('{}.tif'.format(im_pattern), combined.astype(np.uint8))
-    else:
-        left = io.imread('{}_d.tif'.format(im_pattern))
-        for right_img in ['c', 'b', 'a']:
-            right = io.imread('{}_{}.tif'.format(im_pattern, right_img))
-
-            M = match_halves(left, right, overlap=overlap)
-            out_shape = (left.shape[0], left.shape[1] + right.shape[1])
-
-            combined_right = warp(right, M, output_shape=out_shape, preserve_range=True, order=3)
-
-            combined_left = np.zeros(out_shape, dtype=np.uint8)
-            combined_left[:, :left.shape[1]] = left
-
-            if blend:
-                combined = _blend(combined_left, combined_right, left.shape)
-            else:
-                combined_right[:, :left.shape[1]] = 0
-                combined = combined_left + combined_right
-
-            last_ind = np.where(np.sum(combined, axis=0) > 0)[0][-1]
-            left = combined[:, :last_ind + 1]
 
         io.imsave('{}.tif'.format(im_pattern), combined.astype(np.uint8))
 
