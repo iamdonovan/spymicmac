@@ -253,14 +253,14 @@ def generate_measures_files(joined=False):
 
 
 def create_localchantier_xml(name='KH9MC', short_name='KH-9 Hexagon Mapping Camera', film_size=(460, 220),
-                             pattern='DZB.*', focal=304.8):
+                             pattern='.*', focal=304.8):
     """
     Create a MicMac-LocalChantierDescripteur.xml file for a given camera. Default is the KH-9 Hexagon Mapping Camera.
 
     :param str name: The name to use for the camera [KH9MC]
     :param str short_name: A short description of the camera [KH-9 Hexagon Mapping Camera]
     :param array-like film_size: the film size (width, height) in mm [460, 220]
-    :param str pattern: the matching pattern to use for the raw images [DZB.*]
+    :param str pattern: the matching pattern to use for the images [.*]
     :param float focal: the nominal focal length, in mm [304.8]
     """
     E = builder.ElementMaker()
@@ -300,12 +300,15 @@ def create_localchantier_xml(name='KH9MC', short_name='KH-9 Hexagon Mapping Came
     tree = etree.ElementTree(outxml)
     tree.write('MicMac-LocalChantierDescripteur.xml', pretty_print=True, xml_declaration=True, encoding="utf-8")
 
+
 def init_autocal(imsize=(32857, 15714)):
     """
     Create an AutoCal xml file for the KH-9 Mapping Camera for use in the Tapas step.
 
     :param array-like imsize: the size of the image (width, height) in pixels
     """
+    os.makedirs('Ori-Init', exist_ok=True)
+
     pp = np.array(imsize) / 2
 
     E = builder.ElementMaker()
@@ -327,7 +330,8 @@ def init_autocal(imsize=(32857, 15714)):
     )
 
     tree = etree.ElementTree(outxml)
-    tree.write('AutoCal_Foc-304800_KH9MC.xml', pretty_print=True, xml_declaration=True, encoding="utf-8")
+    tree.write(os.path.join('Ori-Init', 'AutoCal_Foc-304800_KH9MC.xml'),
+               pretty_print=True, xml_declaration=True, encoding="utf-8")
 
 
 def get_match_pattern(imlist):
