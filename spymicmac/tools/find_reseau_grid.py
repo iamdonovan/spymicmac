@@ -13,7 +13,7 @@ def _argparser():
     _parser.add_argument('-nproc', action='store', type=int, default=1,
                          help='Number of processors to use [1].')
     _parser.add_argument('-j', '--joined', action='store_true',
-                        help='Image is a joined KH-9 scan, rather than half of a scanned image.')
+                         help='Image is a joined KH-9 scan, rather than half of a scanned image.')
     return _parser
 
 
