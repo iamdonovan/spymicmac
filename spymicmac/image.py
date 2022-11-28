@@ -826,8 +826,8 @@ def get_rough_frame(img):
 
     # get the location in the sorted array that corresponds to the minimum and maximum
     # of the difference, that's also in the right half of the image
-    min_ind = np.where(sorted_row < 0.05 * sorted_row.size)[0][-1]
-    max_ind = np.where(sorted_row > 0.95 * sorted_row.size)[0][0]
+    min_ind = np.where(sorted_row < 0.1 * sorted_row.size)[0][-1]
+    max_ind = np.where(sorted_row > 0.9 * sorted_row.size)[0][0]
 
     xmin = 10 * (sorted_row[min_ind] + 1)
     xmax = 10 * (sorted_row[max_ind] + 1)
@@ -838,8 +838,8 @@ def get_rough_frame(img):
 
     # get the location in the sorted array that corresponds to the minimum and maximum
     # of the difference, that's also in the right half of the image
-    min_ind = np.where(sorted_col < 0.05 * sorted_col.size)[0][-1]
-    max_ind = np.where(sorted_col > 0.95 * sorted_col.size)[0][0]
+    min_ind = np.where(sorted_col < 0.1 * sorted_col.size)[0][-1]
+    max_ind = np.where(sorted_col > 0.9 * sorted_col.size)[0][0]
 
     ymin = 10 * (sorted_col[min_ind] + 1)
     ymax = 10 * (sorted_col[max_ind] + 1)
@@ -885,9 +885,7 @@ def find_reseau_grid(fn_img, csize=361, tsize=300, nproc=1, return_val=False, jo
     """
     print('Reading {}'.format(fn_img))
     img = io.imread(fn_img)
-    img_ = PIL.Image.fromarray(img)
-    img_lowres = np.array(img_.resize((np.array(img_.size)/10).astype(int), PIL.Image.Resampling.LANCZOS))
-    del img_
+    img_lowres = downsample_image(img, fact=10)
 
     print('Image read.')
     tmp_cross = cross_template(csize, width=3)
