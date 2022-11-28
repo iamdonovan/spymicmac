@@ -253,7 +253,7 @@ def generate_measures_files(joined=False):
 
 
 def create_localchantier_xml(name='KH9MC', short_name='KH-9 Hexagon Mapping Camera', film_size=(460, 220),
-                             pattern='.*', focal=304.8):
+                             pattern='.*', focal=304.8, add_sfs=False):
     """
     Create a MicMac-LocalChantierDescripteur.xml file for a given camera. Default is the KH-9 Hexagon Mapping Camera.
 
@@ -262,41 +262,55 @@ def create_localchantier_xml(name='KH9MC', short_name='KH-9 Hexagon Mapping Came
     :param array-like film_size: the film size (width, height) in mm [460, 220]
     :param str pattern: the matching pattern to use for the images [.*]
     :param float focal: the nominal focal length, in mm [304.8]
+    :param bool add_sfs: use SFS to help find tie points in low-contrast images [False]
     """
     E = builder.ElementMaker()
 
-    outxml = E.Global(
-        E.ChantierDescripteur(
-            E.LocCamDataBase(
-                E.CameraEntry(
-                    E.Name(name),
-                    E.SzCaptMm('{} {}'.format(film_size[0], film_size[1])),
-                    E.ShortName(short_name)
+    chantier = E.ChantierDescripteur(
+        E.LocCamDataBase(
+            E.CameraEntry(
+                E.Name(name),
+                E.SzCaptMm('{} {}'.format(film_size[0], film_size[1])),
+                E.ShortName(short_name)
+            )
+        ),
+        E.KeyedNamesAssociations(
+            E.Calcs(
+                E.Arrite('1 1'),
+                E.Direct(
+                    E.PatternTransform(pattern),
+                    E.CalcName(name)
                 )
             ),
+            E.Key('NKS-Assoc-STD-CAM')
+        ),
+        E.KeyedNamesAssociations(
+            E.Calcs(
+                E.Arrite('1 1'),
+                E.Direct(
+                    E.PatternTransform('OIS.*'),
+                    E.CalcName('{}'.format(focal))
+                )
+            ),
+            E.Key('NKS-Assoc-STD-FOC')
+        )
+    )
+
+    if add_sfs:
+        chantier.append(
             E.KeyedNamesAssociations(
                 E.Calcs(
                     E.Arrite('1 1'),
                     E.Direct(
                         E.PatternTransform(pattern),
-                        E.CalcName(name)
+                        E.CalcName('SFS'),
                     )
                 ),
-                E.Key('NKS-Assoc-STD-CAM')
-            ),
-            E.KeyedNamesAssociations(
-                E.Calcs(
-                    E.Arrite('1 1'),
-                    E.Direct(
-                        E.PatternTransform('OIS.*'),
-                        E.CalcName('{}'.format(focal))
-                    )
-                ),
-                E.Key('NKS-Assoc-STD-FOC')
+                E.Key('NKS-Assoc-SFS')
             )
         )
-    )
 
+    outxml = E.Global(chantier)
     tree = etree.ElementTree(outxml)
     tree.write('MicMac-LocalChantierDescripteur.xml', pretty_print=True, xml_declaration=True, encoding="utf-8")
 
