@@ -792,7 +792,7 @@ def find_reseau_border(img, rough_ext, cross, tsize=300):
 
 def downsample_image(img, fact=4):
     _img = PIL.Image.fromarray(img)
-    return np.array(_img.resize((np.array(_img.size) / fact).astype(int), PIL.Image.LANCZOS))
+    return np.array(_img.resize((np.array(_img.size) / fact).astype(int), PIL.Image.Resampling.LANCZOS))
 
 
 def get_rough_frame(img):
@@ -812,21 +812,37 @@ def get_rough_frame(img):
     smooth_col = _moving_average(colmean)
 
     # xmin = 10 * np.where(rowmean > np.percentile(rowmean, 10))[0][0]
-    xmin = 10 * (np.argmax(np.diff(smooth_row)) + 1)
+    # xmin = 10 * (np.argmax(np.diff(smooth_row)) + 1)
 
-    if xmin / img.shape[1] < 0.001:
-        xmin = np.nan
+    # if xmin / img.shape[1] < 0.001:
+    #     xmin = np.nan
 
     # xmax = 10 * np.where(rowmean > np.percentile(rowmean, 10))[0][-1]
-    xmax = 10 * (np.argmin(np.diff(smooth_row)) + 1)
+    # xmax = 10 * (np.argmin(np.diff(smooth_row)) + 1)
 
-    if xmax / img.shape[1] > 0.999:
-        xmax = np.nan
+    # if xmax / img.shape[1] > 0.999:
+    #     xmax = np.nan
+    sorted_row = np.argsort(np.diff(smooth_row))
+
+    # get the location in the sorted array that corresponds to the minimum and maximum
+    # of the difference, that's also in the right half of the image
+    min_ind = np.where(sorted_row < 0.05 * sorted_row.size)[0][-1]
+    max_ind = np.where(sorted_row > 0.95 * sorted_row.size)[0][0]
+
+    xmin = 10 * (sorted_row[min_ind] + 1)
+    xmax = 10 * (sorted_row[max_ind] + 1)
 
     # ymin = 10 * np.where(colmean > np.percentile(colmean, 10))[0][0]
     # ymax = 10 * np.where(colmean > np.percentile(colmean, 10))[0][-1]
-    ymin = 10 * (np.argmax(np.diff(smooth_col)) + 1)
-    ymax = 10 * (np.argmin(np.diff(smooth_col)) + 1)
+    sorted_col = np.argsort(np.diff(smooth_col))
+
+    # get the location in the sorted array that corresponds to the minimum and maximum
+    # of the difference, that's also in the right half of the image
+    min_ind = np.where(sorted_col < 0.05 * sorted_col.size)[0][-1]
+    max_ind = np.where(sorted_col > 0.95 * sorted_col.size)[0][0]
+
+    ymin = 10 * (sorted_col[min_ind] + 1)
+    ymax = 10 * (sorted_col[max_ind] + 1)
 
     return xmin, xmax, ymin, ymax
 
@@ -870,7 +886,7 @@ def find_reseau_grid(fn_img, csize=361, tsize=300, nproc=1, return_val=False, jo
     print('Reading {}'.format(fn_img))
     img = io.imread(fn_img)
     img_ = PIL.Image.fromarray(img)
-    img_lowres = np.array(img_.resize((np.array(img_.size)/10).astype(int), PIL.Image.LANCZOS))
+    img_lowres = np.array(img_.resize((np.array(img_.size)/10).astype(int), PIL.Image.Resampling.LANCZOS))
     del img_
 
     print('Image read.')
@@ -1041,12 +1057,13 @@ def remove_crosses(fn_img):
     io.imsave(fn_img, img.astype(np.uint8))
 
 
-def join_hexagon(im_pattern, overlap=2000, blend=True, corona=False, main=False):
+def join_hexagon(im_pattern, overlap=2000, block_size=None, blend=True, corona=False, main=False):
     """
     Join two halves of a scanned KH-9 Hexagon image (or four parts of a scanned KH-4 Corona image).
 
     :param str im_pattern: the base name of the image to use (e.g., DZB1216-500280L002001).
     :param int overlap: the overlap, in pixels, between the image parts.
+    :param int block_size: the number of rows each sub-block should cover. Defaults to overlap.
     :param bool blend: apply a linear blend between the two scanned halves (default: True).
     :param bool corona: image is a KH-4/4A Corona image. If True, looks for four image parts instead
         of two (default: False).
@@ -1058,7 +1075,7 @@ def join_hexagon(im_pattern, overlap=2000, blend=True, corona=False, main=False)
         for right_img in ['b', 'c', 'd', 'e', 'f', 'g', 'h']:
             right = io.imread('{}_{}.tif'.format(im_pattern, right_img))
 
-            M = match_halves(left, right, overlap=overlap)
+            M = match_halves(left, right, overlap=overlap, block_size=block_size)
             out_shape = (left.shape[0], left.shape[1] + right.shape[1])
 
             combined_right = warp(right, M, output_shape=out_shape, preserve_range=True, order=3)
@@ -1073,7 +1090,7 @@ def join_hexagon(im_pattern, overlap=2000, blend=True, corona=False, main=False)
                 combined = combined_left + combined_right
 
             last_ind = np.where(np.sum(combined, axis=0) > 0)[0][-1]
-            left = combined[:, :last_ind + 1]
+            left = combined[:, :last_ind - int(overlap / 2)]
 
         io.imsave('{}.tif'.format(im_pattern), combined.astype(np.uint8))
     elif corona:
@@ -1140,20 +1157,24 @@ def _blend(_left, _right, left_shape):
     return alpha * _left + (1 - alpha) * _right
 
 
-def match_halves(left, right, overlap):
+def match_halves(left, right, overlap, block_size=None):
     """
     Find a transformation to join the left and right halves of an image scan.
 
     :param array-like left: the left-hand image scan.
     :param array-like right: the right-hand image scan.
     :param int overlap: the estimated overlap between the two images, in pixels.
+    :param int block_size: the number of rows each sub-block should cover. Defaults to overlap.
     :return:
         - **model** (*EuclideanTransform*) -- the estimated Euclidean transformation between the two image halves.
     """
     src_pts = []
     dst_pts = []
 
-    row_inds = list(range(0, left.shape[0] + 1, overlap))
+    if block_size is None:
+        block_size = overlap
+
+    row_inds = list(range(0, left.shape[0] + 1, block_size))
     if row_inds[-1] != left.shape[0]:
         row_inds.append(-1)
     row_inds = np.array(row_inds)
