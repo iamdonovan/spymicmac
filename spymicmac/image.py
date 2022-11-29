@@ -209,6 +209,28 @@ def stretch_image(img, scale=(0, 1), mult=255, imgmin=0, outtype=np.uint8, mask=
     return (mult * (img - minval) / (maxval - minval + imgmin)).astype(outtype)
 
 
+def remove_scanner_stripes(img, dtype=np.uint8, scan_axis=1):
+    """
+    Remove horizontal (or vertical) stripes from an image.
+
+    :param array-like img: the image to remove stripes from.
+    :param numpy.dtype dtype: the original datatype of the image.
+    :param int scan_axis: the axis corresponding to the direction of the stripes. A scan_axis of 1 corresponds to
+        horizontal stripes (the default), while a scan_axis of 0 corresponds to vertical stripes.
+
+    :returns: **destriped**: the original image with the stripes (mostly) removed.
+    """
+    assert scan_axis in [0, 1], "scan_axis corresponds to image axis of scan direction [0, 1]"
+    if scan_axis == 0:
+        outimg = img.astype(np.float32) + \
+                 ((np.median(img.flatten()) - np.median(img, axis=scan_axis)).reshape(1, -1) * np.ones(img.shape))
+    else:
+        outimg = img.astype(np.float32) + \
+                 (np.ones(img.shape) * (np.median(img.flatten()) - np.median(img, axis=scan_axis)).reshape(-1, 1))
+
+    return stretch_image(outimg, outtype=dtype)
+
+
 def contrast_enhance(fn_img, mask_value=None, qmin=0.02, qmax=0.98, gamma=1.25, disksize=3, imgmin=0):
     """
     Enhance image contrast in a three-step process. First, the image is processed with a median filter to reduce
