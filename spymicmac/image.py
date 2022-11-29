@@ -182,7 +182,7 @@ def get_subimg_offsets(split, shape, overlap=0):
     return rel_x.astype(int), rel_y.astype(int)
 
 
-def stretch_image(img, scale=(0, 1), mult=255, imgmin=0, outtype=np.uint8, mask=None):
+def stretch_image(img, scale=(0.0, 1.0), mult=255, imgmin=0, outtype=np.uint8, mask=None):
     """
     Apply a linear stretch to an image by clipping and stretching to quantiles.
 
@@ -1092,74 +1092,31 @@ def join_hexagon(im_pattern, overlap=2000, block_size=None, blend=True, corona=F
     """
     if main:
         left = io.imread('{}_a.tif'.format(im_pattern))
-        for right_img in ['b', 'c', 'd', 'e', 'f', 'g', 'h']:
+
+        imlist = glob(im_pattern + '*.tif')
+        imlist.sort()
+
+        parts = [os.path.splitext(fn_img.split('_')[-1])[0] for fn_img in imlist]
+
+        for right_img in parts:
             right = io.imread('{}_{}.tif'.format(im_pattern, right_img))
 
-            M = match_halves(left, right, overlap=overlap, block_size=block_size)
-            out_shape = (left.shape[0], left.shape[1] + right.shape[1])
+            left = join_halves(left, right, overlap, block_size=block_size, blend=blend, trim=True)
 
-            combined_right = warp(right, M, output_shape=out_shape, preserve_range=True, order=3)
-
-            combined_left = np.zeros(out_shape, dtype=np.uint8)
-            combined_left[:, :left.shape[1]] = left
-
-            if blend:
-                combined = _blend(combined_left, combined_right, left.shape)
-            else:
-                combined_right[:, :left.shape[1]] = 0
-                combined = combined_left + combined_right
-
-            last_ind = np.where(np.sum(combined, axis=0) > 0)[0][-1]
-            left = combined[:, :last_ind - int(overlap / 2)]
-
-        io.imsave('{}.tif'.format(im_pattern), combined.astype(np.uint8))
+        io.imsave('{}.tif'.format(im_pattern), left.astype(np.uint8))
     elif corona:
         left = io.imread('{}_d.tif'.format(im_pattern))
         for right_img in ['c', 'b', 'a']:
             right = io.imread('{}_{}.tif'.format(im_pattern, right_img))
 
-            M = match_halves(left, right, overlap=overlap)
-            out_shape = (left.shape[0], left.shape[1] + right.shape[1])
+            left = join_halves(left, right, overlap, block_size=block_size, blend=blend, trim=True)
 
-            combined_right = warp(right, M, output_shape=out_shape, preserve_range=True, order=3)
-
-            combined_left = np.zeros(out_shape, dtype=np.uint8)
-            combined_left[:, :left.shape[1]] = left
-
-            if blend:
-                combined = _blend(combined_left, combined_right, left.shape)
-            else:
-                combined_right[:, :left.shape[1]] = 0
-                combined = combined_left + combined_right
-
-            last_ind = np.where(np.sum(combined, axis=0) > 0)[0][-1]
-            left = combined[:, :last_ind + 1]
-
-        io.imsave('{}.tif'.format(im_pattern), combined.astype(np.uint8))
+        io.imsave('{}.tif'.format(im_pattern), left.astype(np.uint8))
     else:
         left = io.imread('{}_a.tif'.format(im_pattern))
         right = io.imread('{}_b.tif'.format(im_pattern))
 
-        left_gd = gdal.Open('{}_a.tif'.format(im_pattern))
-        right_gd = gdal.Open('{}_b.tif'.format(im_pattern))
-
-        M = match_halves(left, right, overlap=overlap)
-
-        out_shape = (left.shape[0], left.shape[1] + right.shape[1])
-
-        combined_right = warp(right, M, output_shape=out_shape, preserve_range=True, order=3)
-
-        combined_left = np.zeros(out_shape, dtype=np.uint8)
-        combined_left[:, :left.shape[1]] = left
-
-        if blend:
-            combined = _blend(combined_left, combined_right, left.shape)
-        else:
-            combined_right[:, :left.shape[1]] = 0
-            combined = combined_left + combined_right
-
-        last_ind = np.where(np.sum(combined, axis=0) > 0)[0][-1]
-        combined = combined[:, :last_ind+1]
+        combined = join_halves(left, right, overlap, block_size=block_size, blend=blend, trim=False)
 
         io.imsave('{}.tif'.format(im_pattern), combined.astype(np.uint8))
 
@@ -1175,6 +1132,39 @@ def _blend(_left, _right, left_shape):
         alpha[:, ind] = 1 + m * (ind - first)
 
     return alpha * _left + (1 - alpha) * _right
+
+
+def join_halves(left, right, overlap, block_size=None, blend=True, trim=False):
+    """
+
+    :param left:
+    :param right:
+    :param overlap:
+    :param block_size:
+    :param blend:
+    :param trim:
+    :return:
+    """
+    M = match_halves(left, right, overlap=overlap, block_size=block_size)
+    out_shape = (left.shape[0], left.shape[1] + right.shape[1])
+
+    combined_right = warp(right, M, output_shape=out_shape, preserve_range=True, order=3)
+
+    combined_left = np.zeros(out_shape, dtype=np.uint8)
+    combined_left[:, :left.shape[1]] = left
+
+    if blend:
+        combined = _blend(combined_left, combined_right, left.shape)
+    else:
+        combined_right[:, :left.shape[1]] = 0
+        combined = combined_left + combined_right
+
+    last_ind = np.where(np.sum(combined, axis=0) > 0)[0][-1]
+
+    if trim:
+        return combined[:, :last_ind - int(overlap / 4)]
+    else:
+        return combined[:, :last_ind]
 
 
 def match_halves(left, right, overlap, block_size=None):
@@ -1212,6 +1202,6 @@ def match_halves(left, right, overlap, block_size=None):
             continue
 
     model, inliers = ransac((np.array(src_pts), np.array(dst_pts)), EuclideanTransform,
-                        min_samples=25, residual_threshold=1, max_trials=1000)
+                        min_samples=25, residual_threshold=2, max_trials=1000)
     print('{} tie points found'.format(np.count_nonzero(inliers)))
     return model
