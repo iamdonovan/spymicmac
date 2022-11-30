@@ -1134,7 +1134,7 @@ def _blend(_left, _right, left_shape):
     return alpha * _left + (1 - alpha) * _right
 
 
-def join_halves(left, right, overlap, block_size=None, blend=True, trim=False):
+def join_halves(left, right, overlap, block_size=None, blend=True, trim=None):
     """
 
     :param left:
@@ -1159,10 +1159,12 @@ def join_halves(left, right, overlap, block_size=None, blend=True, trim=False):
         combined_right[:, :left.shape[1]] = 0
         combined = combined_left + combined_right
 
-    last_ind = np.where(np.sum(combined, axis=0) > 0)[0][-1]
+    # last_ind = np.where(np.sum(combined, axis=0) > 0)[0][-1]
+    right_edge = M.inverse(np.array([[right.shape[1], 0], [right.shape[1], right.shape[0]]]))
+    last_ind = int(min(right_edge[:, 0]))
 
-    if trim:
-        return combined[:, :last_ind - int(overlap / 4)]
+    if trim is not None:  # there has to be a way to get the "correct" end here
+        return combined[:, :last_ind - int(trim)]
     else:
         return combined[:, :last_ind]
 
@@ -1202,6 +1204,6 @@ def match_halves(left, right, overlap, block_size=None):
             continue
 
     model, inliers = ransac((np.array(src_pts), np.array(dst_pts)), EuclideanTransform,
-                        min_samples=25, residual_threshold=2, max_trials=1000)
+                        min_samples=10, residual_threshold=2, max_trials=25000)
     print('{} tie points found'.format(np.count_nonzero(inliers)))
     return model
