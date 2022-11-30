@@ -1136,13 +1136,14 @@ def _blend(_left, _right, left_shape):
 
 def join_halves(left, right, overlap, block_size=None, blend=True, trim=None):
     """
+    Join two halves of a scanned image together.
 
-    :param left:
-    :param right:
-    :param overlap:
-    :param block_size:
-    :param blend:
-    :param trim:
+    :param array-like left: the left half of the image
+    :param array-like right: the right half of the image
+    :param int overlap: the amount of overlap, in pixels, between the two halves.
+    :param int block_size: the number of rows each sub-block should cover. Defaults to overlap.
+    :param bool blend: apply a linear blend between the two scanned halves (default: True).
+    :param int trim: the amount to trim the right side of the image by. (default: None).
     :return:
     """
     M = match_halves(left, right, overlap=overlap, block_size=block_size)
