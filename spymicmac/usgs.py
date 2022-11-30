@@ -5,7 +5,7 @@ import os
 import netrc
 import geopandas as gpd
 from shapely.geometry.polygon import Polygon
-from usgs import api
+from usgs import api, USGSAuthExpiredError
 
 
 def get_login_creds():
@@ -58,24 +58,28 @@ def get_usgs_footprints(imlist, dataset='DECLASSII'):
     gdf = gpd.GeoDataFrame()
 
     user, _, pwd = creds.authenticators('earthexplorer.usgs.gov')
-    login = api.login(user, pwd)
+
+    try:
+        login = api.login(user, pwd)
+    except USGSAuthExpiredError as e:
+        print('API key has expired. Attempting to remove .usgs from home directory.')
+        os.remove(os.path.expanduser('~/.usgs'))
+
+        login = api.login(user, pwd)
+
     del user, pwd, creds
 
     if login['errorCode'] is not None:
         print('Error logging in to USGS EROS.')
         raise login['error']
     else:
-        search_results = api.metadata(dataset,
-                                      node='EE',
-                                      entityids=imlist)
-        for i, result in enumerate(search_results['data']):
-            # coords = result['spatialFootprint']['coordinates'][0]
-            coords = read_coords(result)
-            poly = Polygon(coords)
+        search_results = api.scene_metadata(dataset, entity_id=imlist)
+        for ii, result in enumerate(search_results['data']):
+            poly = Polygon(result['spatialCoverage']['coordinates'][0])
 
-            gdf.loc[i, 'geometry'] = poly
-            gdf.loc[i, 'ID'] = result['entityId']
+            gdf.loc[ii, 'geometry'] = poly
+            gdf.loc[ii, 'ID'] = result['entityId']
 
-        gdf.crs = {'init': 'epsg:4326'}
+        gdf.set_crs(epsg=4326, inplace=True)
 
         return gdf
