@@ -848,8 +848,8 @@ def get_rough_frame(img):
 
     # get the location in the sorted array that corresponds to the minimum and maximum
     # of the difference, that's also in the right half of the image
-    min_ind = np.where(sorted_row < 0.1 * sorted_row.size)[0][-1]
-    max_ind = np.where(sorted_row > 0.9 * sorted_row.size)[0][0]
+    min_ind = np.where(sorted_row < 0.2 * sorted_row.size)[0][-1]
+    max_ind = np.where(sorted_row > 0.8 * sorted_row.size)[0][0]
 
     xmin = 10 * (sorted_row[min_ind] + 1)
     xmax = 10 * (sorted_row[max_ind] + 1)
@@ -860,8 +860,8 @@ def get_rough_frame(img):
 
     # get the location in the sorted array that corresponds to the minimum and maximum
     # of the difference, that's also in the right half of the image
-    min_ind = np.where(sorted_col < 0.1 * sorted_col.size)[0][-1]
-    max_ind = np.where(sorted_col > 0.9 * sorted_col.size)[0][0]
+    min_ind = np.where(sorted_col < 0.2 * sorted_col.size)[0][-1]
+    max_ind = np.where(sorted_col > 0.8 * sorted_col.size)[0][0]
 
     ymin = 10 * (sorted_col[min_ind] + 1)
     ymax = 10 * (sorted_col[max_ind] + 1)
@@ -1077,48 +1077,35 @@ def remove_crosses(fn_img):
     io.imsave(fn_img, img.astype(np.uint8))
 
 
-def join_hexagon(im_pattern, overlap=2000, block_size=None, blend=True, corona=False, main=False):
+def get_parts_list(im_pattern):
+    imlist = glob(im_pattern + '*.tif')
+    imlist.sort()
+
+    return [os.path.splitext(fn_img.split('_')[-1])[0] for fn_img in imlist]
+
+
+def join_hexagon(im_pattern, overlap=2000, block_size=None, blend=True, reversed=False):
     """
-    Join two halves of a scanned KH-9 Hexagon image (or four parts of a scanned KH-4 Corona image).
+    Join multiple parts of a scanned image.
 
     :param str im_pattern: the base name of the image to use (e.g., DZB1216-500280L002001).
     :param int overlap: the overlap, in pixels, between the image parts.
     :param int block_size: the number of rows each sub-block should cover. Defaults to overlap.
     :param bool blend: apply a linear blend between the two scanned halves (default: True).
-    :param bool corona: image is a KH-4/4A Corona image. If True, looks for four image parts instead
-        of two (default: False).
-    :param bool main: image is from the KH-9 main camera, instead of the mapping camera. If True, looks for
-        eight image parts instead of two (default: False).
+    :param bool reversed: parts are in reversed order (i.e., part b is the left part, part a is the right part)
     """
-    if main:
-        left = io.imread('{}_a.tif'.format(im_pattern))
+    parts = get_parts_list(im_pattern)
 
-        imlist = glob(im_pattern + '*.tif')
-        imlist.sort()
+    if reversed:
+        parts.reverse()
 
-        parts = [os.path.splitext(fn_img.split('_')[-1])[0] for fn_img in imlist]
+    left = io.imread('{}_{}.tif'.format(im_pattern, parts[0]))
+    for part in parts[1:]:
+        right = io.imread('{}_{}.tif'.format(im_pattern, part))
 
-        for right_img in parts:
-            right = io.imread('{}_{}.tif'.format(im_pattern, right_img))
+        left = join_halves(left, right, overlap, block_size=block_size, blend=blend)
 
-            left = join_halves(left, right, overlap, block_size=block_size, blend=blend, trim=True)
-
-        io.imsave('{}.tif'.format(im_pattern), left.astype(np.uint8))
-    elif corona:
-        left = io.imread('{}_d.tif'.format(im_pattern))
-        for right_img in ['c', 'b', 'a']:
-            right = io.imread('{}_{}.tif'.format(im_pattern, right_img))
-
-            left = join_halves(left, right, overlap, block_size=block_size, blend=blend, trim=True)
-
-        io.imsave('{}.tif'.format(im_pattern), left.astype(np.uint8))
-    else:
-        left = io.imread('{}_a.tif'.format(im_pattern))
-        right = io.imread('{}_b.tif'.format(im_pattern))
-
-        combined = join_halves(left, right, overlap, block_size=block_size, blend=blend, trim=False)
-
-        io.imsave('{}.tif'.format(im_pattern), combined.astype(np.uint8))
+    io.imsave('{}.tif'.format(im_pattern), left.astype(np.uint8))
 
 
 def _blend(_left, _right, left_shape):
