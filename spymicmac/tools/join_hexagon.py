@@ -15,7 +15,7 @@ def _argparser():
                         help='the number of rows each sub-block should cover. Defaults to overlap value.')
     parser.add_argument('-b', '--blend', action='store_true',
                         help='Blend across image halves to prevent a sharp line at edge.')
-    parser.add_argument('-r', '--reverse', action='store_true',
+    parser.add_argument('-r', '--reversed', action='store_true',
                         help='parts are in reversed order (i.e., part b is the left part, part a is the right part)')
     return parser
 
