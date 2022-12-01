@@ -1084,7 +1084,7 @@ def get_parts_list(im_pattern):
     return [os.path.splitext(fn_img.split('_')[-1])[0] for fn_img in imlist]
 
 
-def join_hexagon(im_pattern, overlap=2000, block_size=None, blend=True, reversed=False):
+def join_hexagon(im_pattern, overlap=2000, block_size=None, blend=True, is_reversed=False):
     """
     Join multiple parts of a scanned image.
 
@@ -1092,11 +1092,11 @@ def join_hexagon(im_pattern, overlap=2000, block_size=None, blend=True, reversed
     :param int overlap: the overlap, in pixels, between the image parts.
     :param int block_size: the number of rows each sub-block should cover. Defaults to overlap.
     :param bool blend: apply a linear blend between the two scanned halves (default: True).
-    :param bool reversed: parts are in reversed order (i.e., part b is the left part, part a is the right part)
+    :param bool is_reversed: parts are in reversed order (i.e., part b is the left part, part a is the right part)
     """
     parts = get_parts_list(im_pattern)
 
-    if reversed:
+    if is_reversed:
         parts.reverse()
 
     left = io.imread('{}_{}.tif'.format(im_pattern, parts[0]))
@@ -1104,6 +1104,8 @@ def join_hexagon(im_pattern, overlap=2000, block_size=None, blend=True, reversed
         right = io.imread('{}_{}.tif'.format(im_pattern, part))
 
         left = join_halves(left, right, overlap, block_size=block_size, blend=blend)
+        if len(parts) > 2:
+            io.imsave('tmp_left.tif', left.astype(np.uint8))
 
     io.imsave('{}.tif'.format(im_pattern), left.astype(np.uint8))
 

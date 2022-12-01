@@ -31,7 +31,7 @@ def main():
                      overlap=args.overlap,
                      block_size=args.block_size,
                      blend=args.blend,
-                     reversed=args.reversed)
+                     is_reversed=args.reversed)
 
 
 if __name__ == "__main__":
