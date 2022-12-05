@@ -60,6 +60,34 @@ def cross_template(shape, width=3):
     return cross
 
 
+def wagon_wheel(size, width=3, mult=255):
+    """
+    Creates a template in the shape of a "wagon wheel" (a cross inscribed in a ring).
+
+    :param int size: the width (and height) of the template, in pixels
+    :param int width: the width/thickness of the cross, in pixels
+    :param mult: a multiplier to use for the template [default: 255]
+
+    :returns: **template** (*array-like*) the wagon wheel template
+    """
+    cross = cross_template(size, width)
+    cross[cross > 1] = 0
+
+    templ = disk(int(size / 2))
+    padded = np.zeros(templ.shape, dtype=templ.dtype)
+    padded[width:-width, width:-width] = disk(int((size - 2 * width) / 2))
+
+    templ -= padded
+    templ += cross.astype(templ.dtype)
+    templ[templ > 1] = 1
+
+    return mult * templ
+
+
+def notch_template():
+    pass
+
+
 def make_template(img, pt, half_size):
     nrows, ncols = img.shape
     row, col = np.round(pt).astype(int)
@@ -720,6 +748,42 @@ def find_cross(img, pt, cross, tsize=300):
         return this_i-tsize+pt[0], this_j-tsize+pt[1]
     else:
         return np.nan, np.nan
+
+
+def find_wagon_wheels(img, size, width=3, img_border=None):
+    """
+
+    :param img:
+    :param size:
+    :param width:
+    :param img_border:
+    :return:
+    """
+    if img_border is None:
+        _, _, top, bot = get_rough_frame(img)
+    else:
+        top, bot = img_border
+
+    templ = wagon_wheel(size, width=width)
+
+    img_top = np.zeros(img[:top, :].shape, dtype=np.uint8)
+    img_bot = np.zeros(img[bot:, :].shape, dtype=np.uint8)
+
+    img_top[img[:top, :] > filters.threshold_local(img[:top, :], 51)] = 1
+    img_bot[img[bot:, :] > filters.threshold_local(img[bot:, :], 51)] = 1
+
+    res_top = cv2.matchTemplate(img_top.astype(np.uint8), templ.astype(np.uint8), cv2.TM_CCORR_NORMED)
+    res_bot = cv2.matchTemplate(img_bot.astype(np.uint8), templ.astype(np.uint8), cv2.TM_CCORR_NORMED)
+
+    coords_top = peak_local_max(res_top, threshold_abs=0.7).astype(np.float64)
+    coords_bot = peak_local_max(res_bot, threshold_abs=0.7).astype(np.float64)
+
+    coords_bot[:, 0] += bot
+
+    coords_top += size / 2 - 0.5
+    coords_bot += size / 2 - 0.5
+
+    return np.concatenate((coords_top, coords_bot), axis=0)
 
 
 def lsq_fit(x, y, z):
