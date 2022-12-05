@@ -750,14 +750,17 @@ def find_cross(img, pt, cross, tsize=300):
         return np.nan, np.nan
 
 
-def find_wagon_wheels(img, size, width=3, img_border=None):
+# all credit to joe kennedy for the name of this function.
+def ocm_show_wagon_wheels(img, size, width=3, img_border=None):
     """
+    Find all "wagon wheel" markers in an image.
 
-    :param img:
-    :param size:
-    :param width:
-    :param img_border:
-    :return:
+    :param array-like img: the image
+    :param int size: the size of the marker (in pixels)
+    :param int width: the width/thickness of the cross, in pixels (default: 3)
+    :param img_border: the approximate top and bottom rows of the image frame. If not set,
+        calls get_rough_frame() on the image.
+    :returns: **coords** an Nx2 array of the location of the detected markers.
     """
     if img_border is None:
         _, _, top, bot = get_rough_frame(img)
