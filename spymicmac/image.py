@@ -1266,13 +1266,14 @@ def match_halves(left, right, overlap, block_size=None):
     return model
 
 
-def resample_hex(fn_img, scale, ori='InterneScan'):
+def resample_hex(fn_img, scale, ori='InterneScan', warp_order=3):
     """
     Uses a piecewise affine transformation to resample a KH-9 Mapping Camera image based on the reseau grid.
 
     :param str fn_img: the filename of the image to resample
     :param int scale: the number of pixels per mm of the scanned image
     :param str ori: the Ori directory that contains both MeasuresCamera.xml and MeasuresIm (default: InterneScan)
+    :param int warp_order: the order of resampling to pass to skimage.transform.warp (default: 3, cubic)
     """
 
     img = io.imread(fn_img)
@@ -1286,6 +1287,6 @@ def resample_hex(fn_img, scale, ori='InterneScan'):
     tform = PiecewiseAffineTransform()
     tform.estimate(src, dst)
 
-    out = warp(img, tform, output_shape=(src[:, 1].max(), src[:, 0].max()), preserve_range=True, order=3)
+    out = warp(img, tform, output_shape=(src[:, 1].max(), src[:, 0].max()), preserve_range=True, order=warp_order)
 
     io.imsave('OIS-Reech_{}'.format(fn_img), out.astype(np.uint8))
