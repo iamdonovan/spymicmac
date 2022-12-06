@@ -48,6 +48,7 @@ setup(name='spymicmac',
               'register_ortho = spymicmac.tools.register_ortho:main',
               'remove_crosses = spymicmac.tools.remove_crosses:main',
               'remove_measures = spymicmac.tools.remove_measures:main',
+              'resample_hexagon = spymicmac.tools.resample_hexagon:main',
               'write_micmac_xml = spymicmac.tools.write_micmac_xml:main'
           ],
       },
