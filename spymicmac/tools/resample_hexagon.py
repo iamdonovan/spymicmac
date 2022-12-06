@@ -5,6 +5,7 @@ from spymicmac.image import resample_hex
 
 
 def batch_wrapper(argsin):
+    print(argsin['fn_img'])
     resample_hex(**argsin)
 
 
@@ -26,7 +27,7 @@ def main():
     parser = _argparser()
     args = parser.parse_args()
 
-    if args.nproc > 1 and len(list(args.img)) > 1:
+    if args.nproc > 1 and len(args.img) > 1:
         pool = mp.Pool(args.nproc, maxtasksperchild=1)
 
         arg_dict = {'scale': args.scale, 'ori': args.ori}
@@ -39,7 +40,7 @@ def main():
         pool.close()
         pool.join()
     else:
-        for fn_img in list(args.img):
+        for fn_img in args.img:
             print(fn_img)
             resample_hex(fn_img, scale=args.scale, ori=args.ori)
 
