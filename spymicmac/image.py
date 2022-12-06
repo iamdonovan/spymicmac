@@ -19,7 +19,7 @@ from skimage import exposure, transform, morphology, io, filters
 from skimage.morphology import binary_closing, binary_dilation, disk
 from skimage.measure import ransac
 from skimage.feature import peak_local_max
-from skimage.transform import warp, AffineTransform, EuclideanTransform
+from skimage.transform import warp, AffineTransform, EuclideanTransform, PiecewiseAffineTransform
 from scipy.interpolate import RectBivariateSpline as RBS
 from scipy import ndimage
 import numpy as np
@@ -1264,3 +1264,28 @@ def match_halves(left, right, overlap, block_size=None):
                         min_samples=10, residual_threshold=2, max_trials=25000)
     print('{} tie points found'.format(np.count_nonzero(inliers)))
     return model
+
+
+def resample_hex(fn_img, scale, ori='InterneScan'):
+    """
+    Uses a piecewise affine transformation to resample a KH-9 Mapping Camera image based on the reseau grid.
+
+    :param str fn_img: the filename of the image to resample
+    :param int scale: the number of pixels per mm of the scanned image
+    :param str ori: the Ori directory that contains both MeasuresCamera.xml and MeasuresIm (default: InterneScan)
+    """
+
+    img = io.imread(fn_img)
+
+    cam_meas = parse_im_meas(os.path.join('Ori-{}'.format(ori), 'MeasuresCamera.xml'))
+    img_meas = parse_im_meas(os.path.join('Ori-{}'.format(ori), 'MeasuresIm-{}.xml'.format(fn_img)))
+
+    src = cam_meas[['j', 'i']].values * scale
+    dst = img_meas[['j', 'i']].values
+
+    tform = PiecewiseAffineTransform()
+    tform.estimate(src, dst)
+
+    out = warp(img, tform, output_shape=(src[:, 1].max(), src[:, 0].max()), preserve_range=True, order=3)
+
+    io.imsave('OIS-Reech_{}'.format(fn_img), out.astype(np.uint8))
