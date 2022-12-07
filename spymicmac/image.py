@@ -1288,12 +1288,12 @@ def resample_hex(fn_img, scale, ori='InterneScan'):
     ds.FlushCache()
     ds = None
 
-    out_ds = gdal.Warp('tmp.tif', fn_img, xRes=1, yRes=1,
+    out_ds = gdal.Warp('tmp_{}.tif'.format(fn_img), fn_img, xRes=1, yRes=1,
                        outputBounds=[0, 0, all_meas.j_cam.max(), all_meas.i_cam.max()],
                        resampleAlg=gdal.GRA_Lanczos)
     out_ds = None
 
-    img = io.imread('tmp.tif')
+    img = io.imread('tmp_{}.tif'.format(fn_img))
     io.imsave('OIS-Reech_{}'.format(fn_img), np.flipud(img).astype(np.uint8))
 
-    os.remove('tmp.tif')
+    os.remove('tmp_{}.tif'.format(fn_img))
