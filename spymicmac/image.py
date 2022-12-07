@@ -772,8 +772,8 @@ def ocm_show_wagon_wheels(img, size, width=3, img_border=None):
     img_top = np.zeros(img[:top, :].shape, dtype=np.uint8)
     img_bot = np.zeros(img[bot:, :].shape, dtype=np.uint8)
 
-    img_top[img[:top, :] > filters.threshold_local(img[:top, :], 51)] = 1
-    img_bot[img[bot:, :] > filters.threshold_local(img[bot:, :], 51)] = 1
+    img_top[img[:top, :] > filters.threshold_local(img[:top, :], 101, method='mean')] = 1
+    img_bot[img[bot:, :] > filters.threshold_local(img[bot:, :], 101, method='mean')] = 1
 
     res_top = cv2.matchTemplate(img_top.astype(np.uint8), templ.astype(np.uint8), cv2.TM_CCORR_NORMED)
     res_bot = cv2.matchTemplate(img_bot.astype(np.uint8), templ.astype(np.uint8), cv2.TM_CCORR_NORMED)
@@ -1266,27 +1266,34 @@ def match_halves(left, right, overlap, block_size=None):
     return model
 
 
-def resample_hex(fn_img, scale, ori='InterneScan', warp_order=3):
+def resample_hex(fn_img, scale, ori='InterneScan'):
     """
-    Uses a piecewise affine transformation to resample a KH-9 Mapping Camera image based on the reseau grid.
+    Resample a KH-9 Mapping Camera image based on the reseau grid, using gdal.Warp
 
     :param str fn_img: the filename of the image to resample
     :param int scale: the number of pixels per mm of the scanned image
     :param str ori: the Ori directory that contains both MeasuresCamera.xml and MeasuresIm (default: InterneScan)
-    :param int warp_order: the order of resampling to pass to skimage.transform.warp (default: 3, cubic)
     """
-
-    img = io.imread(fn_img)
-
     cam_meas = parse_im_meas(os.path.join('Ori-{}'.format(ori), 'MeasuresCamera.xml'))
     img_meas = parse_im_meas(os.path.join('Ori-{}'.format(ori), 'MeasuresIm-{}.xml'.format(fn_img)))
 
-    src = cam_meas[['j', 'i']].values * scale
-    dst = img_meas[['j', 'i']].values
+    all_meas = img_meas.set_index('name').join(cam_meas.set_index('name'), lsuffix='_img', rsuffix='_cam')
+    all_meas['i_cam'] *= scale
+    all_meas['j_cam'] *= scale
 
-    tform = PiecewiseAffineTransform()
-    tform.estimate(src, dst)
+    gcp_list = [gdal.GCP(row.j_cam, row.i_cam, 1, row.j_img, row.i_img) for _, row in all_meas.iterrows()]
 
-    out = warp(img, tform, output_shape=(src[:, 1].max(), src[:, 0].max()), preserve_range=True, order=warp_order)
+    ds = gdal.Open(fn_img)
+    ds.SetGCPs(gcp_list, '')
+    ds.FlushCache()
+    ds = None
 
-    io.imsave('OIS-Reech_{}'.format(fn_img), out.astype(np.uint8))
+    out_ds = gdal.Warp('tmp.tif', fn_img, xRes=1, yRes=1,
+                       outputBounds=[0, 0, all_meas.j_cam.max(), all_meas.i_cam.max()],
+                       resampleAlg=gdal.GRA_Lanczos)
+    out_ds = None
+
+    img = io.imread('tmp.tif')
+    io.imsave('OIS-Reech_{}'.format(fn_img), np.flipud(img).astype(np.uint8))
+
+    os.remove('tmp.tif')
