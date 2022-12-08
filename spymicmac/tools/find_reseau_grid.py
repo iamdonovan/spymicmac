@@ -9,11 +9,6 @@ def _argparser():
                                       formatter_class=argparse.RawDescriptionHelpFormatter)
     _parser.add_argument('fn_img', action='store', type=str, help='Image to find Reseau grid in.')
     _parser.add_argument('-csize', action='store', type=int, default=361, help='Reseau mark template size [361 pixels]')
-    _parser.add_argument('-tsize', action='store', type=int, default=300, help='half-size of search window [300 pixels]')
-    _parser.add_argument('-nproc', action='store', type=int, default=1,
-                         help='Number of processors to use [1].')
-    _parser.add_argument('-j', '--joined', action='store_true',
-                         help='Image is a joined KH-9 scan, rather than half of a scanned image.')
     return _parser
 
 
@@ -22,11 +17,7 @@ def main():
     parser = _argparser()
     args = parser.parse_args()
 
-    find_reseau_grid(args.fn_img,
-                     csize=args.csize,
-                     tsize=args.tsize,
-                     nproc=args.nproc,
-                     joined=args.joined)
+    find_reseau_grid(args.fn_img, csize=args.csize)
 
 
 if __name__ == "__main__":

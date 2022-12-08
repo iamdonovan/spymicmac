@@ -23,8 +23,8 @@ from skimage.transform import warp, AffineTransform, EuclideanTransform, Piecewi
 from scipy.interpolate import RectBivariateSpline as RBS
 from scipy import ndimage
 import numpy as np
-from shapely.ops import cascaded_union
-from shapely.geometry import LineString
+from shapely.ops import cascaded_union, nearest_points
+from shapely.geometry import LineString, MultiPoint, Point
 import geopandas as gpd
 # from llc import jit_filter_function
 from numba import jit
@@ -101,18 +101,23 @@ def make_template(img, pt, half_size):
     return template, row_inds, col_inds
 
 
-def find_match(img, template):
-    img_eq = filters.rank.equalize(img, selem=morphology.disk(100))
+def find_match(img, template, how='min'):
+    assert how in ['min', 'max'], "have to choose min or max"
+    img_eq = filters.rank.equalize(img, footprint=morphology.disk(100))
     # res = cross_filter(img_eq, template)
     res = cv2.matchTemplate(img_eq, template, cv2.TM_CCORR_NORMED)
     i_off = (img.shape[0] - res.shape[0]) / 2
     j_off = (img.shape[1] - res.shape[1]) / 2
-    minval, _, minloc, _ = cv2.minMaxLoc(res)
-    # maxj, maxi = maxloc
-    minj, mini = minloc
-    sp_delx, sp_dely = get_subpixel(res)
+    if how == 'min':
+        val, _, loc, _ = cv2.minMaxLoc(res)
+    elif how == 'max':
+        _, val, _, loc = cv2.minMaxLoc(res)
+
+    this_j, this_i = loc
+
+    sp_delx, sp_dely = get_subpixel(res, how=how)
     # sp_delx, sp_dely = 0, 0
-    return res, mini + i_off + sp_dely, minj + j_off + sp_delx
+    return res, this_i + i_off + sp_dely, this_j + j_off + sp_delx
 
 
 def get_subpixel(res, how='min'):
@@ -789,6 +794,74 @@ def ocm_show_wagon_wheels(img, size, width=3, img_border=None):
     return np.concatenate((coords_top, coords_bot), axis=0)
 
 
+def find_crosses(img, cross, spacing=200):
+
+    img_inv = img.max() - img
+    res = cv2.matchTemplate(img_inv.astype(np.uint8), cross.astype(np.uint8), cv2.TM_CCORR_NORMED)
+
+    coords = peak_local_max(res, min_distance=spacing, threshold_abs=0.15).astype(np.float64)
+
+    coords += cross.shape[0] / 2 - 0.5
+
+    grid_df = match_reseau_grid(coords)
+    # if we have missing values, we find matches individually
+    if grid_df.dist.isnull().sum() > 0:
+        tsize = int(cross.shape[0] * 1.5)
+        for ind, row in grid_df[grid_df.isnull().any(axis=1)].iterrows():
+            subimg, _, _ = make_template(img, row[['search_i', 'search_j']].astype(int), tsize)
+            res, this_i, this_j = find_match(subimg.astype(np.uint8), cross.astype(np.uint8), how='min')
+
+            grid_df.loc[ind, 'match_i'] = this_i - tsize + row['search_i']
+            grid_df.loc[ind, 'match_j'] = this_j - tsize + row['search_j']
+            grid_df.loc[ind, 'dist'] = np.sqrt(this_i**2 + this_j**2)
+
+    return grid_df
+
+
+def match_reseau_grid(coords):
+    matchpoints = MultiPoint(coords[:, ::-1])
+    top, bot, left, right = find_grid_border(coords)
+
+    scale = np.mean([(bot - top) / 22, (right - left) / 46])
+
+    left_edge = LineString([(left, bot), (left, top)])
+    right_edge = LineString([(right, bot), (right, top)])
+
+    II, JJ, search_grid = _search_grid(left_edge, right_edge, True)
+
+    grid_df = pd.DataFrame()
+    for ii, pr in enumerate(list(zip(II, JJ))):
+        grid_df.loc[ii, 'gcp'] = 'GCP_{}_{}'.format(pr[0], pr[1])
+        grid_df.loc[ii, 'grid_j'] = left + scale * pr[1]
+        grid_df.loc[ii, 'grid_i'] = bot - scale * pr[0]
+
+    grid_df['search_j'] = np.array(search_grid)[:, 1]
+    grid_df['search_i'] = np.array(search_grid)[:, 0]
+
+    for ind, row in grid_df.iterrows():
+        gridpt = Point(row.grid_j, row.grid_i)
+        _, matchpt = nearest_points(gridpt, matchpoints)
+        grid_df.loc[ind, 'match_i'] = matchpt.y
+        grid_df.loc[ind, 'match_j'] = matchpt.x
+        grid_df.loc[ind, 'dist'] = gridpt.distance(matchpt)
+
+    z_score = (grid_df.dist - grid_df.dist.mean()) / grid_df.dist.std()
+    grid_df.loc[np.abs(z_score) > 3, 'dist'] = np.nan
+    grid_df.loc[np.abs(z_score) > 3, 'match_i'] = np.nan
+    grid_df.loc[np.abs(z_score) > 3, 'match_j'] = np.nan
+
+    return grid_df
+
+
+def find_grid_border(coords):
+    top = np.percentile(coords[:, 0], 1)
+    bot = np.percentile(coords[:, 0], 99)
+    left = np.percentile(coords[:, 1], 1)
+    right = np.percentile(coords[:, 1], 99)
+
+    return top, bot, left, right
+
+
 def lsq_fit(x, y, z):
     tmp_A = []
     tmp_b = []
@@ -958,17 +1031,14 @@ def _search_grid(left, right, joined=False):
     return i_grid, j_grid, search_pts
 
 
-def find_reseau_grid(fn_img, csize=361, tsize=300, nproc=1, return_val=False, joined=False):
+def find_reseau_grid(fn_img, csize=361, return_val=False):
     """
     Find the locations of the Reseau marks in a scanned KH-9 image. Locations are saved
     to Ori-InterneScan/MeasuresIm-:fn_img:.xml.
 
     :param str fn_img: the image filename.
     :param int csize: the size of the cross template (default: 361 -> 361x361)
-    :param int tsize: the search grid size for the Reseau mark.
-    :param int nproc: the number of processors to use, via multiprocessing.Pool (default: 1).
     :param bool return_val: return a pandas DataFrame of the Reseau mark locations (default: False).
-    :param bool joined: image represents a joined KH-9 image rather than a scanned half (default: False).
     :return:
         - **gcps_df** (*pandas.DataFrame*) -- a DataFrame of the Reseau mark locations (if return_val=True).
     """
@@ -977,9 +1047,9 @@ def find_reseau_grid(fn_img, csize=361, tsize=300, nproc=1, return_val=False, jo
     img_lowres = downsample_image(img, fact=10)
 
     print('Image read.')
-    tmp_cross = cross_template(csize, width=3)
-    cross = np.ones((csize, csize)).astype(np.uint8)
-    cross[tmp_cross == 1] = 255
+    cross = cross_template(csize, width=3)
+    cross[cross > 1] = 0
+    cross *= 255
 
     fig = plt.figure(figsize=(7, 12))
     ax = fig.add_subplot(111)
@@ -987,95 +1057,40 @@ def find_reseau_grid(fn_img, csize=361, tsize=300, nproc=1, return_val=False, jo
     ax.set_xticks([])
     ax.set_yticks([])
 
-    rough_border = get_rough_frame(img)
-    left_edge, right_edge = find_reseau_border(img, rough_border, cross, tsize=tsize)
-
-    II, JJ, search_grid = _search_grid(left_edge, right_edge, joined)
-    matched_grid = []
-
     print('Finding grid points in {}...'.format(fn_img))
-    if nproc > 1:
-        subimgs = []
-        std_devs = []
-        means = []
-        for loc in search_grid:
-            subimg, _, _ = make_template(img, loc, tsize)
-            subimgs.append(subimg)
-        pool = mp.Pool(nproc)
-        outputs = pool.map(partial(find_match, template=cross), subimgs)
-        pool.close()
-        # have to map outputs to warped_ij
-        for n, output in enumerate(outputs):
-            res, this_i, this_j = output
-            maxj, maxi = cv2.minMaxLoc(res)[2]  # 'peak' is actually the minimum location, remember.
-            inv_res = res.max() - res
-            std_devs.append(inv_res.std())
-            means.append(inv_res.mean())
-
-            pks = peak_local_max(inv_res, min_distance=5, num_peaks=2)
-            if pks.size > 0:
-                this_z_corrs = []
-                for pk in pks:
-                    max_ = inv_res[pk[0], pk[1]]
-                    this_z_corrs.append((max_ - inv_res.mean()) / inv_res.std())
-
-                if max(this_z_corrs) > 5 and max(this_z_corrs) / min(this_z_corrs) > 1.15:
-                    rel_i = this_i - tsize
-                    rel_j = this_j - tsize
-                    i, j = search_grid[n]
-                    matched_grid.append((rel_i + i, rel_j + j))
-                else:
-                    matched_grid.append((np.nan, np.nan))
-            else:
-                matched_grid.append((np.nan, np.nan))
-    else:
-        for loc in search_grid:
-            _j, _i = find_cross(img, loc, cross, tsize=tsize)
-            matched_grid.append((_j, _i))
-
-    matched_grid = np.array(matched_grid)
-    search_grid = np.array(search_grid)
-
-    gcps_df = pd.DataFrame()
-    for i, pr in enumerate(list(zip(II, JJ))):
-        gcps_df.loc[i, 'gcp'] = 'GCP_{}_{}'.format(pr[0], pr[1])
-
-    gcps_df['search_j'] = search_grid[:, 1]
-    gcps_df['search_i'] = search_grid[:, 0]
-    gcps_df['match_j'] = matched_grid[:, 1]
-    gcps_df['match_i'] = matched_grid[:, 0]
+    grid_df = find_crosses(img, cross, spacing=800)
 
     model = AffineTransform()
-    model.estimate(gcps_df.dropna()[['search_j', 'search_i']].values,
-                   gcps_df.dropna()[['match_j', 'match_i']].values)
-    dst = model(gcps_df[['search_j', 'search_i']].values)
+    model.estimate(grid_df.dropna()[['grid_j', 'grid_i']].values,
+                   grid_df.dropna()[['match_j', 'match_i']].values)
+    residuals = model.residuals(grid_df.dropna()[['grid_j', 'grid_i']].values,
+                                grid_df.dropna()[['match_j', 'match_i']].values)
+    dst = model(grid_df[['grid_j', 'grid_i']].values)
 
-    nomatch = np.isnan(gcps_df.match_j)
+    grid_df['dj'] = grid_df['match_j'] - dst[:, 0]
+    grid_df['di'] = grid_df['match_i'] - dst[:, 1]
+    grid_df['resid'] = residuals
 
-    ux = lsq_fit(gcps_df.search_j.values, gcps_df.search_i.values, gcps_df.match_j.values)
-    uy = lsq_fit(gcps_df.search_j.values, gcps_df.search_i.values, gcps_df.match_i.values)
+    errs = np.abs(residuals - residuals.mean()) / residuals.std() > 3
+    grid_df.loc[errs, 'match_j'] = dst[errs, 0]
+    grid_df.loc[errs, 'match_i'] = dst[errs, 1]
 
-    gcps_df.loc[nomatch, 'match_j'] = ux[nomatch]
-    gcps_df.loc[nomatch, 'match_i'] = uy[nomatch]
-
-    gcps_df['dj'] = gcps_df['match_j'] - dst[:, 0]
-    gcps_df['di'] = gcps_df['match_i'] - dst[:, 1]
-
-    gcps_df['im_row'] = gcps_df['match_i']
-    gcps_df['im_col'] = gcps_df['match_j']
+    grid_df['im_row'] = grid_df['match_i']
+    grid_df['im_col'] = grid_df['match_j']
 
     print('Grid points found.')
     os.makedirs('match_imgs', exist_ok=True)
 
-    ax.quiver(gcps_df.search_j, gcps_df.search_i, gcps_df.dj, gcps_df.di, color='r')
-    ax.plot(gcps_df.search_j[nomatch], gcps_df.search_i[nomatch], 'b+')
+    ax.quiver(grid_df.search_j, grid_df.search_i, grid_df.dj, grid_df.di, color='r')
+    ax.plot(grid_df.search_j[errs], grid_df.search_i[errs], 'b+')
+
     this_out = os.path.splitext(fn_img)[0]
     fig.savefig(os.path.join('match_imgs', this_out + '_matches.png'), bbox_inches='tight', dpi=200)
 
     E = builder.ElementMaker()
     ImMes = E.MesureAppuiFlottant1Im(E.NameIm(fn_img))
 
-    pt_els = get_im_meas(gcps_df, E)
+    pt_els = get_im_meas(grid_df, E)
     for p in pt_els:
         ImMes.append(p)
     os.makedirs('Ori-InterneScan', exist_ok=True)
@@ -1086,7 +1101,7 @@ def find_reseau_grid(fn_img, csize=361, tsize=300, nproc=1, return_val=False, jo
                xml_declaration=True, encoding="utf-8")
 
     if return_val:
-        return gcps_df
+        return grid_df
 
 
 def _fix_cross(subimg):
@@ -1288,12 +1303,12 @@ def resample_hex(fn_img, scale, ori='InterneScan'):
     ds.FlushCache()
     ds = None
 
-    out_ds = gdal.Warp('tmp_{}.tif'.format(fn_img), fn_img, xRes=1, yRes=1,
+    out_ds = gdal.Warp('tmp_{}'.format(fn_img), fn_img, xRes=1, yRes=1,
                        outputBounds=[0, 0, all_meas.j_cam.max(), all_meas.i_cam.max()],
                        resampleAlg=gdal.GRA_Lanczos)
     out_ds = None
 
-    img = io.imread('tmp_{}.tif'.format(fn_img))
+    img = io.imread('tmp_{}'.format(fn_img))
     io.imsave('OIS-Reech_{}'.format(fn_img), np.flipud(img).astype(np.uint8))
 
-    os.remove('tmp_{}.tif'.format(fn_img))
+    os.remove('tmp_{}'.format(fn_img))
