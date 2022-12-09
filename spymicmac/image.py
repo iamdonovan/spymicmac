@@ -794,14 +794,25 @@ def ocm_show_wagon_wheels(img, size, width=3, img_border=None):
     return np.concatenate((coords_top, coords_bot), axis=0)
 
 
-def find_crosses(img, cross, spacing=200):
+def find_crosses(img, cross):
 
-    img_inv = img.max() - img
-    res = cv2.matchTemplate(img_inv.astype(np.uint8), cross.astype(np.uint8), cv2.TM_CCORR_NORMED)
+    sub_coords = []
+    simgs, top_inds, left_inds = splitter(img, (4, 8), overlap=4*cross.shape[0])
 
-    coords = peak_local_max(res, min_distance=spacing, threshold_abs=0.15).astype(np.float64)
+    for ind, simg in enumerate(simgs):
+        img_inv = img.max() - simg
+        res = cv2.matchTemplate(img_inv.astype(np.uint8), cross.astype(np.uint8), cv2.TM_CCORR_NORMED)
 
-    coords += cross.shape[0] / 2 - 0.5
+        these_coords = peak_local_max(res, min_distance=2*cross.shape[0], threshold_abs=0.15).astype(np.float64)
+
+        these_coords += cross.shape[0] / 2 - 0.5
+
+        these_coords[:, 0] += top_inds[ind]
+        these_coords[:, 1] += left_inds[ind]
+
+        sub_coords.append(these_coords)
+
+    coords = np.concatenate(sub_coords, axis=0)
 
     grid_df = match_reseau_grid(coords)
     # if we have missing values, we find matches individually
@@ -813,7 +824,8 @@ def find_crosses(img, cross, spacing=200):
 
             grid_df.loc[ind, 'match_i'] = this_i - tsize + row['search_i']
             grid_df.loc[ind, 'match_j'] = this_j - tsize + row['search_j']
-            grid_df.loc[ind, 'dist'] = np.sqrt(this_i**2 + this_j**2)
+            grid_df.loc[ind, 'dist'] = np.sqrt((grid_df.loc[ind, 'match_i'] - grid_df.loc[ind, 'grid_i'])**2 +
+                                               (grid_df.loc[ind, 'match_j'] - grid_df.loc[ind, 'grid_j'])**2)
 
     return grid_df
 
@@ -845,10 +857,11 @@ def match_reseau_grid(coords):
         grid_df.loc[ind, 'match_j'] = matchpt.x
         grid_df.loc[ind, 'dist'] = gridpt.distance(matchpt)
 
-    z_score = (grid_df.dist - grid_df.dist.mean()) / grid_df.dist.std()
-    grid_df.loc[np.abs(z_score) > 3, 'dist'] = np.nan
-    grid_df.loc[np.abs(z_score) > 3, 'match_i'] = np.nan
-    grid_df.loc[np.abs(z_score) > 3, 'match_j'] = np.nan
+    model, inliers = ransac((grid_df[['grid_j', 'grid_i']].values, grid_df[['match_j', 'match_i']].values),
+                            AffineTransform, min_samples=10, residual_threshold=grid_df.dist.median(), max_trials=5000)
+    grid_df.loc[~inliers, 'dist'] = np.nan
+    grid_df.loc[~inliers, 'match_j'] = np.nan
+    grid_df.loc[~inliers, 'match_i'] = np.nan
 
     return grid_df
 
@@ -1058,31 +1071,30 @@ def find_reseau_grid(fn_img, csize=361, return_val=False):
     ax.set_yticks([])
 
     print('Finding grid points in {}...'.format(fn_img))
-    grid_df = find_crosses(img, cross, spacing=800)
+    grid_df = find_crosses(img, cross)
 
-    model = AffineTransform()
-    model.estimate(grid_df.dropna()[['grid_j', 'grid_i']].values,
-                   grid_df.dropna()[['match_j', 'match_i']].values)
+    model, inliers = ransac((grid_df[['grid_j', 'grid_i']].values, grid_df[['match_j', 'match_i']].values),
+                            AffineTransform, min_samples=10, residual_threshold=10, max_trials=5000)
     residuals = model.residuals(grid_df.dropna()[['grid_j', 'grid_i']].values,
                                 grid_df.dropna()[['match_j', 'match_i']].values)
     dst = model(grid_df[['grid_j', 'grid_i']].values)
 
-    grid_df['dj'] = grid_df['match_j'] - dst[:, 0]
-    grid_df['di'] = grid_df['match_i'] - dst[:, 1]
     grid_df['resid'] = residuals
 
-    errs = np.abs(residuals - residuals.mean()) / residuals.std() > 3
-    grid_df.loc[errs, 'match_j'] = dst[errs, 0]
-    grid_df.loc[errs, 'match_i'] = dst[errs, 1]
+    grid_df.loc[~inliers, 'match_j'] = dst[~inliers, 0]
+    grid_df.loc[~inliers, 'match_i'] = dst[~inliers, 1]
 
     grid_df['im_row'] = grid_df['match_i']
     grid_df['im_col'] = grid_df['match_j']
+
+    grid_df['dj'] = grid_df['match_j'] - dst[:, 0]
+    grid_df['di'] = grid_df['match_i'] - dst[:, 1]
 
     print('Grid points found.')
     os.makedirs('match_imgs', exist_ok=True)
 
     ax.quiver(grid_df.search_j, grid_df.search_i, grid_df.dj, grid_df.di, color='r')
-    ax.plot(grid_df.search_j[errs], grid_df.search_i[errs], 'b+')
+    ax.plot(grid_df.search_j[~inliers], grid_df.search_i[~inliers], 'b+')
 
     this_out = os.path.splitext(fn_img)[0]
     fig.savefig(os.path.join('match_imgs', this_out + '_matches.png'), bbox_inches='tight', dpi=200)
