@@ -1111,6 +1111,10 @@ def find_reseau_grid(fn_img, csize=361, return_val=False):
     print('Grid points found.')
     os.makedirs('match_imgs', exist_ok=True)
 
+    print('Mean x residual: {:.2f} pixels'.format(grid_df.dj.abs().mean()))
+    print('Mean y residual: {:.2f} pixels'.format(grid_df.di.abs().mean()))
+    print('Mean residual: {:.2f} pixels'.format(grid_df.resid.mean()))
+
     ax.quiver(grid_df.search_j, grid_df.search_i, grid_df.dj, grid_df.di, color='r')
     ax.plot(grid_df.search_j[~inliers], grid_df.search_i[~inliers], 'b+')
 
