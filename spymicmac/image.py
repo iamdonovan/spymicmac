@@ -814,7 +814,7 @@ def find_crosses(img, cross):
 
     coords = np.concatenate(sub_coords, axis=0)
 
-    grid_df = match_reseau_grid(coords)
+    grid_df = match_reseau_grid(img, coords, cross)
     # if we have missing values, we find matches individually
     if grid_df.dist.isnull().sum() > 0:
         tsize = int(cross.shape[0] * 1.5)
@@ -830,22 +830,25 @@ def find_crosses(img, cross):
     return grid_df
 
 
-def match_reseau_grid(coords):
+def match_reseau_grid(img, coords, cross):
     matchpoints = MultiPoint(coords[:, ::-1])
-    top, bot, left, right = find_grid_border(coords)
+    # top, bot, left, right = find_grid_border(coords)
+    left, right, top, bot = get_rough_frame(img)
 
-    scale = np.mean([(bot - top) / 22, (right - left) / 46])
+    scale = np.mean([(bot - top) / 23, (right - left) / 46.5])
 
-    left_edge = LineString([(left, bot), (left, top)])
-    right_edge = LineString([(right, bot), (right, top)])
+    left_edge = LineString([(left + cross.shape[0], bot - cross.shape[0]),
+                            (left + cross.shape[0], top + cross.shape[0])])
+    right_edge = LineString([(right - cross.shape[0], bot - cross.shape[0]),
+                             (right - cross.shape[0], top + cross.shape[0])])
 
     II, JJ, search_grid = _search_grid(left_edge, right_edge, True)
 
     grid_df = pd.DataFrame()
     for ii, pr in enumerate(list(zip(II, JJ))):
         grid_df.loc[ii, 'gcp'] = 'GCP_{}_{}'.format(pr[0], pr[1])
-        grid_df.loc[ii, 'grid_j'] = left + scale * pr[1]
-        grid_df.loc[ii, 'grid_i'] = bot - scale * pr[0]
+        grid_df.loc[ii, 'grid_j'] = left + scale * pr[1] + cross.shape[0]
+        grid_df.loc[ii, 'grid_i'] = bot - scale * pr[0] - 2 * cross.shape[0]
 
     grid_df['search_j'] = np.array(search_grid)[:, 1]
     grid_df['search_i'] = np.array(search_grid)[:, 0]
