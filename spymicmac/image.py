@@ -1006,11 +1006,11 @@ def get_rough_frame(img):
     # of the difference, that's also in the right half of the image
     # min_ind = np.where(sorted_row < 0.2 * sorted_row.size)[0][-1]
     # max_ind = np.where(sorted_row > 0.8 * sorted_row.size)[0][0]
-    col_peaks = peak_local_max(np.diff(colmean), min_distance=20, threshold_abs=10).flatten()
-    col_troughs = peak_local_max(-np.diff(colmean), min_distance=20, threshold_abs=10).flatten()
+    col_peaks = peak_local_max(np.diff(colmean), min_distance=20, threshold_rel=0.1, num_peaks=2).flatten()
+    col_troughs = peak_local_max(-np.diff(colmean), min_distance=20, threshold_rel=0.1, num_peaks=2).flatten()
 
-    row_peaks = peak_local_max(np.diff(rowmean), min_distance=20, threshold_abs=10).flatten()
-    row_troughs = peak_local_max(-np.diff(rowmean), min_distance=20, threshold_abs=10).flatten()
+    row_peaks = peak_local_max(np.diff(rowmean), min_distance=20, threshold_rel=0.1, num_peaks=2).flatten()
+    row_troughs = peak_local_max(-np.diff(rowmean), min_distance=20, threshold_rel=0.1, num_peaks=2).flatten()
 
     left_ind = max(row_peaks[np.where(row_peaks < 0.2 * rowmean.size)[0]])
     right_ind = min(row_troughs[np.where(row_troughs > 0.8 * rowmean.size)[0]])
