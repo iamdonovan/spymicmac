@@ -984,10 +984,10 @@ def get_rough_frame(img):
     img_lowres = downsample_image(img, fact=10)
 
     rowmean = img_lowres.mean(axis=0)
-    # smooth_row = _moving_average(rowmean, n=10)
+    smooth_row = _moving_average(rowmean, n=5)
 
     colmean = img_lowres.mean(axis=1)
-    # smooth_col = _moving_average(colmean, n=10)
+    smooth_col = _moving_average(colmean, n=5)
 
     # xmin = 10 * np.where(rowmean > np.percentile(rowmean, 10))[0][0]
     # xmin = 10 * (np.argmax(np.diff(smooth_row)) + 1)
@@ -1006,11 +1006,11 @@ def get_rough_frame(img):
     # of the difference, that's also in the right half of the image
     # min_ind = np.where(sorted_row < 0.2 * sorted_row.size)[0][-1]
     # max_ind = np.where(sorted_row > 0.8 * sorted_row.size)[0][0]
-    col_peaks = peak_local_max(np.diff(colmean), min_distance=20, threshold_rel=0.1, num_peaks=2).flatten()
-    col_troughs = peak_local_max(-np.diff(colmean), min_distance=20, threshold_rel=0.1, num_peaks=2).flatten()
+    col_peaks = peak_local_max(np.diff(smooth_col), min_distance=20, threshold_rel=0.1, num_peaks=2).flatten()
+    col_troughs = peak_local_max(-np.diff(smooth_col), min_distance=20, threshold_rel=0.1, num_peaks=2).flatten()
 
-    row_peaks = peak_local_max(np.diff(rowmean), min_distance=20, threshold_rel=0.1, num_peaks=2).flatten()
-    row_troughs = peak_local_max(-np.diff(rowmean), min_distance=20, threshold_rel=0.1, num_peaks=2).flatten()
+    row_peaks = peak_local_max(np.diff(smooth_row), min_distance=20, threshold_rel=0.1, num_peaks=2).flatten()
+    row_troughs = peak_local_max(-np.diff(smooth_row), min_distance=20, threshold_rel=0.1, num_peaks=2).flatten()
 
     left_ind = max(row_peaks[np.where(row_peaks < 0.2 * rowmean.size)[0]])
     right_ind = min(row_troughs[np.where(row_troughs > 0.8 * rowmean.size)[0]])
