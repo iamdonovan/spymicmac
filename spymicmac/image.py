@@ -984,10 +984,10 @@ def get_rough_frame(img):
     img_lowres = downsample_image(img, fact=10)
 
     rowmean = img_lowres.mean(axis=0)
-    smooth_row = _moving_average(rowmean)
+    # smooth_row = _moving_average(rowmean, n=10)
 
     colmean = img_lowres.mean(axis=1)
-    smooth_col = _moving_average(colmean)
+    # smooth_col = _moving_average(colmean, n=10)
 
     # xmin = 10 * np.where(rowmean > np.percentile(rowmean, 10))[0][0]
     # xmin = 10 * (np.argmax(np.diff(smooth_row)) + 1)
@@ -1000,27 +1000,42 @@ def get_rough_frame(img):
 
     # if xmax / img.shape[1] > 0.999:
     #     xmax = np.nan
-    sorted_row = np.argsort(np.diff(smooth_row))
+    # sorted_row = np.argsort(np.diff(smooth_row))
 
     # get the location in the sorted array that corresponds to the minimum and maximum
     # of the difference, that's also in the right half of the image
-    min_ind = np.where(sorted_row < 0.2 * sorted_row.size)[0][-1]
-    max_ind = np.where(sorted_row > 0.8 * sorted_row.size)[0][0]
+    # min_ind = np.where(sorted_row < 0.2 * sorted_row.size)[0][-1]
+    # max_ind = np.where(sorted_row > 0.8 * sorted_row.size)[0][0]
+    col_peaks = peak_local_max(np.diff(colmean), min_distance=20, threshold_rel=0.2).flatten()
+    col_troughs = peak_local_max(-np.diff(colmean), min_distance=20, threshold_rel=0.2).flatten()
 
-    xmin = 10 * (sorted_row[min_ind] + 1)
-    xmax = 10 * (sorted_row[max_ind] + 1)
+    row_peaks = peak_local_max(np.diff(rowmean), min_distance=20, threshold_rel=0.2).flatten()
+    row_troughs = peak_local_max(-np.diff(rowmean), min_distance=20, threshold_rel=0.2).flatten()
+
+    left_ind = max(row_peaks[np.where(row_peaks < 0.2 * rowmean.size)[0]])
+    right_ind = min(row_troughs[np.where(row_troughs > 0.8 * rowmean.size)[0]])
+
+    top_ind = max(col_peaks[np.where(col_peaks < 0.2 * colmean.size)[0]])
+    bot_ind = min(col_troughs[np.where(col_troughs > 0.8 * colmean.size)[0]])
+
+    # xmin = 10 * (sorted_row[min_ind] + 1)
+    # xmax = 10 * (sorted_row[max_ind] + 1)
+    xmin = 10 * (left_ind + 1)
+    xmax = 10 * (right_ind + 1)
 
     # ymin = 10 * np.where(colmean > np.percentile(colmean, 10))[0][0]
     # ymax = 10 * np.where(colmean > np.percentile(colmean, 10))[0][-1]
-    sorted_col = np.argsort(np.diff(smooth_col))
+    # sorted_col = np.argsort(np.diff(smooth_col))
 
     # get the location in the sorted array that corresponds to the minimum and maximum
     # of the difference, that's also in the right half of the image
-    min_ind = np.where(sorted_col < 0.2 * sorted_col.size)[0][-1]
-    max_ind = np.where(sorted_col > 0.8 * sorted_col.size)[0][0]
+    # min_ind = np.where(sorted_col < 0.2 * sorted_col.size)[0][-1]
+    # max_ind = np.where(sorted_col > 0.8 * sorted_col.size)[0][0]
+    ymin = 10 * (top_ind + 1)
+    ymax = 10 * (bot_ind + 1)
 
-    ymin = 10 * (sorted_col[min_ind] + 1)
-    ymax = 10 * (sorted_col[max_ind] + 1)
+    # ymin = 10 * (sorted_col[min_ind] + 1)
+    # ymax = 10 * (sorted_col[max_ind] + 1)
 
     return xmin, xmax, ymin, ymax
 
