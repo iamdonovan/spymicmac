@@ -15,7 +15,16 @@ def get_login_creds():
     :return:
         - **creds** -- the netrc.netrc credentials.
     """
-    return netrc.netrc(os.path.expanduser('~/.netrc'))
+
+    # first, check whether .netrc exists in the home directory
+    if os.path.exists(os.path.expanduser('~/.netrc')):
+        return netrc.netrc(os.path.expanduser('~/.netrc'))
+    # next, check whether _netrc exists
+    elif os.path.exists(os.path.expanduser('~/_netrc')):
+        return netrc.netrc(os.path.expanduser('~/_netrc'))
+    # if we don't have ~/.netrc or ~/_netrc, then we can't log in.
+    else:
+        raise FileExistsError("Please ensure that you have a .netrc file stored in your home directory.")
 
 
 def read_coords(result):
