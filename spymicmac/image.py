@@ -795,6 +795,14 @@ def ocm_show_wagon_wheels(img, size, width=3, img_border=None):
 
 
 def find_crosses(img, cross):
+    """
+    Find all cross markers in an image.
+
+    :param array-like img: the image
+    :param array-like cross: the cross template to use
+    :returns:
+        - **grid_df** (*pandas.DataFrame*) -- a dataframe of marker locations and offsets
+    """
 
     sub_coords = []
     simgs, top_inds, left_inds = splitter(img, (4, 8), overlap=4*cross.shape[0])
@@ -831,6 +839,15 @@ def find_crosses(img, cross):
 
 
 def match_reseau_grid(img, coords, cross):
+    """
+    Find the best match for each KH-9 mapping camera reseau grid point, given a list of potential matches.
+
+    :param array-like img: the image to use
+    :param array-like coords: the coordinates of the potential matches
+    :param array-like cross: the cross template to use.
+    :returns:
+        - **grid_df** (*pandas.DataFrame*) -- a DataFrame of grid locations and match points
+    """
     matchpoints = MultiPoint(coords[:, ::-1])
     # top, bot, left, right = find_grid_border(coords)
     left, right, top, bot = get_rough_frame(img)
@@ -969,6 +986,14 @@ def find_reseau_border(img, rough_ext, cross, tsize=300):
 
 
 def downsample_image(img, fact=4):
+    """
+    Rescale an image using Lanczos resampling
+
+    :param array-like img: the image to rescale
+    :param numeric fact: the number by which to divide the image width and height (default: 4)
+    :return:
+        - **rescaled** (*array-like*) -- the rescaled image
+    """
     _img = PIL.Image.fromarray(img)
     return np.array(_img.resize((np.array(_img.size) / fact).astype(int), PIL.Image.Resampling.LANCZOS))
 
@@ -1115,8 +1140,8 @@ def find_reseau_grid(fn_img, csize=361, return_val=False):
     print('Mean y residual: {:.2f} pixels'.format(grid_df.di.abs().mean()))
     print('Mean residual: {:.2f} pixels'.format(grid_df.resid.mean()))
 
-    ax.quiver(grid_df.search_j, grid_df.search_i, grid_df.dj, grid_df.di, color='r')
-    ax.plot(grid_df.search_j[~inliers], grid_df.search_i[~inliers], 'b+')
+    ax.quiver(grid_df.match_j, grid_df.match_i, grid_df.dj, grid_df.di, color='r')
+    ax.plot(grid_df.match_j[~inliers], grid_df.match_i[~inliers], 'b+')
 
     this_out = os.path.splitext(fn_img)[0]
     fig.savefig(os.path.join('match_imgs', this_out + '_matches.png'), bbox_inches='tight', dpi=200)
@@ -1194,6 +1219,13 @@ def remove_crosses(fn_img):
 
 
 def get_parts_list(im_pattern):
+    """
+    Find all of the parts of a scanned image that match a given filename pattern
+
+    :param str im_pattern: the image pattern to match
+    :returns:
+        - **parts_list** (*list*) -- a list of all parts of the image that match the pattern.
+    """
     imlist = glob(im_pattern + '*.tif')
     imlist.sort()
 
