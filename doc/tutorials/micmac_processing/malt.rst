@@ -3,7 +3,8 @@ computing the absolute orthophoto and DEM
 
 Once you have successfully run :py:meth:`spymicmac.register.register_ortho`, you will have an orientation folder,
 ``Ori-TerrainFirstPass`` [#]_. This is the folder to pass to ``Malt``:
-::
+
+.. code-block:: sh
 
     mm3d Malt Ortho "OIS.*tif" TerrainFirstPass DirMEC=MEC-Malt NbVI=2 MasqImGlob=filtre.tif ZoomF=1 DefCor=0 CostTrans=1 EZA=1
 
@@ -13,7 +14,8 @@ orthophotos are found in ``Ortho-MEC-Malt``.
 
 Depending on the scale of your images and how many you are using, you will probably need to mosaic the tiles
 of the DEM, and possibly the correlation masks [#]_:
-::
+
+.. code-block:: sh
 
     cd MEC-Malt
     mosaic_micmac_tiles.py -filename Z_Num9_DeZoom1_STD-Malt
@@ -26,14 +28,16 @@ creating the orthomosaic using Tawny
 ------------------------------------
 Just like with the :doc:`relative` step, the orthoimages are not mosaicked - they are just the individual images
 orthorectified using the extracted DEM - you'll need to run ``Tawny`` again to mosaic the images:
-::
+
+.. code-block:: sh
 
     mm3d Tawny Ortho-MEC-Malt Out=Orthophotomosaic.tif RadiomEgal=0
 
 Again, we are using ``RadiomEgal=0`` to use the images as-is, rather than attempting to balance the radiometry (as this
 can lead to undesirable results). Finally, you might need to re-combine the image tiles, depending on how large they
 are:
-::
+
+.. code-block:: sh
 
     cd Ortho-MEC-Malt
     mosaic_micmac_tiles.py -filename Orthophotomosaic
@@ -44,7 +48,8 @@ co-registering it to a DEM of known quality. You may also wish to remove residua
 
 You can also run :doc:`../../spymicmac/scripts/post_process_micmac` to apply the AutoMask to the DEM and
 georeference the correlation mask:
-::
+
+.. code-block:: sh
 
     cd MEC-Malt
     post_process_micmac.sh -z "8 +north" -n Block1

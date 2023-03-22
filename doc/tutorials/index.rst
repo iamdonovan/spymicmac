@@ -8,6 +8,8 @@ Here, you will find information about the workflow for using sPyMicMac to proces
     :align: center
     :alt: a flow diagram showing the steps involved in spymicmac processing
 
+|br|
+
 .. toctree::
    :glob:
    :maxdepth: 2

@@ -2,11 +2,13 @@ example camera models
 =======================
 
 This section is a list of different camera models that have acquired historical aerial photos, what their fiducial marks
-look like, and the approximate coordinates of the fiducial marks that you can use to populate the ``MeasuresCamera.xml`` file.
+look like, and the approximate coordinates of the fiducial marks that you can use to populate the
+``MeasuresCamera.xml`` file.
 
 .. note::
 
     If you have a calibration report that corresponds to your specific images, **you should use that instead**.
+
     The information provided here is for those cases where a calibration report does not exist, or has been lost to time.
 
 
@@ -17,6 +19,8 @@ Fairchild F224, K17B (Metrogon Lens)
     :width: 400
     :align: center
     :alt: a diagram of a Fairchild F224 K17B with fiducial markers labeled
+
+|br|
 
 +----+-----+-----+
 |    | x   | y   |
@@ -44,6 +48,8 @@ Fairchild KC-1, KC-1B, T-11 (Metrogon Lens)
     :align: center
     :alt: a diagram of a Fairchild KC-1B with fiducial markers labeled
 
+|br|
+
 +----+-----+-------+
 |    | x   | y     |
 +----+-----+-------+
@@ -70,6 +76,8 @@ Wild RC5, RC8 (Aviogon Lens)
     :align: center
     :alt: a diagram of a Wild RC5 with fiducial markers labeled
 
+|br|
+
 +----+-----+-----+
 |    | x   | y   |
 +----+-----+-----+
@@ -90,6 +98,8 @@ Wild RC10 (Aviogon Lens)
     :width: 400
     :align: center
     :alt: a diagram of a Wild RC10 with fiducial markers labeled
+
+|br|
 
 +----+-----+-----+
 |    | x   | y   |
@@ -119,6 +129,8 @@ Zeiss RMK 15/23 (Pleogon Lens)
     :align: center
     :alt: a diagram of a Zeiss RMK with fiducial markers labeled
 
+|br|
+
 +----+-----+-----+
 |    | x   | y   |
 +----+-----+-----+
@@ -143,6 +155,8 @@ Zeiss RMK A 15/23 (Pleogon Lens)
     :width: 400
     :align: center
     :alt: a diagram of a Zeiss RMK with fiducial markers labeled
+
+|br|
 
 +----+-------+-------+
 |    | x     | y     |

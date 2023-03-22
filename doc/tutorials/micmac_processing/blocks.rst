@@ -18,14 +18,14 @@ as seen below.
     :align: center
     :alt: predicted camera centers for two different sub-blocks
 
-The image below shows camera centers for two different sub-blocks - note the different calculated camera positions in the
-overlapping area - when the absolute DEMs and Orthophotos are created using ``Malt``, this difference will make combining
-the DEMs and Orthophotos more difficult.
+|br| The image below shows camera centers for two different sub-blocks - note the different calculated camera
+positions in the overlapping area - when the absolute DEMs and Orthophotos are created using ``Malt``, this difference
+will make combining the DEMs and Orthophotos more difficult.
 
-To prevent this issue, :py:meth:`spymicmac.micmac.combine_block_measures` will combine the individual GCP and Measures files
-for each block, so that ``Campari`` can be used to create a single absolute orientation for all of the images. You can
-also run :py:meth:`spymicmac.micmac.iterate_campari` to iteratively run ``Campari``, removing any outlier GCPs to further
-refine/correct the orientation.
+To prevent this issue, :py:meth:`spymicmac.micmac.combine_block_measures` will combine the individual GCP and Measures
+files for each block, so that ``Campari`` can be used to create a single absolute orientation for all of the images.
+You can also run :py:meth:`spymicmac.micmac.iterate_campari` to iteratively run ``Campari``, removing any outlier GCPs
+to further refine/correct the orientation.
 
 The screenshot below shows the point cloud file for a set of 1455 historic images acquired over the Juneau Icefield.
 
@@ -34,6 +34,6 @@ The screenshot below shows the point cloud file for a set of 1455 historic image
     :align: center
     :alt: the absolute orientation estimated by re-combining individual sub-blocks
 
-The images were divided into 4 overlapping blocks of roughly equal size for the :doc:`relative` and :doc:`register` steps,
-before being re-combined into a single orientation used to extract DEMs and Orthophotos. This has resulted in relatively
-smooth overlaps between the different DEM blocks, as illustrated in the image below:
+|br| The images were divided into 4 overlapping blocks of roughly equal size for the :doc:`relative` and :doc:`register`
+steps, before being re-combined into a single orientation used to extract DEMs and Orthophotos. This has resulted in
+relatively smooth overlaps between the different DEM blocks, as illustrated in the image below:

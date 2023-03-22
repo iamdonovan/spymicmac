@@ -11,6 +11,7 @@ uses to find GCPs and iteratively refine the orientation.
 
 necessary files
 ----------------
+
 reference orthoimage and DEM
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 At the risk of stating the obvious, the reference orthoimage and DEM should cover your study area. The reference
@@ -66,17 +67,17 @@ positions estimated by ``mm3d Tapas``.
     :align: center
     :alt: diagram showing the transformation of the relative orthophoto to absolute space, using the camera positions
 
-Because the footprints are most likely approximate, especially for historic datasets, this step uses
+|br| Because the footprints are most likely approximate, especially for historic datasets, this step uses
 `RANSAC <https://scikit-image.org/docs/dev/api/skimage.measure.html#skimage.measure.ransac>`_ with a fairly large
 residual threshold. The goal is to create a rough transformation of the relative orthophoto that can be used for
 the gridded template matching step.
 
 gridded template matching
 --------------------------
-Once the relative orthophoto has been roughly transformed to absolute space, :py:meth:`spymicmac.register.register_ortho`
-find matches between the orthophoto and the reference image using :py:meth:`spymicmac.image.find_grid_matches`. The
-size of each search window is set by ``dstwin``, and the templates (of size 121x121 pixels) are taken from a grid
-with spacing determined by the ``density`` parameter.
+Once the relative orthophoto has been roughly transformed to absolute space,
+:py:meth:`spymicmac.register.register_ortho` find matches between the orthophoto and the reference image using
+:py:meth:`spymicmac.image.find_grid_matches`. The size of each search window is set by ``dstwin``, and the templates
+(of size 121x121 pixels) are taken from a grid with spacing determined by the ``density`` parameter.
 
 Each template and search image are first run through :py:meth:`spymicmac.image.highpass_filter`, to help minimize
 radiometric differences between the two images (and maximizing the high-frequency variation). After that, the
@@ -91,6 +92,8 @@ quality matches are more likely to represent larger departures from the backgrou
     :width: 600
     :align: center
     :alt: a comparison of (a) the template, (b) the search space (with match indicated by a red plus), and (c) the correlation between the template and search image
+
+|br|
 
 iterative outlier removal
 --------------------------

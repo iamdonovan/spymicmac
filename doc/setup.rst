@@ -15,7 +15,8 @@ Detailed installation instructions for MicMac on multiple platforms can be found
 but we've added a short summary to help guide through the process.
 
 First, clone the MicMac repository to a folder on your computer (you can also do this online via github):
-::
+
+.. code-block:: sh
 
     /home/bob/software:~$ git clone https://github.com/micmacIGN/micmac.git
     ...
@@ -25,7 +26,8 @@ First, clone the MicMac repository to a folder on your computer (you can also do
 
 This will clone the MicMac git repository to your machine, fetch the remote, and switch to the *IncludeALGLIB* branch.
 Check the **README.md** (or **LISEZMOI.md**) file to install any dependencies, then:
-::
+
+.. code-block:: sh
 
     /home/bob/software/micmac:~$ mkdir build && cd build/
     /home/bob/software/micmac/build:~$ cmake .. -DWITH_QT5=1 -DWERROR=0 -DWITH_CCACHE=OFF
@@ -38,7 +40,8 @@ will throw warnings that will force the compiler to quit with errors if we don't
 Finally, make sure to add the MicMac bin directory (``/home/bob/software/micmac/bin`` in the above example)
 to your ``$PATH`` environment variable, in order to be able to run MicMac. You can check that all dependencies are
 installed by running the following:
-::
+
+.. code-block:: text
 
     /home/bob:~$ mm3d CheckDependencies
     git revision : v1.0.beta13-844-g21d990533
@@ -69,14 +72,16 @@ via PyPI
 ------------
 As of version 0.1, sPyMicMac is available via PyPI. To install the latest packaged version into your python environment,
 simply run:
-::
+
+.. code-block:: sh
 
     pip install spymicmac
 
 via conda-forge
 -----------------
 As of version 0.1.1, sPyMicMac is available via conda-forge. To install the latest version, run:
-::
+
+.. code-block:: sh
 
     conda install -c conda-forge spymicmac
 
@@ -84,7 +89,8 @@ As of version 0.1.1, sPyMicMac is available via conda-forge. To install the late
 from source
 -------------
 To get started, clone the repository, then navigate to the directory where the repository is downloaded:
-::
+
+.. code-block:: sh
 
     git clone https://github.com/iamdonovan/sPyMicMac.git
 
@@ -96,13 +102,15 @@ is `conda <https://docs.conda.io/en/latest/>`_, but your preferences may differ.
 
 The git repository has a file, environment.yml, which provides a working environment for sPyMicMac and conda.
 Once you have conda installed, simply run:
-::
+
+.. code-block:: sh
 
     conda env create -f environment.yml
 
 This will create a new conda environment, called spymicmac, which will have all of the various python packages
 necessary to run sPyMicMac. To activate the new environment, type:
-::
+
+.. code-block:: sh
 
     conda activate spymicmac
 
@@ -112,25 +120,29 @@ sPyMicMac scripts and tools, if it is not already activated in your terminal.
 Installing via pip
 ^^^^^^^^^^^^^^^^^^^^
 Once you have the environment prepared (or not), run pip from inside the ``sPyMicMac`` directory:
-::
+
+.. code-block:: sh
 
     pip install .
 
 Alternatively, you can install a development version, which allows you to make changes to the code (either via git updates
 or your own tinkering) without having to re-install each time. To install a development version, use the ``-e`` option:
-::
+
+.. code-block:: sh
 
     pip install -e .
 
 Checking the installation
 --------------------------
 Assuming that you haven't run into any errors, you should be set up. You can verify this by running:
-::
+
+.. code-block:: sh
 
     register_ortho -h
 
 From the command line. You should see the following output (or something very similar):
-::
+
+.. code-block:: text
 
     usage: register_ortho [-h] [-glacmask GLACMASK] [-landmask LANDMASK] [-footprints FOOTPRINTS]
                           [-im_subset IM_SUBSET [IM_SUBSET ...]] [-b BLOCK_NUM] [-ori ORI]
