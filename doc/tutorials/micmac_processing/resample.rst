@@ -1,10 +1,13 @@
 re-sampling the images
 ======================
 
-After you have found each of the fiducial marks in each image and generated a MeasuresIm file for each image,
-either using :doc:`../../spymicmac/scripts/find_reseau_grid` for KH-9 images, or by hand/using ``mm3d Kugelhupf``
-for historic aerial photographs, you can run ``ReSampFid``:
-::
+air photos
+------------
+
+After you have found each of the fiducial marks in each image and generated a MeasuresIm file for each image, either by
+hand or using ``mm3d Kugelhupf``, you can run ``ReSampFid``:
+
+.. code-block:: text
 
     *****************************
     *  Help for Elise Arg main  *
@@ -18,23 +21,30 @@ for historic aerial photographs, you can run ``ReSampFid``:
       * [Name=AttrMasq] string :: {Atribut for masq toto-> toto_AttrMasq.tif, NONE if unused, Def=NONE}
       * [Name=ExpAff] bool :: {Export the affine transformation}
 
-For example, if you are using KH-9 images from Earth Explorer, you would run the following command to re-sample
-the images to 14 microns (0.014 mm):
-::
+For example, to re-sample the images to 14 microns (0.014 mm):
 
-    mm3d ReSampFid "DZB.*tif" 0.014
+.. code-block:: sh
 
-.. note::
-    There is also a shell script, :doc:`../../spymicmac/scripts/resample_hexagon`, that will leave a 1 mm overlap
-    between the two image halves, to aid in joining them together.
+    mm3d ReSampFid "AR5.*tif" 0.014
 
 
 The re-sampled images will have OIS-Reech\_ appended to the filename:
-::
+
+.. code-block:: text
 
     AR5840034159994.tif -> OIS-Reech_AR5840034159994.tif
 
 These are the images that you will use for the remaining steps - you might want to create a new folder to place the
 original images.
+
+kh-9 hexagon
+--------------
+
+To resample KH-9 Hexagon Mapping Camera images, use either :py:meth:`spymicmac.image.resample_hex` or
+:doc:`../../spymicmac/scripts/resample_hexagon`.
+
+
+next step
+----------
 
 The next step is to find tie points using ``Tapioca``.

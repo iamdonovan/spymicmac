@@ -2,7 +2,8 @@ computing the relative orthophoto
 =================================
 Once you have the relative orientation, you can use `Malt <https://micmac.ensg.eu/index.php/Malt>`_ to compute
 a relative DEM and orthoimages:
-::
+
+.. code-block:: sh
 
     mm3d Malt Ortho "OIS.*tif" Relative DirMEC=MEC-Relative NbVI=2 MasqImGlob=filtre.tif ZoomF=8 DefCor=0 CostTrans=1 EZA=1
 
@@ -20,7 +21,8 @@ creating the orthomosaic using Tawny
 ------------------------------------
 Note that the orthoimages are not mosaicked - they are just the individual images orthorectified using the extracted
 DEM. To generate an orthomosaic, we use `Tawny <https://micmac.ensg.eu/index.php/Tawny>`_:
-::
+
+.. code-block:: sh
 
     mm3d Tawny Ortho-MEC-Malt Out=Orthophotomosaic.tif RadiomEgal=0
 
@@ -28,7 +30,8 @@ Here, we use ``RadiomEgal=0`` to use the images as-is, rather than attempting to
 can lead to undesirable results). Finally, you might need to re-combine the image tiles using
 `mosaic_micmac_tiles.py <https://mmaster-workflows.readthedocs.io/en/v0.1/pymmaster/python/scripts/mosaic_micmac_tiles.html>`_,
 depending on how large they are:
-::
+
+.. code-block:: sh
 
     cd Ortho-MEC-Malt
     mosaic_micmac_tiles.py -filename Orthophotomosaic
