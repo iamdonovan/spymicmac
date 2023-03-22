@@ -35,8 +35,7 @@ setup(name='spymicmac',
                         'sphinx-argparse', 'earthengine-api', 'pyasn1', 'usgs'],
       packages=find_packages(),
       scripts=['bin/get_autogcp_locations.sh',
-               'bin/post_process_micmac.sh',
-               'bin/resample_hexagon.sh'],
+               'bin/post_process_micmac.sh'],
       entry_points={
           'console_scripts': [
               'balance_images = spymicmac.tools.balance_images:main',
