@@ -5,18 +5,18 @@ from spymicmac.image import join_hexagon
 
 
 def _argparser():
-    parser = argparse.ArgumentParser(description="Join two halves of a scanned KH-9 Hexagon image (or four parts of a scanned KH-4 Corona image).",
+    parser = argparse.ArgumentParser(description="Join parts of a scanned image",
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument('-o', '--overlap', action='store', type=int, default=2000,
-                        help='overlap search width between two images [2000]')
     parser.add_argument('-p', '--pattern', action='store', type=str, default='DZB',
                        help='Match pattern for images [DZB]')
+    parser.add_argument('-o', '--overlap', action='store', type=int, default=2000,
+                        help='overlap search width between two images [2000]')
+    parser.add_argument('-k', '--block_size', action='store', type=int, default=None,
+                        help='the number of rows each sub-block should cover. Defaults to overlap value.')
     parser.add_argument('-b', '--blend', action='store_true',
                         help='Blend across image halves to prevent a sharp line at edge.')
-    parser.add_argument('-c', '--corona', action='store_true',
-                        help='Images are Corona KH-4/KH-4A scans (i.e., there are 4 parts).')
-    parser.add_argument('-m', '--main', action='store_true',
-                        help='Images are from KH-9 main camera (i.e., there are 8 parts).')
+    parser.add_argument('-r', '--reversed', action='store_true',
+                        help='parts are in reversed order (i.e., part b is the left part, part a is the right part)')
     return parser
 
 
@@ -29,9 +29,9 @@ def main():
         print(im)
         join_hexagon(im,
                      overlap=args.overlap,
+                     block_size=args.block_size,
                      blend=args.blend,
-                     corona=args.corona,
-                     main=args.main)
+                     is_reversed=args.reversed)
 
 
 if __name__ == "__main__":

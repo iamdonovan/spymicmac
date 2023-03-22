@@ -1,19 +1,20 @@
 #!/usr/bin/env python
 import argparse
+import multiprocessing as mp
 import numpy as np
 from spymicmac.image import find_reseau_grid
+
+
+def batch_wrapper(argsin):
+    find_reseau_grid(**argsin)
 
 
 def _argparser():
     _parser = argparse.ArgumentParser(description="Find Reseau marks in a scanned KH-9 Hexagon image.",
                                       formatter_class=argparse.RawDescriptionHelpFormatter)
-    _parser.add_argument('fn_img', action='store', type=str, help='Image to find Reseau grid in.')
+    _parser.add_argument('img', action='store', type=str, nargs='+', help='Image(s) to find Reseau marks in.')
     _parser.add_argument('-csize', action='store', type=int, default=361, help='Reseau mark template size [361 pixels]')
-    _parser.add_argument('-tsize', action='store', type=int, default=300, help='half-size of search window [300 pixels]')
-    _parser.add_argument('-nproc', action='store', type=int, default=1,
-                         help='Number of processors to use [1].')
-    _parser.add_argument('-j', '--joined', action='store_true',
-                         help='Image is a joined KH-9 scan, rather than half of a scanned image.')
+    _parser.add_argument('-n', '--nproc', type=int, default=1, help='number of sub-processes to use [Default: 1].')
     return _parser
 
 
@@ -22,11 +23,22 @@ def main():
     parser = _argparser()
     args = parser.parse_args()
 
-    find_reseau_grid(args.fn_img,
-                     csize=args.csize,
-                     tsize=args.tsize,
-                     nproc=args.nproc,
-                     joined=args.joined)
+    if args.nproc > 1 and len(args.img) > 1:
+        pool = mp.Pool(args.nproc, maxtasksperchild=1)
+
+        arg_dict = {'csize': args.csize}
+        pool_args = [{'fn_img': fn_img} for fn_img in args.img]
+
+        for d in pool_args:
+            d.update(arg_dict)
+
+        pool.map(batch_wrapper, pool_args, chunksize=1)
+        pool.close()
+        pool.join()
+    else:
+        for fn_img in args.img:
+            find_reseau_grid(fn_img, csize=args.csize)
+
 
 
 if __name__ == "__main__":

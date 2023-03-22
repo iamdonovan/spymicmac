@@ -5,7 +5,7 @@ channels:
 dependencies:
   - python>=3.7
   - pyproj
-  - scikit-image>=0.18
+  - scikit-image>=0.19
   - geopandas
   - matplotlib
   - sphinx

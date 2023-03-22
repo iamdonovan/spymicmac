@@ -315,13 +315,22 @@ def create_localchantier_xml(name='KH9MC', short_name='KH-9 Hexagon Mapping Came
     tree.write('MicMac-LocalChantierDescripteur.xml', pretty_print=True, xml_declaration=True, encoding="utf-8")
 
 
-def init_autocal(imsize=(32857, 15714)):
+# TODO: make this more general by changing the name of the file based on foc, camera name
+def init_autocal(imsize=(32200, 15400), framesize=(460, 220), foc=304.8, camname='KH9MC'):
     """
-    Create an AutoCal xml file for the KH-9 Mapping Camera for use in the Tapas step.
+    Create an AutoCal xml file for use in the Tapas step. Default values are for KH-9 Hexagon Mapping Camera.
 
-    :param array-like imsize: the size of the image (width, height) in pixels
+    When calling mm3d Tapas, be sure to use "InCal=Init":
+
+        mm3d Tapas RadialBasic "OIS.*tif" InCal=Init Out=Relative LibFoc=0
+
+    :param array-like imsize: the size of the image (width, height) in pixels (default: (32200, 15400))
+    :param array-like framesize: the size of the image (width, height) in mm (default: (460, 220))
+    :param float foc: nominal focal length, in mm (default: 304.8)
     """
     os.makedirs('Ori-Init', exist_ok=True)
+
+    scale = np.mean([imsize[0] / framesize[0], imsize[1] / framesize[1]])
 
     pp = np.array(imsize) / 2
 
@@ -330,7 +339,7 @@ def init_autocal(imsize=(32857, 15714)):
         E.CalibrationInternConique(
             E.KnownConv('eConvApero_DistM2C'),
                 E.PP('{} {}'.format(pp[0], pp[1])),
-                E.F('21771.2778464694711'),
+                E.F('{}'.format(scale * foc)),
                 E.SzIm('{} {}'.format(imsize[0], imsize[1])),
                 E.CalibDistortion(
                     E.ModRad(
@@ -344,8 +353,13 @@ def init_autocal(imsize=(32857, 15714)):
     )
 
     tree = etree.ElementTree(outxml)
-    tree.write(os.path.join('Ori-Init', 'AutoCal_Foc-304800_KH9MC.xml'),
+    tree.write(os.path.join('Ori-Init', 'AutoCal_Foc-{}_{}.xml'.format(int(foc*1000), camname)),
                pretty_print=True, xml_declaration=True, encoding="utf-8")
+
+
+def parse_localchantier(fn_chant):
+    pass
+
 
 
 def get_match_pattern(imlist):
