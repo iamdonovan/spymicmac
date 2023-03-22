@@ -15,7 +15,39 @@ def get_login_creds():
     :return:
         - **creds** -- the netrc.netrc credentials.
     """
-    return netrc.netrc(os.path.expanduser('~/.netrc'))
+
+    # first, check whether .netrc exists in the home directory
+    if os.path.exists(os.path.expanduser('~/.netrc')):
+        return netrc.netrc(os.path.expanduser('~/.netrc'))
+    # next, check whether _netrc exists
+    elif os.path.exists(os.path.expanduser('~/_netrc')):
+        return netrc.netrc(os.path.expanduser('~/_netrc'))
+    # if we don't have ~/.netrc or ~/_netrc, then we can't log in.
+    else:
+        raise FileExistsError("Please ensure that you have a .netrc file stored in your home directory.")
+
+
+def authenticate():
+    """
+    Use the credentials stored in the user's .netrc file to authenticate the user on earthexplorer.usgs.gov
+
+    :return:
+        -- **login** (*dict*) -- the response from the login attempt
+    """
+    creds = get_login_creds()
+    user, _, pwd = creds.authenticators('earthexplorer.usgs.gov')
+
+    try:
+        login = api.login(user, pwd)
+    except USGSAuthExpiredError as e:
+        print('API key has expired. Attempting to remove .usgs from home directory.')
+        os.remove(os.path.expanduser('~/.usgs'))
+
+        login = api.login(user, pwd)
+
+    del user, pwd, creds
+
+    return login
 
 
 def read_coords(result):
@@ -53,21 +85,9 @@ def get_usgs_footprints(imlist, dataset='DECLASSII'):
         -- **gdf** (*GeoDataFrame*) -- a GeoDataFrame of image footprints.
     """
     # air photos: 'AERIAL_COMBIN'
-    creds = get_login_creds()
-
     gdf = gpd.GeoDataFrame()
 
-    user, _, pwd = creds.authenticators('earthexplorer.usgs.gov')
-
-    try:
-        login = api.login(user, pwd)
-    except USGSAuthExpiredError as e:
-        print('API key has expired. Attempting to remove .usgs from home directory.')
-        os.remove(os.path.expanduser('~/.usgs'))
-
-        login = api.login(user, pwd)
-
-    del user, pwd, creds
+    login = authenticate()
 
     if login['errorCode'] is not None:
         print('Error logging in to USGS EROS.')
