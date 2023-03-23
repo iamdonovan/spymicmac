@@ -14,6 +14,7 @@ Here, you will find information about the workflow for using sPyMicMac to proces
    :glob:
    :maxdepth: 2
 
+   tealdeer
    preprocessing/index
    micmac_processing/index
 

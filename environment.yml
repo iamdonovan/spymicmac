@@ -13,6 +13,7 @@ dependencies:
   - lxml
   - gdal
   - pyasn1
+  - numba
   - earthengine-api
   - pillow>9.1.0
   - pip
