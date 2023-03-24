@@ -14,7 +14,7 @@ def _argparser():
                         help='Film size (width, height), in mm. [Default: 460, 220]')
     parser.add_argument('-p', '--pattern', action='store', type=str, default='.*',
                         help='Camera name to use. [Default: .*]')
-    parser.add_argument('-f', '--focal', action='store', type=float,
+    parser.add_argument('-f', '--focal', action='store', type=float, default=304.8,
                         help='Camera focal length (in mm). [Default: 304.8]')
     parser.add_argument('--add_sfs', action='store_true',
                         help='Use SFS for tie point matching [Default: False].')
