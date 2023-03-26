@@ -8,7 +8,7 @@ def _argparser():
     parser = argparse.ArgumentParser(description="Join parts of a scanned image",
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('-p', '--pattern', action='store', type=str, default='DZB',
-                       help='Match pattern for images [DZB]')
+                        help='Match pattern for images [DZB]')
     parser.add_argument('-o', '--overlap', action='store', type=int, default=2000,
                         help='overlap search width between two images [2000]')
     parser.add_argument('-k', '--block_size', action='store', type=int, default=None,
@@ -25,6 +25,8 @@ def main():
     args = parser.parse_args()
 
     imlist = [f.split('_a.tif')[0] for f in glob('{}*a.tif'.format(args.pattern))]
+    imlist.sort()
+
     for im in imlist:
         print(im)
         join_hexagon(im,
