@@ -15,6 +15,7 @@ def extract(tar_ext='.tgz'):
     tarlist.sort()
 
     if len(tarlist) > 0:
+        print('Extracting images from tar files.')
         for tarball in tarlist:
             print(tarball)
             with tarfile.open(tarball, 'r') as tfile:
@@ -112,6 +113,7 @@ def main():
         imlist.sort()
 
     if do['join']:
+        print('Joining scanned image halves.')
         for fn_img in imlist:
             print(fn_img)
             join_hexagon(fn_img, blend=args.blend)
@@ -123,6 +125,7 @@ def main():
             shutil.move(fn_img + '_b.tif', 'halves')
 
     if do['reseau']:
+        print('Finding Reseau marks in images.')
         for fn_img in imlist:
             find_reseau_grid(fn_img + '.tif')
 
