@@ -1183,11 +1183,12 @@ def _fix_cross(subimg):
     return subimg.astype(np.uint8)
 
 
-def remove_crosses(fn_img):
+def remove_crosses(fn_img, nproc=1):
     """
     Remove the Reseau marks from a KH-9 image before re-sampling.
 
     :param str fn_img: the image filename.
+    :param int nproc: the number of subprocesses to use (default: 1).
     """
     fn_meas = os.path.join('Ori-InterneScan', 'MeasuresIm-{}.xml'.format(fn_img))
     img = io.imread(fn_img)
@@ -1208,10 +1209,33 @@ def remove_crosses(fn_img):
     img[int(pt[0]) - row_[0]:int(pt[0]) + row_[1] + 1, int(pt[1]) - col_[0]:int(pt[1]) + col_[1] + 1] = subim.astype(
         np.uint8)
 
-    for i, row in gcps.loc[1:].iterrows():
-        pt = np.round([row.i, row.j]).astype(int)
-        subim, row_, col_ = make_template(img, pt, 200)
-        img[pt[0] - row_[0]:pt[0] + row_[1] + 1, pt[1] - col_[0]:pt[1] + col_[1] + 1] = _fix_cross(subim)
+    if nproc == 1:
+        for i, row in gcps.loc[1:].iterrows():
+            pt = np.round([row.i, row.j]).astype(int)
+            subim, row_, col_ = make_template(img, pt, 200)
+            img[pt[0] - row_[0]:pt[0] + row_[1] + 1, pt[1] - col_[0]:pt[1] + col_[1] + 1] = _fix_cross(subim)
+    else:
+        pool = mp.Pool(nproc, maxtasksperchild=1)
+
+        subimgs = []
+        rows = []
+        cols = []
+        points = []
+
+        for ind, row in gcps.loc[1:].iterrows():
+            pt = np.round([row.i, row.j]).astype(int)
+            subim, row_, col_ = make_template(img, pt, 200)
+            subimgs.append(subim)
+            rows.append(row_)
+            cols.append(col_)
+            points.append(pt)
+
+        outputs = pool.map(_fix_cross, subimgs, chunksize=1)
+        pool.close()
+        pool.join()
+
+    for subim, row, col, pt in zip(outputs, rows, cols, points):
+        img[pt[0] - row_[0]:pt[0] + row_[1] + 1, pt[1] - col_[0]:pt[1] + col_[1] + 1] = subim
 
     os.makedirs('original', exist_ok=True)
     shutil.move(fn_img, 'original')
@@ -1265,7 +1289,7 @@ def _blend(_left, _right, left_shape):
     m = 1 / (first - last)
     alpha = np.ones(_left.shape, dtype=np.float32)
     alpha[:, last:] = 0
-    for i, ind in enumerate(np.arange(first, last)):
+    for ind in np.arange(first, last):
         alpha[:, ind] = 1 + m * (ind - first)
 
     return alpha * _left + (1 - alpha) * _right
@@ -1372,9 +1396,13 @@ def resample_hex(fn_img, scale, ori='InterneScan'):
     out_ds = gdal.Warp('tmp_{}'.format(fn_img), fn_img, xRes=1, yRes=1,
                        outputBounds=[0, 0, all_meas.j_cam.max(), all_meas.i_cam.max()],
                        resampleAlg=gdal.GRA_Lanczos)
+    meta_shp = '{"shape": ' + '[{}, {}]'.format(out_ds.RasterYSize, out_ds.RasterXSize) + '}'
+    out_ds.SetMetadata({'TIFFTAG_IMAGEDESCRIPTION': meta_shp})
+    out_ds.FlushCache()
     out_ds = None
 
     img = io.imread('tmp_{}'.format(fn_img))
     io.imsave('OIS-Reech_{}'.format(fn_img), np.flipud(img).astype(np.uint8))
 
     os.remove('tmp_{}'.format(fn_img))
+    os.remove('{}.aux.xml'.format(fn_img))
