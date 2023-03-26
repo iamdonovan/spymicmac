@@ -640,6 +640,66 @@ def move_bad_tapas(ori):
         shutil.move(im, 'bad')
 
 
+def tapioca(img_pattern='OIS.*tif', res_low=400, res_high=1200):
+    """
+    Run mm3d Tapioca MulScale
+
+    :param str img_pattern: The image pattern to pass to Tapioca (default: OIS.*tif)
+    :param int res_low: the size of the largest image axis, in pixels, for low-resolution matching (default: 400)
+    :param int res_high: the size of the largest image axis, in pixels, for high-resolution matching (default: 1200)
+    """
+    echo = subprocess.Popen('echo', stdout=subprocess.PIPE)
+    p = subprocess.Popen(['mm3d', 'Tapioca', 'MulScale', img_pattern,
+                          str(res_low), str(res_high)], stdin=echo.stdout)
+    return p.wait()
+
+
+def tapas(cam_model, ori_out, img_pattern='OIS.*tif', in_cal=None, lib_foc=True, lib_pp=True):
+    """
+    Run mm3d Tapas with a given camera calibration model.
+
+    Some basic camera calibration models for air photos:
+        - RadialBasic
+        - RadialStd
+        - RadialExtended
+        - FraserBasic
+        - Fraser
+
+    See MicMac docs for a full list/explanation of the camera models.
+
+    :param str cam_model: the camera calibration model to use.
+    :param str ori_out: the output orientation. Will create a directory, Ori-{ori_out}, with camera parameter files.
+    :param str img_pattern: the image pattern to pass to Tapas (default: OIS.*tif)
+    :param str in_cal: an input calibration model to refine (default: None)
+    :param bool lib_foc: allow the focal length to be calibrated (default: True)
+    :param bool lib_pp: allow the principal point to be calibrated (default: True)
+    :return:
+    """
+    echo = subprocess.Popen('echo', stdout=subprocess.PIPE)
+
+    if in_cal is not None:
+        p = subprocess.Popen(['mm3d', 'Tapas', cam_model, img_pattern, 'InCal=' + in_cal,
+                              'LibFoc={}'.format(int(lib_foc)), 'LibPP={}'.format(int(lib_pp)),
+                              'Out=' + ori_out], stdin=echo.stdout)
+    else:
+        p = subprocess.Popen(['mm3d', 'Tapas', cam_model, img_pattern,
+                              'LibFoc={}'.format(int(lib_foc)), 'LibPP={}'.format(int(lib_pp)),
+                              'Out=' + ori_out], stdin=echo.stdout)
+    return p.wait()
+
+
+def apericloud(ori, img_pattern='OIS.*tif'):
+    """
+    Run mm3d AperiCloud to create a point cloud layer
+
+    :param str ori: the input orientation to use
+    :param str img_pattern: the image pattern to pass to AperiCloud (default: OIS.*tif)
+    """
+    echo = subprocess.Popen('echo', stdout=subprocess.PIPE)
+    p = subprocess.Popen(['mm3d', 'AperiCloud', img_pattern, ori], stdin=echo.stdout)
+    return p.wait()
+
+
 def run_bascule(in_gcps, outdir, img_pattern, sub, ori, outori='TerrainRelAuto',
                 fn_gcp='AutoGCPs', fn_meas='AutoMeasures'):
     """
@@ -697,10 +757,6 @@ def run_campari(in_gcps, outdir, img_pattern, sub, dx, ortho_res, allfree=True,
         - **out_gcps** (*pandas.DataFrame*) -- the input gcps with the updated Campari residuals.
     """
     echo = subprocess.Popen('echo', stdout=subprocess.PIPE)
-    if allfree:
-        allfree_tag = 1
-    else:
-        allfree_tag = 0
 
     fn_gcp = fn_gcp + sub + '.xml'
     fn_meas = fn_meas + sub + '-S2D.xml'
@@ -713,7 +769,7 @@ def run_campari(in_gcps, outdir, img_pattern, sub, dx, ortho_res, allfree=True,
                                                      os.path.join(outdir, fn_meas),
                                                      np.abs(dx / ortho_res)),
                           'SH={}'.format(homol),
-                          'AllFree={}'.format(allfree_tag)], stdin=echo.stdout)
+                          'AllFree={}'.format(int(allfree))], stdin=echo.stdout)
     p.wait()
 
     out_gcps = get_campari_residuals('Ori-{}/Residus.xml'.format(outori + sub), in_gcps)

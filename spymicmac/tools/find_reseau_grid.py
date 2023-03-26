@@ -40,6 +40,5 @@ def main():
             find_reseau_grid(fn_img, csize=args.csize)
 
 
-
 if __name__ == "__main__":
     main()
