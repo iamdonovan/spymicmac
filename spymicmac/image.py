@@ -23,7 +23,7 @@ from skimage.transform import warp, AffineTransform, EuclideanTransform, Piecewi
 from scipy.interpolate import RectBivariateSpline as RBS
 from scipy import ndimage
 import numpy as np
-from shapely.ops import cascaded_union, nearest_points
+from shapely.ops import nearest_points, unary_union
 from shapely.geometry import LineString, MultiPoint, Point
 import geopandas as gpd
 # from llc import jit_filter_function
@@ -314,7 +314,7 @@ def make_binary_mask(img, mult_value=255, erode=0, mask_value=0):
         _mask[np.isnan(img)] = 0
 
     if erode > 0:
-        erode_mask = morphology.binary_erosion(_mask, selem=morphology.disk(erode))
+        erode_mask = morphology.binary_erosion(_mask, footprint=morphology.disk(erode))
         _mask[~erode_mask] = 0
 
     return _mask
@@ -329,7 +329,7 @@ def balance_image(img):
         - **img_filt** (*array-like*) -- the balanced, filtered image.
     """
     img_eq = (255 * exposure.equalize_adapthist(img)).astype(np.uint8)
-    img_filt = filters.median(img_eq, selem=disk(1))
+    img_filt = filters.median(img_eq, footprint=disk(1))
     return img_filt
 
 
@@ -401,7 +401,7 @@ def get_footprint_overlap(fprints):
 
     :param GeoDataFrame fprints: a GeoDataFrame of image footprints
     :return:
-        - **intersection** (*shapely.Polygon*) -- the overlapping area (cascaded union) of the images.
+        - **intersection** (*shapely.Polygon*) -- the overlapping area (unary union) of the images.
     """
     if fprints.shape[0] == 1:
         return fprints.geometry.values[0]
@@ -413,10 +413,11 @@ def get_footprint_overlap(fprints):
 
     intersections = []
     for poly in fprints['geometry']:
-        merged = cascaded_union([fprints.loc[pos, 'geometry'] for pos in idx.intersection(poly.bounds) if fprints.loc[pos, 'geometry'] != poly])
+        merged = unary_union([fprints.loc[pos, 'geometry'] for pos in idx.intersection(poly.bounds)
+                              if fprints.loc[pos, 'geometry'] != poly])
         intersections.append(poly.intersection(merged))
 
-    intersection = cascaded_union(intersections)
+    intersection = unary_union(intersections)
 
     # return intersection.minimum_rotated_rectangle
     return intersection
@@ -622,8 +623,8 @@ def do_match(dest_img, ref_img, mask, pt, srcwin, dstwin):
         test = highpass_filter(testchip)
         dest = highpass_filter(dst_chip)
 
-        testmask = binary_dilation(testchip == 0, selem=disk(8))
-        destmask = binary_dilation(dst_chip == 0, selem=disk(8))
+        testmask = binary_dilation(testchip == 0, footprint=disk(8))
+        destmask = binary_dilation(dst_chip == 0, footprint=disk(8))
 
         test[testmask] = np.random.rand(test.shape[0], test.shape[1])[testmask]
         dest[destmask] = np.random.rand(dest.shape[0], dest.shape[1])[destmask]
