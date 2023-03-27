@@ -105,6 +105,8 @@ def get_imlist(im_subset, dirname='.', strip_text=None):
             match_pattern = im_subset[0] + '.*tif'
             imlist = [f for f in glob('OIS*.tif') if re.search(match_pattern, f)]
 
+    imlist.sort()
+
     return imlist, match_pattern
 
 
@@ -782,6 +784,17 @@ def register_ortho(fn_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, landmask=
     Minit, _, centers = transform_centers(ortho_gt, ref_img, imlist, footprints, 'Ori-{}'.format(ori))
     rough_tfm = warp(ortho, Minit, output_shape=ref_img.shape, preserve_range=True)
 
+    rough_spacing = np.round(max(ref_img.shape) / 20 / 1000) * 1000
+
+    rough_gcps = imtools.find_grid_matches(rough_tfm, ref_img, mask_full, Minit,
+                                           spacing=int(rough_spacing), dstwin=int(rough_spacing))
+
+    model, inliers = ransac((rough_gcps[['search_j', 'search_i']].values,
+                             rough_gcps[['orig_j', 'orig_i']].values), AffineTransform,
+                            min_samples=6, residual_threshold=200, max_trials=5000)
+
+    rough_tfm = warp(ortho, model, output_shape=ref_img.shape, preserve_range=True)
+
     rough_geo = ref_img.copy(new_raster=rough_tfm)
     rough_geo.write('Orthophoto{}_geo.tif'.format(subscript), dtype=np.uint8)
 
@@ -793,7 +806,7 @@ def register_ortho(fn_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, landmask=
     plt.close(fig)
 
     # for each of these pairs (src, dst), find the precise subpixel match (or not...)
-    gcps = imtools.find_grid_matches(rough_tfm, ref_img, mask_full, Minit,
+    gcps = imtools.find_grid_matches(rough_tfm, ref_img, mask_full, model,
                                      spacing=density, dstwin=_search_size(rough_tfm.shape))
 
     xy = np.array([ref_img.ij2xy((pt[1], pt[0])) for pt in gcps[['search_j', 'search_i']].values]).reshape(-1, 2)
