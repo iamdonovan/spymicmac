@@ -735,7 +735,7 @@ def run_bascule(in_gcps, outdir, img_pattern, sub, ori, outori='TerrainRelAuto',
 
 def run_campari(in_gcps, outdir, img_pattern, sub, dx, ortho_res, allfree=True,
                 fn_gcp='AutoGCPs', fn_meas='AutoMeasures', inori='TerrainRelAuto',
-                outori='TerrainFirstPass', homol='Homol'):
+                outori='TerrainFinal', homol='Homol'):
     """
     Interface for running mm3d Campari and reading the residuals from the residual xml file.
 
@@ -751,7 +751,7 @@ def run_campari(in_gcps, outdir, img_pattern, sub, dx, ortho_res, allfree=True,
     :param str fn_meas: the filename pattern for the measures file. The file that will be loaded will be
         fn_meas + sub + '-S2D.xml' (e.g., default: AutoMeasures -> AutoMeasures_block0-S2D.xml)
     :param str inori: the input orientation to Campari (default: Ori-TerrainRelAuto -> TerrainRelAuto)
-    :param str outori: the output orientation from Campari (default: Ori-TerrainFirstPass -> TerrainFirstPass)
+    :param str outori: the output orientation from Campari (default: Ori-TerrainFinal -> TerrainFinal)
     :param str homol: the Homologue directory to use (default: Homol)
     :return:
         - **out_gcps** (*pandas.DataFrame*) -- the input gcps with the updated Campari residuals.
@@ -782,7 +782,7 @@ def remove_worst_mesures(fn_meas, ori):
     Remove outlier measures from an xml file, given the output from Campari.
 
     :param str fn_meas: the filename for the measures file.
-    :param str ori: the orientation directory output from Campari (e.g., Ori-TerrainFirstPass -> TerrainFirstPass)
+    :param str ori: the orientation directory output from Campari (e.g., Ori-TerrainFinal -> TerrainFinal)
     :return:
     """
     camp_root = ET.parse('Ori-{}/Residus.xml'.format(ori)).getroot()
@@ -816,7 +816,7 @@ def remove_worst_mesures(fn_meas, ori):
 
 
 def iterate_campari(gcps, out_dir, match_pattern, subscript, dx, ortho_res, fn_gcp='AutoGCPs', fn_meas='AutoMeasures',
-                    rel_ori='Relative', inori='TerrainRelAuto', outori='TerrainFirstPass', homol='Homol',
+                    rel_ori='Relative', inori='TerrainRelAuto', outori='TerrainFinal', homol='Homol',
                     allfree=True, max_iter=5):
     """
     Run Campari iteratively, refining the orientation by removing outlier GCPs and Measures, based on their fit to the
@@ -834,7 +834,7 @@ def iterate_campari(gcps, out_dir, match_pattern, subscript, dx, ortho_res, fn_g
         fn_meas + sub + '-S2D.xml' (e.g., default: AutoMeasures -> AutoMeasures_block0-S2D.xml)
     :param str rel_ori: the name of the relative orientation to input to GCPBascule (default: Relative -> Ori-Relative + sub)
     :param str inori: the input orientation to Campari (default: Ori-TerrainRelAuto -> TerrainRelAuto)
-    :param str outori: the output orientation from Campari (default: Ori-TerrainFirstPass -> TerrainFirstPass)
+    :param str outori: the output orientation from Campari (default: Ori-TerrainFinal -> TerrainFinal)
     :param str homol: the Homologue directory to use (default: Homol)
     :param bool allfree: run Campari with AllFree=1 (True), or AllFree=0 (False). (default: True)
     :param int max_iter: the maximum number of iterations to run. (default: 5)
@@ -853,10 +853,10 @@ def iterate_campari(gcps, out_dir, match_pattern, subscript, dx, ortho_res, fn_g
 
     gcps['camp_dist'] = np.sqrt(gcps.camp_xres ** 2 + gcps.camp_yres ** 2)
 
-    while any([np.any(np.abs(gcps.camp_res - gcps.camp_res.median()) > 4 * nmad(gcps.camp_res)),
-               np.any(np.abs(gcps.camp_dist - gcps.camp_dist.median()) > 4 * nmad(gcps.camp_dist)),
+    while any([np.any(np.abs(gcps.camp_res - gcps.camp_res.median()) > 2 * nmad(gcps.camp_res)),
+               np.any(np.abs(gcps.camp_dist - gcps.camp_dist.median()) > 2 * nmad(gcps.camp_dist)),
                gcps.camp_res.max() > 2]) and niter <= 5:
-        valid_inds = np.logical_and.reduce((np.abs(gcps.camp_res - gcps.camp_res.median()) < 4 * nmad(gcps.camp_res),
+        valid_inds = np.logical_and.reduce((np.abs(gcps.camp_res - gcps.camp_res.median()) < 2 * nmad(gcps.camp_res),
                                             gcps.camp_res < gcps.camp_res.max()))
         if np.count_nonzero(valid_inds) < 10:
             break

@@ -107,20 +107,18 @@ def main():
     # now, do all the steps we were asked to do, in order
     if do['extract']:
         imlist = extract(args.tar_ext)
-        imlist = [os.path.splitext(tfile)[0] for tfile in imlist]
+        imlist = [tfile.split(args.tar_ext)[0] for tfile in imlist]
     else:
         imlist = list(set([os.path.splitext(fn)[0].split('_')[0] for fn in glob('DZB*.tif')]))
         imlist.sort()
 
     if do['join']:
         print('Joining scanned image halves.')
-        for fn_img in imlist:
-            print(fn_img)
-            join_hexagon(fn_img, blend=args.blend)
-
         os.makedirs('halves', exist_ok=True)
 
         for fn_img in imlist:
+            print(fn_img)
+            join_hexagon(fn_img, blend=args.blend)
             shutil.move(fn_img + '_a.tif', 'halves')
             shutil.move(fn_img + '_b.tif', 'halves')
 
