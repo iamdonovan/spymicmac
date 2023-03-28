@@ -103,3 +103,31 @@ def get_usgs_footprints(imlist, dataset='DECLASSII'):
         gdf.set_crs(epsg=4326, inplace=True)
 
         return gdf
+
+
+def landsat_to_gdf(results):
+    """
+    Convert USGS Landsat search results to a GeoDataFrame
+
+    :param list results: a list of results (i.e., the 'data' value returned by api.scene_metadata)
+    :return:
+        - **meta_gdf** (*geopandas.GeoDataFrame*) - a GeoDataFrame of search results
+    """
+    meta_gdf = gpd.GeoDataFrame()
+
+    for ind, res in enumerate(results):
+        keys = [f['fieldName'] for f in res['metadata']]
+        values = [f['value'] for f in res['metadata']]
+        metadata = dict(zip(keys, values))
+
+        meta_gdf.loc[ind, 'ID'] = metadata['Landsat Product Identifier L1']
+        meta_gdf.loc[ind, 'geometry'] = Polygon(res['spatialCoverage']['coordinates'][0])
+        meta_gdf.loc[ind, 'acq_date'] = metadata['Date Acquired']
+        meta_gdf.loc[ind, 'land_cc'] = float(metadata['Land Cloud Cover'])
+        meta_gdf.loc[ind, 'scene_cc'] = float(metadata['Scene Cloud Cover L1'])
+        meta_gdf.loc[ind, 'day_night'] = metadata['Day/Night Indicator']
+        # meta_gdf.loc[ind, 'rmse_x'] = float(metadata['Geometric RMSE Model X'])
+        # meta_gdf.loc[ind, 'rmse_y'] = float(metadata['Geometric RMSE Model Y'])
+
+    return meta_gdf.set_crs(epsg=4326)
+
