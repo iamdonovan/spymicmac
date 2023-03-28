@@ -18,7 +18,7 @@ from scipy.interpolate import LinearNDInterpolator
 from shapely.geometry.point import Point
 from shapely.geometry import LineString
 from shapely.strtree import STRtree
-from skimage.io import imread
+from skimage.io import imread, imsave
 from skimage.measure import ransac
 from skimage.transform import AffineTransform
 from pybob.GeoImg import GeoImg
@@ -1313,4 +1313,38 @@ def dem_to_text(fn_dem, fn_out='dem_pts.txt', spacing=100):
     with open(fn_out, 'w') as f:
         for pt in list(zip(x, y, z)):
             print(pt[0], pt[1], pt[2], file=f)
+
+
+# copied from pymmaster
+def mosaic_micmac_tiles(filename, dirname='.'):
+    """
+    Re-stitch images tiled by MicMac.
+
+    :param str filename: MicMac filename to mosaic together
+    :param str dirname: Directory containing images to Mosaic (default: .)
+    :return:
+    """
+    filelist = glob(os.path.sep.join([dirname, '{}_Tile*'.format(filename)]))
+
+    tiled = arrange_tiles(filelist, args)
+
+    arr_cols = []
+    for j in range(J):
+        arr_cols.append(np.concatenate(tiled[:, j], axis=0))
+
+    img = np.concatenate(arr_cols, axis=1)
+
+    imsave(os.path.sep.join([args.imgdir, '{}.tif'.format(args.filename)]), img)
+
+
+def arrange_tiles(flist, fname):
+    tmp_inds = [os.path.splitext(f)[0].split('Tile_')[-1].split('_') for f in flist]
+    arr_inds = np.array([[int(a) for a in ind] for ind in tmp_inds])
+    nrows = arr_inds[:,1].max() + 1
+    ncols = arr_inds[:,0].max() + 1
+    img_arr = np.array(np.zeros((nrows, ncols)), dtype='object')
+    for i in range(nrows):
+         for j in range(ncols):
+             img_arr[i, j] = imread(os.path.sep.join([args.imgdir, '{}_Tile_{}_{}.tif'.format(filename, j, i)]))
+    return img_arr
 
