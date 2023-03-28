@@ -29,7 +29,6 @@ import geopandas as gpd
 # from llc import jit_filter_function
 from numba import jit
 from pybob.image_tools import match_hist, reshape_geoimg, create_mask_from_shapefile, nanmedian_filter
-from pymmaster.mmaster_tools import orient_footprint
 from spymicmac.micmac import get_im_meas, parse_im_meas
 
 
@@ -703,6 +702,26 @@ def find_grid_matches(tfm_img, refgeo, mask, initM=None, spacing=200, srcwin=60,
     gcps.dropna(inplace=True)
 
     return gcps
+
+
+# copied from pymmaster.mmaster_tools
+def orient_footprint(fprint):
+    """
+    Orient footprint coordinates to be clockwise, with upper left coordinate first.
+    :param fprint: footprint to orient
+    :type fprint: shapely polygon
+    :returns o_fprint: re-oriented copy of input footprint.
+    """
+    # orient the footprint coordinates so that they are clockwise
+    fprint = orient(fprint, sign=-1)
+    x, y = fprint.boundary.coords.xy
+    x = x[:-1]  # drop the last coordinate, which is a duplicate of the first
+    y = y[:-1]
+    # as long as the footprints are coming from the .met file, the upper left corner
+    # will be the maximum y value.
+    upper_left = np.argmax(y)
+    new_inds = list(range(upper_left, len(x))) + list(range(0, upper_left))
+    return Polygon(list(zip(np.array(x)[new_inds], np.array(y)[new_inds])))
 
 
 def transform_from_fprint(img, geo, fprint):
