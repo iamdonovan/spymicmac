@@ -20,7 +20,6 @@ dependencies:
   - pip:
       - llc
       - pybob>=0.25.1
-      - pymmaster>=0.1.1
       - sphinx-argparse
       - sphinx-rtd-theme
       - usgs
