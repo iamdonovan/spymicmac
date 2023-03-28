@@ -1326,7 +1326,8 @@ def mosaic_micmac_tiles(filename, dirname='.'):
     """
     filelist = glob(os.path.sep.join([dirname, '{}_Tile*'.format(filename)]))
 
-    tiled = arrange_tiles(filelist, args)
+    tiled = arrange_tiles(filelist, filename, dirname)
+    I, J = tiled.shape
 
     arr_cols = []
     for j in range(J):
@@ -1334,17 +1335,17 @@ def mosaic_micmac_tiles(filename, dirname='.'):
 
     img = np.concatenate(arr_cols, axis=1)
 
-    imsave(os.path.sep.join([args.imgdir, '{}.tif'.format(args.filename)]), img)
+    imsave(os.path.sep.join([dirname, '{}.tif'.format(filename)]), img)
 
 
-def arrange_tiles(flist, fname):
+def arrange_tiles(flist, filename, dirname='.'):
     tmp_inds = [os.path.splitext(f)[0].split('Tile_')[-1].split('_') for f in flist]
     arr_inds = np.array([[int(a) for a in ind] for ind in tmp_inds])
-    nrows = arr_inds[:,1].max() + 1
-    ncols = arr_inds[:,0].max() + 1
+    nrows = arr_inds[:, 1].max() + 1
+    ncols = arr_inds[:, 0].max() + 1
     img_arr = np.array(np.zeros((nrows, ncols)), dtype='object')
     for i in range(nrows):
          for j in range(ncols):
-             img_arr[i, j] = imread(os.path.sep.join([args.imgdir, '{}_Tile_{}_{}.tif'.format(filename, j, i)]))
+             img_arr[i, j] = imread(os.path.sep.join([dirname, '{}_Tile_{}_{}.tif'.format(filename, j, i)]))
     return img_arr
 
