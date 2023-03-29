@@ -75,9 +75,11 @@ def _argparser():
     parser.add_argument('--init_cal', action='store', type=str, default='Init',
                         help='The initial calibration Ori to use for Tapas (default: Init)')
     parser.add_argument('--lib_foc', action='store_true',
-                        help='Use LibFoc=1 for mm3d Tapas (default: False)')
+                        help='Use LibFoc=1 for mm3d Tapas (default: LibFoc=0)')
     parser.add_argument('--lib_pp', action='store_true',
-                        help='Use LibPP=1 for mm3d Tapas (default: False)')
+                        help='Use LibPP=1 for mm3d Tapas (default: LibPP=0)')
+    parser.add_argument('--lib_cd', action='store_true',
+                        help='Use LibCD=1 for mm3d Tapas (default: LibCD=0)')
     parser.add_argument('-n', '--nproc', type=int, default=1, help='number of sub-processes to use (default: 1).')
     return parser
 
@@ -149,7 +151,8 @@ def main():
 
     # run tapas
     if do['tapas']:
-        exit_code = micmac.tapas(args.camera_model, args.ori, lib_foc=args.lib_foc, lib_pp=args.lib_pp)
+        exit_code = micmac.tapas(args.camera_model, args.ori, lib_foc=args.lib_foc,
+                                 lib_pp=args.lib_pp, lib_cd=args.lib_cd)
         if exit_code != 0:
             raise RuntimeError('Error in mm3d Tapas - check Tapas output for details.')
 
