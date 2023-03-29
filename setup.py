@@ -40,6 +40,7 @@ setup(name='spymicmac',
           'console_scripts': [
               'balance_images = spymicmac.tools.balance_images:main',
               'combine_auto_measures = spymicmac.tools.combine_auto_measures:main',
+              'create_localchantier_xml = spymicmac.tools.create_localchantier_xml:main',
               'find_reseau_grid = spymicmac.tools.find_reseau_grid:main',
               'generate_micmac_measures = spymicmac.tools.generate_micmac_measures:main',
               'join_hexagon = spymicmac.tools.join_hexagon:main',

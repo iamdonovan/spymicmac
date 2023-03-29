@@ -12,8 +12,8 @@ MicMac-LocalChantierDescripteur.xml
 
 .. note::
 
-    For KH-9 Hexagon Mapping Camera images, you can use :py:meth:`spymicmac.micmac.create_localchantier_xml` to
-    generate this file.
+    For KH-9 Hexagon Mapping Camera images, you can use :py:meth:`spymicmac.micmac.create_localchantier_xml` or
+    :doc:`../../spymicmac/scripts/create_localchantier_xml` to generate this file.
 
     Alternatively, you can
     :download:`download <../../examples/MicMac-LocalChantierDescripteur.xml>` and edit the example provided.
@@ -24,7 +24,8 @@ length in mm (``CalcName``, line 30) for each set of images - if, for example, d
 
 To improve tie point density and matching, especially in low-contrast images, you can try copying the block below
 into your ``MicMac-LocalChantierDescripteur.xml`` file:
-::
+
+.. code-block:: text
 
     <KeyedNamesAssociations>
         <Calcs>
