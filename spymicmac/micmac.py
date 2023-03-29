@@ -654,7 +654,7 @@ def tapioca(img_pattern='OIS.*tif', res_low=400, res_high=1200):
     return p.wait()
 
 
-def tapas(cam_model, ori_out, img_pattern='OIS.*tif', in_cal=None, lib_foc=True, lib_pp=True):
+def tapas(cam_model, ori_out, img_pattern='OIS.*tif', in_cal=None, lib_foc=True, lib_pp=True, lib_cd=True):
     """
     Run mm3d Tapas with a given camera calibration model.
 
@@ -673,6 +673,7 @@ def tapas(cam_model, ori_out, img_pattern='OIS.*tif', in_cal=None, lib_foc=True,
     :param str in_cal: an input calibration model to refine (default: None)
     :param bool lib_foc: allow the focal length to be calibrated (default: True)
     :param bool lib_pp: allow the principal point to be calibrated (default: True)
+    :param bool lib_cd: allow the center of distortion to be calibrated (default: True)
     :return:
     """
     echo = subprocess.Popen('echo', stdout=subprocess.PIPE)
@@ -680,11 +681,11 @@ def tapas(cam_model, ori_out, img_pattern='OIS.*tif', in_cal=None, lib_foc=True,
     if in_cal is not None:
         p = subprocess.Popen(['mm3d', 'Tapas', cam_model, img_pattern, 'InCal=' + in_cal,
                               'LibFoc={}'.format(int(lib_foc)), 'LibPP={}'.format(int(lib_pp)),
-                              'Out=' + ori_out], stdin=echo.stdout)
+                              'LibCD={}'.format(int(lib_cd)), 'Out=' + ori_out], stdin=echo.stdout)
     else:
         p = subprocess.Popen(['mm3d', 'Tapas', cam_model, img_pattern,
                               'LibFoc={}'.format(int(lib_foc)), 'LibPP={}'.format(int(lib_pp)),
-                              'Out=' + ori_out], stdin=echo.stdout)
+                              'LibCD={}'.format(int(lib_cd)), 'Out=' + ori_out], stdin=echo.stdout)
     return p.wait()
 
 
