@@ -25,6 +25,7 @@ from scipy import ndimage
 import numpy as np
 from shapely.ops import nearest_points, unary_union
 from shapely.geometry import LineString, MultiPoint, Point
+from shapely.geometry.polygon import Polygon, orient
 import geopandas as gpd
 # from llc import jit_filter_function
 from numba import jit
@@ -789,6 +790,8 @@ def ocm_show_wagon_wheels(img, size, width=3, img_border=None):
     """
     if img_border is None:
         _, _, top, bot = get_rough_frame(img)
+        if top < 0 or bot > 1e10:
+            raise RuntimeError("Unable to find image border. Try running again with approximate values.")
     else:
         top, bot = img_border
 
@@ -831,7 +834,7 @@ def find_crosses(img, cross):
         img_inv = img.max() - simg
         res = cv2.matchTemplate(img_inv.astype(np.uint8), cross.astype(np.uint8), cv2.TM_CCORR_NORMED)
 
-        these_coords = peak_local_max(res, min_distance=2*cross.shape[0], threshold_abs=0.15).astype(np.float64)
+        these_coords = peak_local_max(res, min_distance=int(1.5*cross.shape[0]), threshold_abs=0.15).astype(np.float64)
 
         these_coords += cross.shape[0] / 2 - 0.5
 
@@ -872,7 +875,37 @@ def match_reseau_grid(img, coords, cross):
     # top, bot, left, right = find_grid_border(coords)
     left, right, top, bot = get_rough_frame(img)
 
-    scale = np.mean([(bot - top) / 23, (right - left) / 46.5])
+    lr_valid = left > 0 and right < 1e10
+    tb_valid = top > 0 and bot < 1e10
+
+    if lr_valid and tb_valid:
+        scale = np.mean([(bot - top) / 23, (right - left) / 46.5])
+
+    elif lr_valid and not tb_valid:
+        # if the left/right border is okay, use it to guess the top/bottom border
+        scale = (right - left) / 46.5
+
+        if top > 0:
+            bot = int(top + scale * 23)
+        elif bot < 1e10:
+            top = int(bot - scale * 23)
+        else: # if both or wrong, use very approximate average values
+            top = 1200
+            bot = 34000
+
+    elif not lr_valid and tb_valid:
+        # if the top/bottom border is okay, use it to guess the left/right border
+        scale = (bot - top) / 23
+        if left > 0:
+            right = int(left + scale * 46.5)
+        elif right < 1e10:
+            left = int(right - scale * 46.5)
+        else:
+            left = 2000
+            right = 68500
+    else:
+        # if we can't find the image border, try using the mark coordinates.
+        top, bot, left, right = find_grid_border(coords)
 
     left_edge = LineString([(left + cross.shape[0], bot - cross.shape[0]),
                             (left + cross.shape[0], top + cross.shape[0])])
@@ -1024,7 +1057,8 @@ def get_rough_frame(img):
 
     :param array-like img: the image to find a border for
     :return:
-        - **xmin**, **xmax**, **ymin**, **ymax** (*float*) -- the left, right, top, and bottom indices for the rough border.
+        - **xmin**, **xmax**, **ymin**, **ymax** (*float*) -- the left, right, top, and bottom indices
+            for the rough border.
     """
     img_lowres = downsample_image(img, fact=10)
 
@@ -1057,11 +1091,11 @@ def get_rough_frame(img):
     row_peaks = peak_local_max(np.diff(smooth_row), min_distance=20, threshold_rel=0.1, num_peaks=2).flatten()
     row_troughs = peak_local_max(-np.diff(smooth_row), min_distance=20, threshold_rel=0.1, num_peaks=2).flatten()
 
-    left_ind = max(row_peaks[np.where(row_peaks < 0.2 * rowmean.size)[0]])
-    right_ind = min(row_troughs[np.where(row_troughs > 0.8 * rowmean.size)[0]])
+    left_ind = np.max(row_peaks[np.where(row_peaks < 0.2 * rowmean.size)[0]], initial=-1e10)
+    right_ind = np.min(row_troughs[np.where(row_troughs > 0.8 * rowmean.size)[0]], initial=1e10)
 
-    top_ind = max(col_peaks[np.where(col_peaks < 0.2 * colmean.size)[0]])
-    bot_ind = min(col_troughs[np.where(col_troughs > 0.8 * colmean.size)[0]])
+    top_ind = np.max(col_peaks[np.where(col_peaks < 0.2 * colmean.size)[0]], initial=-1e10)
+    bot_ind = np.min(col_troughs[np.where(col_troughs > 0.8 * colmean.size)[0]], initial=1e10)
 
     # xmin = 10 * (sorted_row[min_ind] + 1)
     # xmax = 10 * (sorted_row[max_ind] + 1)
@@ -1156,9 +1190,9 @@ def find_reseau_grid(fn_img, csize=361, return_val=False):
     print('Grid points found.')
     os.makedirs('match_imgs', exist_ok=True)
 
-    print('Mean x residual: {:.2f} pixels'.format(grid_df.dj.abs().mean()))
-    print('Mean y residual: {:.2f} pixels'.format(grid_df.di.abs().mean()))
-    print('Mean residual: {:.2f} pixels'.format(grid_df.resid.mean()))
+    print('Mean x residual: {:.2f} pixels'.format(grid_df.loc[inliers, 'dj'].abs().mean()))
+    print('Mean y residual: {:.2f} pixels'.format(grid_df.loc[inliers, 'di'].abs().mean()))
+    print('Mean residual: {:.2f} pixels'.format(grid_df.loc[inliers, 'resid'].mean()))
 
     ax.quiver(grid_df.match_j, grid_df.match_i, grid_df.dj, grid_df.di, color='r')
     ax.plot(grid_df.match_j[~inliers], grid_df.match_i[~inliers], 'b+')
