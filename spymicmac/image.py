@@ -30,6 +30,7 @@ import geopandas as gpd
 # from llc import jit_filter_function
 from numba import jit
 from pybob.image_tools import match_hist, reshape_geoimg, create_mask_from_shapefile, nanmedian_filter
+from pybob.ddem_tools import nmad
 from spymicmac.micmac import get_im_meas, parse_im_meas
 
 
@@ -84,8 +85,13 @@ def wagon_wheel(size, width=3, mult=255):
     return mult * templ
 
 
-def notch_template():
-    pass
+def notch_template(size):
+
+    template = np.zeros((size, size), dtype=np.uint8)
+    template[-1, :] = 1
+    for ind in range(1, int(size/2) + 1):
+        template[-ind-1, ind:-ind] = 1
+    return 255 * template
 
 
 def make_template(img, pt, half_size):
@@ -815,6 +821,72 @@ def ocm_show_wagon_wheels(img, size, width=3, img_border=None):
     coords_bot += size / 2 - 0.5
 
     return np.concatenate((coords_top, coords_bot), axis=0)
+
+
+def find_rail_marks(img):
+    """
+    Find all rail marks along the bottom edge of a KH-4 style image.
+
+    :param array-like img: the image to find the rail marks in.
+    :returns: **coords** an Nx2 array of the location of the detected markers.
+    """
+    left, right, top, bot = get_rough_frame(img)
+    img_lowres = downsample_image(img, fact=10)
+
+    templ = np.zeros((21, 21), dtype=np.uint8)
+    templ[5:-5, 5:-5] = 255 * disk(5)  # rail marks are approximately 100 x 100 pixels, so lowres is 10 x 10
+    res = cv2.matchTemplate(img_lowres.astype(np.uint8), templ.astype(np.uint8), cv2.TM_CCORR_NORMED)
+
+    coords = peak_local_max(res, threshold_rel=0.5, min_distance=30).astype(np.float64)
+    coords += templ.shape[0] / 2 - 0.5
+    coords *= 10
+
+    bottom_rail = np.logical_and.reduce([coords[:, 1] > left,
+                                         coords[:, 1] < right,
+                                         np.abs(coords[:, 0] - bot) < 400])
+    out_coords = coords[bottom_rail]
+
+    valid = _refine_rail(coords[bottom_rail])
+
+    return out_coords[valid]
+
+
+def _refine_rail(coords):
+
+    valid = np.isfinite(coords[:, 1])
+    prev_valid = np.count_nonzero(valid)
+
+    nout = 1
+
+    while nout > 0:
+        p = np.polyfit(coords[valid, 1], coords[valid, 0], 1)
+        fit = np.polyval(p, coords[:, 1])
+
+        diff = coords[:, 0] - fit
+        valid = np.abs(diff - np.median(diff)) < 3 * nmad(diff)
+
+        nout = prev_valid - np.count_nonzero(valid)
+        prev_valid = np.count_nonzero(valid)
+
+    return valid
+
+
+def rotate_kh4(img):
+
+    rails = find_rail_marks(img)
+    slope, intercept = np.polyfit(rails[:, 1], rails[:, 0], 1)
+    angle = np.rad2deg(np.arctan(slope))
+    print('Calculated angle of rotation: {:.4f}'.format(angle))
+
+    return ndimage.rotate(img, angle)
+
+
+def resample_kh4(img):
+
+    rotated = rotate_kh4(img)
+    left, right, top, bot = get_rough_frame(rotated)
+
+    # left_notch =
 
 
 def find_crosses(img, cross):
