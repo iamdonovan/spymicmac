@@ -361,7 +361,6 @@ def parse_localchantier(fn_chant):
     pass
 
 
-
 def get_match_pattern(imlist):
     """
     Given a list of image names, return a match pattern that can be passed to MicMac command line functions.
@@ -370,18 +369,24 @@ def get_match_pattern(imlist):
     :return:
         - **pattern** (*str*) -- a match pattern (e.g., "OIS.*tif") that can be passed to MicMac functions.
     """
-    matches = []
-    for i, this_im in enumerate(imlist[:-1]):
-        for im in imlist[i + 1:]:
-            matches.extend(list(difflib.SequenceMatcher(None, this_im, im).get_matching_blocks()))
+    imlist.sort()
 
-    good_matches = set([m for m in matches if m.size > 0 and m.a == m.b])
-    start_inds = set([m.a for m in good_matches])
-    ind_lengths = [(ind, min([m.size for m in good_matches if m.a == ind])) for ind in start_inds]
-    ind_lengths.sort()
+    first_ind = len(imlist[0])
+    last_ind = len(imlist[0])
 
-    first, last = ind_lengths[0][1], ind_lengths[1][0]
-    return imlist[0][:first] + '(' + '|'.join([im[first:last] for im in imlist]) + ')' + imlist[0][last:]
+    for fn_img in imlist[1:]:
+        diff = list(difflib.ndiff(imlist[0], fn_img))
+        first_ind = min(first_ind, diff.index(next(d for d in diff if len(d.strip()) > 1)))
+        last_ind = min(last_ind, diff[::-1].index(next(d for d in diff if len(d.strip()) > 1)))
+
+    last_ind = len(diff) - last_ind # because we reversed diff to find the last ind
+
+    first = imlist[0][:first_ind]
+    last = imlist[0][last_ind:]
+
+    middle = ''.join(['(', '|'.join([fn_img[first_ind:last_ind] for fn_img in imlist]), ')'])
+
+    return first + middle + last
 
 
 def write_auto_mesures(gcps, sub, outdir, outname='AutoMeasures'):
@@ -699,6 +704,65 @@ def apericloud(ori, img_pattern='OIS.*tif'):
     echo = subprocess.Popen('echo', stdout=subprocess.PIPE)
     p = subprocess.Popen(['mm3d', 'AperiCloud', img_pattern, ori], stdin=echo.stdout)
     return p.wait()
+
+
+def malt(imlist, ori, zoomf=1, dirmec='MEC-Malt'):
+    """
+    Run mm3d Malt Ortho.
+
+    :param str|iterable imlist: either a match pattern (e.g., OIS.*tif) or an iterable object of image filenames.
+    :param str ori: the orientation directory to use for Malt.
+    :param int zoomf: the final Zoom level to use (default: 1)
+    :param str dirmec: the output MEC directory to create (default: MEC-Malt)
+    :return:
+    """
+    echo = subprocess.Popen('echo', stdout=subprocess.PIPE)
+
+    if type(imlist) is str:
+        matchstr = imlist
+    else:
+        try:
+            matchstr = '|'.join(imlist)
+        except TypeError as te:
+            raise TypeError(f"imlist is not iterable: {imlist}")
+
+    p = subprocess.Popen(['mm3d', 'Malt', 'Ortho', matchstr, ori, 'DirMEC={}'.format(dirmec),
+                          'NbVI=2', 'ZoomF={}'.format(zoomf),
+                          'DefCor=0', 'CostTrans=1', 'EZA=1'], stdin=echo.stdout)
+
+    p.wait()
+
+
+def tawny(dirmec, radiomegal=False):
+    """
+    Run mm3d Tawny to create an orthomosaic.
+
+    :param str dirmec: the MEC directory to use
+    :param bool radiomegal: run Tawny with RadiomEgal=1 (default: False)
+    :return:
+    """
+    echo = subprocess.Popen('echo', stdout=subprocess.PIPE)
+
+    p = subprocess.Popen(['mm3d', 'Tawny', 'Ortho-{}'.format(dirmec), 'Out=Orthophotomosaic.tif',
+                          'RadiomEgal={}'.format(int(radiomegal))], stdin=echo.stdout)
+    p.wait()
+
+
+def block_malt(imlist, nimg=3, dirmec='MEC-Relative'):
+    """
+    Run mm3d Malt Ortho and mm3d Tawny on successive blocks of images.
+
+    :param iterable imlist: an iterable object of image filenames.
+    :param int nimg: the number of images to use in a block (default: 3)
+    :param str dirmec: the output MEC directory to create (default: MEC-Relative)
+    :return:
+    """
+    for block, ind in enumerate(range(0, len(imlist) - (nimg - 1), nimg - 1)):
+        print(imlist[ind:ind + nimg])
+
+        malt(imlist[ind:ind + nimg], 'Relative', zoomf=8, dirmec='{}_block{}'.format(dirmec, block))
+
+        tawny('{}_block{}'.format(dirmec, block))
 
 
 def run_bascule(in_gcps, outdir, img_pattern, sub, ori, outori='TerrainRelAuto',
