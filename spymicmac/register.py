@@ -99,8 +99,8 @@ def get_imlist(im_subset, dirname='.', strip_text=None):
     else:
         if len(im_subset) > 1:
             imlist = im_subset
-            # match_pattern = mmtools.get_match_pattern(imlist)
-            match_pattern = '|'.join(imlist)
+            match_pattern = mmtools.get_match_pattern(imlist)
+            # match_pattern = '|'.join(imlist)
         else:
             match_pattern = im_subset[0] + '.*tif'
             imlist = [f for f in glob('OIS*.tif') if re.search(match_pattern, f)]
