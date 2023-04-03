@@ -107,11 +107,15 @@ def make_template(img, pt, half_size):
     return template, row_inds, col_inds
 
 
-def find_match(img, template, how='min'):
+def find_match(img, template, how='min', eq=True):
     assert how in ['min', 'max'], "have to choose min or max"
-    img_eq = filters.rank.equalize(img, footprint=morphology.disk(100))
-    # res = cross_filter(img_eq, template)
-    res = cv2.matchTemplate(img_eq, template, cv2.TM_CCORR_NORMED)
+
+    if eq:
+        img_eq = filters.rank.equalize(img, footprint=morphology.disk(100))
+        res = cv2.matchTemplate(img_eq, template, cv2.TM_CCORR_NORMED)
+    else:
+        res = cv2.matchTemplate(img, template, cv2.TM_CCORR_NORMED)
+
     i_off = (img.shape[0] - res.shape[0]) / 2
     j_off = (img.shape[1] - res.shape[1]) / 2
     if how == 'min':
@@ -837,7 +841,9 @@ def find_rail_marks(img):
     templ[5:-5, 5:-5] = 255 * disk(5)  # rail marks are approximately 100 x 100 pixels, so lowres is 10 x 10
     res = cv2.matchTemplate(img_lowres.astype(np.uint8), templ.astype(np.uint8), cv2.TM_CCORR_NORMED)
 
-    coords = peak_local_max(res, threshold_rel=0.5, min_distance=30).astype(np.float64)
+    norm_res = res - res.mean()
+
+    coords = peak_local_max(norm_res, threshold_abs=2.5*norm_res.std(), min_distance=10).astype(np.float64)
     coords += templ.shape[0] / 2 - 0.5
     coords *= 10
 
@@ -863,7 +869,7 @@ def _refine_rail(coords):
         fit = np.polyval(p, coords[:, 1])
 
         diff = coords[:, 0] - fit
-        valid = np.abs(diff - np.median(diff)) < 3 * nmad(diff)
+        valid = np.abs(diff - np.median(diff)) < 4 * nmad(diff)
 
         nout = prev_valid - np.count_nonzero(valid)
         prev_valid = np.count_nonzero(valid)
@@ -881,10 +887,36 @@ def rotate_kh4(img):
     return ndimage.rotate(img, angle)
 
 
-def resample_kh4(img):
+def find_kh4_notches(img, size=101):
+    left, right, top, bot = get_rough_frame(img)
 
+    templ = notch_template(size)
+
+    pcts = np.array([0.03, 0.5, 0.6, 0.97])
+
+    search_j = (left + pcts * (right - left)).astype(int)
+    search_i = top * np.ones(4).astype(int)
+
+    matches = []
+
+    for jj, ii in zip(search_j, search_i):
+        subimg, _, _ = make_template(img, [ii, jj], 400)
+        res, this_i, this_j = find_match(subimg, templ, how='max', eq=False)
+        matches.append((this_i - 400 + ii, this_j - 400 + jj))
+
+    return np.array(matches)
+
+
+def resample_kh4(img):
+    """
+
+    :param img:
+    :return:
+    """
     rotated = rotate_kh4(img)
     left, right, top, bot = get_rough_frame(rotated)
+    rails = find_rail_marks(rotated)
+
 
     # left_notch =
 
