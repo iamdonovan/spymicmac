@@ -1465,7 +1465,15 @@ def join_halves(left, right, overlap, block_size=None, blend=True, trim=None):
     :param int trim: the amount to trim the right side of the image by. (default: None).
     :return:
     """
-    M = match_halves(left, right, overlap=overlap, block_size=block_size)
+    M, num_inliers = match_halves(left, right, overlap=overlap, block_size=block_size)
+
+    if num_inliers < 10:
+        print('Not enough tie points found. Re-trying with a larger overlap.')
+        M, num_inliers = match_halves(left, right, overlap=2*overlap, block_size=block_size)
+
+        if num_inliers < 10:
+            raise RuntimeError("Unable to find a reliable transformation between left and right halves.")
+
     out_shape = (left.shape[0], left.shape[1] + right.shape[1])
 
     combined_right = warp(right, M, output_shape=out_shape, preserve_range=True, order=3)
@@ -1525,8 +1533,9 @@ def match_halves(left, right, overlap, block_size=None):
 
     model, inliers = ransac((np.array(src_pts), np.array(dst_pts)), EuclideanTransform,
                         min_samples=10, residual_threshold=2, max_trials=25000)
+
     print('{} tie points found'.format(np.count_nonzero(inliers)))
-    return model
+    return model, np.count_nonzero(inliers)
 
 
 def resample_hex(fn_img, scale, ori='InterneScan'):
