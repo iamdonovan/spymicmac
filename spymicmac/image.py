@@ -938,7 +938,8 @@ def find_crosses(img, cross):
         img_inv = img.max() - simg
         res = cv2.matchTemplate(img_inv.astype(np.uint8), cross.astype(np.uint8), cv2.TM_CCORR_NORMED)
 
-        these_coords = peak_local_max(res, min_distance=int(1.5*cross.shape[0]), threshold_abs=0.15).astype(np.float64)
+        these_coords = peak_local_max(res, min_distance=int(1.5*cross.shape[0]),
+                                      threshold_abs=np.median(res)).astype(np.float64)
 
         these_coords += cross.shape[0] / 2 - 0.5
 
@@ -983,27 +984,27 @@ def match_reseau_grid(img, coords, cross):
     tb_valid = top > 0 and bot < 1e10
 
     if lr_valid and tb_valid:
-        scale = np.mean([(bot - top) / 23, (right - left) / 46.5])
+        scale = np.mean([(bot - top - 3 * cross.shape[0]) / 22, (right - left - cross.shape[0]) / 46])
 
     elif lr_valid and not tb_valid:
         # if the left/right border is okay, use it to guess the top/bottom border
-        scale = (right - left) / 46.5
+        scale = (right - left - cross.shape[0]) / 46
 
         if top > 0:
-            bot = int(top + scale * 23)
+            bot = int(top + scale * 22 + 1.5 * cross.shape[0])
         elif bot < 1e10:
-            top = int(bot - scale * 23)
+            top = int(bot - scale * 22 - 1.5 * cross.shape[0])
         else: # if both or wrong, use very approximate average values
             top = 1200
             bot = 34000
 
     elif not lr_valid and tb_valid:
         # if the top/bottom border is okay, use it to guess the left/right border
-        scale = (bot - top) / 23
+        scale = (bot - top - 3 * cross.shape[0]) / 22
         if left > 0:
-            right = int(left + scale * 46.5)
+            right = int(left + scale * 46 + 0.5 * cross.shape[0])
         elif right < 1e10:
-            left = int(right - scale * 46.5)
+            left = int(right - scale * 46 - 0.5 * cross.shape[0])
         else:
             left = 2000
             right = 68500
@@ -1011,18 +1012,18 @@ def match_reseau_grid(img, coords, cross):
         # if we can't find the image border, try using the mark coordinates.
         top, bot, left, right = find_grid_border(coords)
 
-    left_edge = LineString([(left + cross.shape[0], bot - cross.shape[0]),
-                            (left + cross.shape[0], top + cross.shape[0])])
-    right_edge = LineString([(right - cross.shape[0], bot - cross.shape[0]),
-                             (right - cross.shape[0], top + cross.shape[0])])
+    left_edge = LineString([(left + 0.5 * cross.shape[0], bot - 1.5 * cross.shape[0]),
+                            (left + 0.5 * cross.shape[0], top + 1.5 * cross.shape[0])])
+    right_edge = LineString([(right - 0.5 * cross.shape[0], bot - 1.5 * cross.shape[0]),
+                             (right - 0.5 * cross.shape[0], top + 1.5 * cross.shape[0])])
 
     II, JJ, search_grid = _search_grid(left_edge, right_edge, True)
 
     grid_df = pd.DataFrame()
     for ii, pr in enumerate(list(zip(II, JJ))):
         grid_df.loc[ii, 'gcp'] = 'GCP_{}_{}'.format(pr[0], pr[1])
-        grid_df.loc[ii, 'grid_j'] = left + scale * pr[1] + cross.shape[0]
-        grid_df.loc[ii, 'grid_i'] = bot - scale * pr[0] - 2 * cross.shape[0]
+        grid_df.loc[ii, 'grid_j'] = left + scale * pr[1] + 0.5 * cross.shape[0]
+        grid_df.loc[ii, 'grid_i'] = bot - scale * pr[0] - 1.5 * cross.shape[0]
 
     grid_df['search_j'] = np.array(search_grid)[:, 1]
     grid_df['search_i'] = np.array(search_grid)[:, 0]
@@ -1245,6 +1246,10 @@ def _search_grid(left, right, joined=False):
     return i_grid, j_grid, search_pts
 
 
+def _outlier_filter(vals, n=3):
+    return np.abs(vals - np.nanmean(vals)) > n * np.nanstd(vals)
+
+
 def find_reseau_grid(fn_img, csize=361, return_val=False):
     """
     Find the locations of the Reseau marks in a scanned KH-9 image. Locations are saved
@@ -1276,14 +1281,38 @@ def find_reseau_grid(fn_img, csize=361, return_val=False):
 
     model, inliers = ransac((grid_df[['grid_j', 'grid_i']].values, grid_df[['match_j', 'match_i']].values),
                             AffineTransform, min_samples=10, residual_threshold=10, max_trials=5000)
-    residuals = model.residuals(grid_df.dropna()[['grid_j', 'grid_i']].values,
-                                grid_df.dropna()[['match_j', 'match_i']].values)
+    grid_df['resid'] = model.residuals(grid_df.dropna()[['grid_j', 'grid_i']].values,
+                                       grid_df.dropna()[['match_j', 'match_i']].values)
+
+    grid_df.loc[~inliers, ['match_j', 'match_i']] = np.nan
+
     dst = model(grid_df[['grid_j', 'grid_i']].values)
 
-    grid_df['resid'] = residuals
+    x_res = grid_df['match_j'] - dst[:, 0]
+    y_res = grid_df['match_i'] - dst[:, 1]
 
-    grid_df.loc[~inliers, 'match_j'] = dst[~inliers, 0]
-    grid_df.loc[~inliers, 'match_i'] = dst[~inliers, 1]
+    ux = x_res.values.reshape(23, 47)
+    uy = y_res.values.reshape(23, 47)
+
+    xdiff = ux - nanmedian_filter(ux, footprint=disk(3))
+    ydiff = uy - nanmedian_filter(uy, footprint=disk(3))
+
+    xout = _outlier_filter(xdiff, n=5)
+    yout = _outlier_filter(ydiff, n=5)
+
+    outliers = np.logical_or.reduce([~inliers, xout.flatten(), yout.flatten()])
+
+    ux[outliers.reshape(23, 47)] = np.nan
+    uy[outliers.reshape(23, 47)] = np.nan
+
+    ux[outliers.reshape(23, 47)] = nanmedian_filter(ux, footprint=disk(1))[outliers.reshape(23, 47)]
+    uy[outliers.reshape(23, 47)] = nanmedian_filter(uy, footprint=disk(1))[outliers.reshape(23, 47)]
+
+    grid_df.loc[outliers, 'match_j'] = dst[outliers, 0] + ux.flatten()[outliers]
+    grid_df.loc[outliers, 'match_i'] = dst[outliers, 1] + uy.flatten()[outliers]
+
+    grid_df.loc[np.isnan(grid_df['match_j']), 'match_j'] = dst[np.isnan(grid_df['match_j']), 0]
+    grid_df.loc[np.isnan(grid_df['match_i']), 'match_i'] = dst[np.isnan(grid_df['match_i']), 1]
 
     grid_df['im_row'] = grid_df['match_i']
     grid_df['im_col'] = grid_df['match_j']
@@ -1294,12 +1323,12 @@ def find_reseau_grid(fn_img, csize=361, return_val=False):
     print('Grid points found.')
     os.makedirs('match_imgs', exist_ok=True)
 
-    print('Mean x residual: {:.2f} pixels'.format(grid_df.loc[inliers, 'dj'].abs().mean()))
-    print('Mean y residual: {:.2f} pixels'.format(grid_df.loc[inliers, 'di'].abs().mean()))
-    print('Mean residual: {:.2f} pixels'.format(grid_df.loc[inliers, 'resid'].mean()))
+    print('Mean x residual: {:.2f} pixels'.format(grid_df.loc[~outliers, 'dj'].abs().mean()))
+    print('Mean y residual: {:.2f} pixels'.format(grid_df.loc[~outliers, 'di'].abs().mean()))
+    print('Mean residual: {:.2f} pixels'.format(grid_df.loc[~outliers, 'resid'].mean()))
 
     ax.quiver(grid_df.match_j, grid_df.match_i, grid_df.dj, grid_df.di, color='r')
-    ax.plot(grid_df.match_j[~inliers], grid_df.match_i[~inliers], 'b+')
+    ax.plot(grid_df.match_j[outliers], grid_df.match_i[outliers], 'b+')
 
     this_out = os.path.splitext(fn_img)[0]
     fig.savefig(os.path.join('match_imgs', this_out + '_matches.png'), bbox_inches='tight', dpi=200)
