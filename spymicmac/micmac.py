@@ -78,12 +78,13 @@ def write_neighbour_images(imlist, fprints=None, nameField='ID', prefix='OIS-Ree
     tree.write('FileImagesNeighbour.xml', pretty_print=True, xml_declaration=True, encoding="utf-8")
 
 
-def write_xml(fn_img, fn_mask='./MEC-Malt/Masq_STD-MALT_DeZoom1.tif', geomname='eGeomMNTEuclid'):
+def write_xml(fn_img, fn_mask='./MEC-Malt/Masq_STD-MALT_DeZoom1.tif', fn_xml=None, geomname='eGeomMNTEuclid'):
     """
     Given a GDAL dataset, create a MicMac xml worldfile.
 
     :param str fn_img: the filename of the image.
     :param str fn_mask: the filename of the mask file (default: ./MEC-Malt/Masq_STD-MALT_DeZoom1.tif)
+    :param str fn_xml: the filename of the xml file to create (default: fn_img + '.xml')
     :param str geomname: the MicMac Geometry name to use (default: eGeomMNTEuclid)
     """
     ds = gdal.Open(fn_img)
@@ -113,7 +114,10 @@ def write_xml(fn_img, fn_mask='./MEC-Malt/Masq_STD-MALT_DeZoom1.tif', geomname='
     )
 
     tree = etree.ElementTree(outxml)
-    tree.write(fn_img.replace(ext, '.xml'), pretty_print=True,
+    if fn_xml is None:
+        fn_xml = fn_img.replace(ext, '.xml')
+
+    tree.write(fn_xml, pretty_print=True,
                xml_declaration=False, encoding="utf-8")
 
 
