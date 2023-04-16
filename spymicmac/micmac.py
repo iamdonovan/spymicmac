@@ -706,14 +706,19 @@ def apericloud(ori, img_pattern='OIS.*tif'):
     return p.wait()
 
 
-def malt(imlist, ori, zoomf=1, dirmec='MEC-Malt'):
+def malt(imlist, ori, zoomf=1, zoomi=None, dirmec='MEC-Malt', seed_img=None, seed_xml=None):
     """
     Run mm3d Malt Ortho.
 
     :param str|iterable imlist: either a match pattern (e.g., OIS.*tif) or an iterable object of image filenames.
     :param str ori: the orientation directory to use for Malt.
     :param int zoomf: the final Zoom level to use (default: 1)
+    :param int zoomi: the initial Zoom level to use (default: not set)
     :param str dirmec: the output MEC directory to create (default: MEC-Malt)
+    :param str seed_img: a DEM to pass to Malt as DEMInitImg. Note that if seed_img is set, seed_xml
+        must also be set. (default: not used)
+    :param str seed_xml: an XML file corresponding to the seed_img (default: not used)
+
     :return:
     """
     echo = subprocess.Popen('echo', stdout=subprocess.PIPE)
@@ -726,9 +731,18 @@ def malt(imlist, ori, zoomf=1, dirmec='MEC-Malt'):
         except TypeError as te:
             raise TypeError(f"imlist is not iterable: {imlist}")
 
-    p = subprocess.Popen(['mm3d', 'Malt', 'Ortho', matchstr, ori, 'DirMEC={}'.format(dirmec),
-                          'NbVI=2', 'ZoomF={}'.format(zoomf),
-                          'DefCor=0', 'CostTrans=1', 'EZA=1'], stdin=echo.stdout)
+    args = ['mm3d', 'Malt', 'Ortho', matchstr, ori, 'DirMEC={}'.format(dirmec),
+            'NbVI=2', 'ZoomF={}'.format(zoomf), 'DefCor=0', 'CostTrans=1', 'EZA=1']
+
+    if zoomi is not None:
+        args.append('ZoomI={}'.format(zoomi))
+
+    if seed_img is not None:
+        assert seed_xml is not None
+        args.append('DEMInitImg=' + seed_img)
+        args.append('DEMInitXML=' + seed_xml)
+
+    p = subprocess.Popen(args, stdin=echo.stdout)
 
     p.wait()
 
@@ -748,19 +762,26 @@ def tawny(dirmec, radiomegal=False):
     p.wait()
 
 
-def block_malt(imlist, nimg=3, dirmec='MEC-Relative'):
+def block_malt(imlist, nimg=3, ori='Relative', zoomf=8):
     """
     Run mm3d Malt Ortho and mm3d Tawny on successive blocks of images.
 
     :param iterable imlist: an iterable object of image filenames.
     :param int nimg: the number of images to use in a block (default: 3)
-    :param str dirmec: the output MEC directory to create (default: MEC-Relative)
+    :param str ori: the name of the orientation directory (e.g., Ori-Relative). (default: Relative)
+    :param int zoomf: the final Zoom level to use (default: 8)
     :return:
     """
-    for block, ind in enumerate(range(0, len(imlist) - (nimg - 1), nimg - 1)):
+    dirmec = 'MEC-' + ori
+
+    inds = range(0, len(imlist) - (nimg - 1), nimg - 1)
+    if len(inds) == 1 and len(imlist) > nimg:
+        inds = [0, 1]
+
+    for block, ind in enumerate(inds):
         print(imlist[ind:ind + nimg])
 
-        malt(imlist[ind:ind + nimg], 'Relative', zoomf=8, dirmec='{}_block{}'.format(dirmec, block))
+        malt(imlist[ind:ind + nimg], ori, dirmec='{}_block{}'.format(dirmec, block), zoomf=zoomf)
 
         tawny('{}_block{}'.format(dirmec, block))
 
