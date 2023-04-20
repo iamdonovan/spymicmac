@@ -319,7 +319,6 @@ def create_localchantier_xml(name='KH9MC', short_name='KH-9 Hexagon Mapping Came
     tree.write('MicMac-LocalChantierDescripteur.xml', pretty_print=True, xml_declaration=True, encoding="utf-8")
 
 
-# TODO: make this more general by changing the name of the file based on foc, camera name
 def init_autocal(imsize=(32200, 15400), framesize=(460, 220), foc=304.8, camname='KH9MC'):
     """
     Create an AutoCal xml file for use in the Tapas step. Default values are for KH-9 Hexagon Mapping Camera.
@@ -328,9 +327,15 @@ def init_autocal(imsize=(32200, 15400), framesize=(460, 220), foc=304.8, camname
 
         mm3d Tapas RadialBasic "OIS.*tif" InCal=Init Out=Relative LibFoc=0
 
+    The name of the file changes based on the focal length and camera name. Using the default values of
+    foc=304.8 and camname='KH9MC' creates the following file in Ori-Init:
+
+        AutoCal_Foc-KH9MC_304800.xml
+
     :param array-like imsize: the size of the image (width, height) in pixels (default: (32200, 15400))
     :param array-like framesize: the size of the image (width, height) in mm (default: (460, 220))
     :param float foc: nominal focal length, in mm (default: 304.8)
+    :param int camname: the camera short name to use (default: KH9MC)
     """
     os.makedirs('Ori-Init', exist_ok=True)
 
@@ -348,8 +353,17 @@ def init_autocal(imsize=(32200, 15400), framesize=(460, 220), foc=304.8, camname
                 E.CalibDistortion(
                     E.ModRad(
                         E.CDist('{} {}'.format(pp[0], pp[1])),
-                        E.CoeffDist('1.85331776538527523e-11'),
-                        E.CoeffDist('-1.70500975308453256e-21'),
+                        E.CoeffDist('2.74e-11'),
+                        E.CoeffDist('-1.13e-21'),
+                        E.CoeffDist('4.01e-29'),
+                        E.CoeffDist('1.28e-38'),
+                        E.CoeffDist('-4.32e-46'),
+                        E.CeoffDistInv('2.74e-11'),
+                        E.CeoffDistInv('3.88e-21'),
+                        E.CeoffDistInv('-4.79e-29'),
+                        E.CeoffDistInv('3.82e-38'),
+                        E.CeoffDistInv('2.13e-46'),
+                        E.CeoffDistInv('4.47e-55'),
                         E.PPaEqPPs('true')
                     )
                 )
