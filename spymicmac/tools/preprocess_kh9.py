@@ -171,7 +171,7 @@ def main():
         # TODO: parallelize this
         for fn_img in imlist:
             print('Resampling {}'.format(fn_img))
-            resample_hex(fn_img + '.tif', scale=70)
+            resample_hex(fn_img + '.tif', scale=args.scale)
             shutil.move(fn_img + '.tif', 'Orig')
 
     # run tapioca
