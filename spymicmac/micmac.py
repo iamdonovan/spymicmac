@@ -78,12 +78,13 @@ def write_neighbour_images(imlist, fprints=None, nameField='ID', prefix='OIS-Ree
     tree.write('FileImagesNeighbour.xml', pretty_print=True, xml_declaration=True, encoding="utf-8")
 
 
-def write_xml(fn_img, fn_mask='./MEC-Malt/Masq_STD-MALT_DeZoom1.tif', geomname='eGeomMNTEuclid'):
+def write_xml(fn_img, fn_mask='./MEC-Malt/Masq_STD-MALT_DeZoom1.tif', fn_xml=None, geomname='eGeomMNTEuclid'):
     """
     Given a GDAL dataset, create a MicMac xml worldfile.
 
     :param str fn_img: the filename of the image.
     :param str fn_mask: the filename of the mask file (default: ./MEC-Malt/Masq_STD-MALT_DeZoom1.tif)
+    :param str fn_xml: the filename of the xml file to create (default: fn_img + '.xml')
     :param str geomname: the MicMac Geometry name to use (default: eGeomMNTEuclid)
     """
     ds = gdal.Open(fn_img)
@@ -113,7 +114,10 @@ def write_xml(fn_img, fn_mask='./MEC-Malt/Masq_STD-MALT_DeZoom1.tif', geomname='
     )
 
     tree = etree.ElementTree(outxml)
-    tree.write(fn_img.replace(ext, '.xml'), pretty_print=True,
+    if fn_xml is None:
+        fn_xml = fn_img.replace(ext, '.xml')
+
+    tree.write(fn_xml, pretty_print=True,
                xml_declaration=False, encoding="utf-8")
 
 
@@ -315,7 +319,6 @@ def create_localchantier_xml(name='KH9MC', short_name='KH-9 Hexagon Mapping Came
     tree.write('MicMac-LocalChantierDescripteur.xml', pretty_print=True, xml_declaration=True, encoding="utf-8")
 
 
-# TODO: make this more general by changing the name of the file based on foc, camera name
 def init_autocal(imsize=(32200, 15400), framesize=(460, 220), foc=304.8, camname='KH9MC'):
     """
     Create an AutoCal xml file for use in the Tapas step. Default values are for KH-9 Hexagon Mapping Camera.
@@ -324,9 +327,15 @@ def init_autocal(imsize=(32200, 15400), framesize=(460, 220), foc=304.8, camname
 
         mm3d Tapas RadialBasic "OIS.*tif" InCal=Init Out=Relative LibFoc=0
 
+    The name of the file changes based on the focal length and camera name. Using the default values of
+    foc=304.8 and camname='KH9MC' creates the following file in Ori-Init:
+
+        AutoCal_Foc-KH9MC_304800.xml
+
     :param array-like imsize: the size of the image (width, height) in pixels (default: (32200, 15400))
     :param array-like framesize: the size of the image (width, height) in mm (default: (460, 220))
     :param float foc: nominal focal length, in mm (default: 304.8)
+    :param int camname: the camera short name to use (default: KH9MC)
     """
     os.makedirs('Ori-Init', exist_ok=True)
 
@@ -344,8 +353,17 @@ def init_autocal(imsize=(32200, 15400), framesize=(460, 220), foc=304.8, camname
                 E.CalibDistortion(
                     E.ModRad(
                         E.CDist('{} {}'.format(pp[0], pp[1])),
-                        E.CoeffDist('1.85331776538527523e-11'),
-                        E.CoeffDist('-1.70500975308453256e-21'),
+                        E.CoeffDist('2.74e-11'),
+                        E.CoeffDist('-1.13e-21'),
+                        E.CoeffDist('4.01e-29'),
+                        E.CoeffDist('1.28e-38'),
+                        E.CoeffDist('-4.32e-46'),
+                        E.CeoffDistInv('2.74e-11'),
+                        E.CeoffDistInv('3.88e-21'),
+                        E.CeoffDistInv('-4.79e-29'),
+                        E.CeoffDistInv('3.82e-38'),
+                        E.CeoffDistInv('2.13e-46'),
+                        E.CeoffDistInv('4.47e-55'),
                         E.PPaEqPPs('true')
                     )
                 )
@@ -361,7 +379,6 @@ def parse_localchantier(fn_chant):
     pass
 
 
-
 def get_match_pattern(imlist):
     """
     Given a list of image names, return a match pattern that can be passed to MicMac command line functions.
@@ -370,18 +387,24 @@ def get_match_pattern(imlist):
     :return:
         - **pattern** (*str*) -- a match pattern (e.g., "OIS.*tif") that can be passed to MicMac functions.
     """
-    matches = []
-    for i, this_im in enumerate(imlist[:-1]):
-        for im in imlist[i + 1:]:
-            matches.extend(list(difflib.SequenceMatcher(None, this_im, im).get_matching_blocks()))
+    imlist.sort()
 
-    good_matches = set([m for m in matches if m.size > 0 and m.a == m.b])
-    start_inds = set([m.a for m in good_matches])
-    ind_lengths = [(ind, min([m.size for m in good_matches if m.a == ind])) for ind in start_inds]
-    ind_lengths.sort()
+    first_ind = len(imlist[0])
+    last_ind = len(imlist[0])
 
-    first, last = ind_lengths[0][1], ind_lengths[1][0]
-    return imlist[0][:first] + '(' + '|'.join([im[first:last] for im in imlist]) + ')' + imlist[0][last:]
+    for fn_img in imlist[1:]:
+        diff = list(difflib.ndiff(imlist[0], fn_img))
+        first_ind = min(first_ind, diff.index(next(d for d in diff if len(d.strip()) > 1)))
+        last_ind = min(last_ind, diff[::-1].index(next(d for d in diff if len(d.strip()) > 1)))
+
+    last_ind = len(diff) - last_ind # because we reversed diff to find the last ind
+
+    first = imlist[0][:first_ind]
+    last = imlist[0][last_ind:]
+
+    middle = ''.join(['(', '|'.join([fn_img[first_ind:last_ind] for fn_img in imlist]), ')'])
+
+    return first + middle + last
 
 
 def write_auto_mesures(gcps, sub, outdir, outname='AutoMeasures'):
@@ -654,7 +677,7 @@ def tapioca(img_pattern='OIS.*tif', res_low=400, res_high=1200):
     return p.wait()
 
 
-def tapas(cam_model, ori_out, img_pattern='OIS.*tif', in_cal=None, lib_foc=True, lib_pp=True):
+def tapas(cam_model, ori_out, img_pattern='OIS.*tif', in_cal=None, lib_foc=True, lib_pp=True, lib_cd=True):
     """
     Run mm3d Tapas with a given camera calibration model.
 
@@ -673,6 +696,7 @@ def tapas(cam_model, ori_out, img_pattern='OIS.*tif', in_cal=None, lib_foc=True,
     :param str in_cal: an input calibration model to refine (default: None)
     :param bool lib_foc: allow the focal length to be calibrated (default: True)
     :param bool lib_pp: allow the principal point to be calibrated (default: True)
+    :param bool lib_cd: allow the center of distortion to be calibrated (default: True)
     :return:
     """
     echo = subprocess.Popen('echo', stdout=subprocess.PIPE)
@@ -680,11 +704,11 @@ def tapas(cam_model, ori_out, img_pattern='OIS.*tif', in_cal=None, lib_foc=True,
     if in_cal is not None:
         p = subprocess.Popen(['mm3d', 'Tapas', cam_model, img_pattern, 'InCal=' + in_cal,
                               'LibFoc={}'.format(int(lib_foc)), 'LibPP={}'.format(int(lib_pp)),
-                              'Out=' + ori_out], stdin=echo.stdout)
+                              'LibCD={}'.format(int(lib_cd)), 'Out=' + ori_out], stdin=echo.stdout)
     else:
         p = subprocess.Popen(['mm3d', 'Tapas', cam_model, img_pattern,
                               'LibFoc={}'.format(int(lib_foc)), 'LibPP={}'.format(int(lib_pp)),
-                              'Out=' + ori_out], stdin=echo.stdout)
+                              'LibCD={}'.format(int(lib_cd)), 'Out=' + ori_out], stdin=echo.stdout)
     return p.wait()
 
 
@@ -698,6 +722,86 @@ def apericloud(ori, img_pattern='OIS.*tif'):
     echo = subprocess.Popen('echo', stdout=subprocess.PIPE)
     p = subprocess.Popen(['mm3d', 'AperiCloud', img_pattern, ori], stdin=echo.stdout)
     return p.wait()
+
+
+def malt(imlist, ori, zoomf=1, zoomi=None, dirmec='MEC-Malt', seed_img=None, seed_xml=None):
+    """
+    Run mm3d Malt Ortho.
+
+    :param str|iterable imlist: either a match pattern (e.g., OIS.*tif) or an iterable object of image filenames.
+    :param str ori: the orientation directory to use for Malt.
+    :param int zoomf: the final Zoom level to use (default: 1)
+    :param int zoomi: the initial Zoom level to use (default: not set)
+    :param str dirmec: the output MEC directory to create (default: MEC-Malt)
+    :param str seed_img: a DEM to pass to Malt as DEMInitImg. Note that if seed_img is set, seed_xml
+        must also be set. (default: not used)
+    :param str seed_xml: an XML file corresponding to the seed_img (default: not used)
+
+    :return:
+    """
+    echo = subprocess.Popen('echo', stdout=subprocess.PIPE)
+
+    if type(imlist) is str:
+        matchstr = imlist
+    else:
+        try:
+            matchstr = '|'.join(imlist)
+        except TypeError as te:
+            raise TypeError(f"imlist is not iterable: {imlist}")
+
+    args = ['mm3d', 'Malt', 'Ortho', matchstr, ori, 'DirMEC={}'.format(dirmec),
+            'NbVI=2', 'ZoomF={}'.format(zoomf), 'DefCor=0', 'CostTrans=1', 'EZA=1']
+
+    if zoomi is not None:
+        args.append('ZoomI={}'.format(zoomi))
+
+    if seed_img is not None:
+        assert seed_xml is not None
+        args.append('DEMInitImg=' + seed_img)
+        args.append('DEMInitXML=' + seed_xml)
+
+    p = subprocess.Popen(args, stdin=echo.stdout)
+
+    p.wait()
+
+
+def tawny(dirmec, radiomegal=False):
+    """
+    Run mm3d Tawny to create an orthomosaic.
+
+    :param str dirmec: the MEC directory to use
+    :param bool radiomegal: run Tawny with RadiomEgal=1 (default: False)
+    :return:
+    """
+    echo = subprocess.Popen('echo', stdout=subprocess.PIPE)
+
+    p = subprocess.Popen(['mm3d', 'Tawny', 'Ortho-{}'.format(dirmec), 'Out=Orthophotomosaic.tif',
+                          'RadiomEgal={}'.format(int(radiomegal))], stdin=echo.stdout)
+    p.wait()
+
+
+def block_malt(imlist, nimg=3, ori='Relative', zoomf=8):
+    """
+    Run mm3d Malt Ortho and mm3d Tawny on successive blocks of images.
+
+    :param iterable imlist: an iterable object of image filenames.
+    :param int nimg: the number of images to use in a block (default: 3)
+    :param str ori: the name of the orientation directory (e.g., Ori-Relative). (default: Relative)
+    :param int zoomf: the final Zoom level to use (default: 8)
+    :return:
+    """
+    dirmec = 'MEC-' + ori
+
+    inds = range(0, len(imlist) - (nimg - 1), nimg - 1)
+    if len(inds) == 1 and len(imlist) > nimg:
+        inds = [0, 1]
+
+    for block, ind in enumerate(inds):
+        print(imlist[ind:ind + nimg])
+
+        malt(imlist[ind:ind + nimg], ori, dirmec='{}_block{}'.format(dirmec, block), zoomf=zoomf)
+
+        tawny('{}_block{}'.format(dirmec, block))
 
 
 def run_bascule(in_gcps, outdir, img_pattern, sub, ori, outori='TerrainRelAuto',

@@ -30,6 +30,18 @@ def extract(tar_ext='.tgz'):
     return tarlist
 
 
+def check_reseau():
+    imlist = glob('DZB*.tif')
+    measlist = glob('MeasuresIm*.tif.xml', dir_fd='Ori-InterneScan')
+
+    # if there are no DZB*.tif, but there are MeasuresIm files, we've probably done this step
+    if len(imlist) == 0 and len(measlist) > 0:
+        return True
+    else:
+        # check that each image file has a matching measuresim file
+        return all([any([im in meas for meas in measlist]) for im in imlist])
+
+
 def _argparser():
     helpstr = """
     Run pre-processing steps for KH-9 Hexagon Mapping Camera images. By default, runs all steps (equivalent to 
@@ -75,9 +87,11 @@ def _argparser():
     parser.add_argument('--init_cal', action='store', type=str, default='Init',
                         help='The initial calibration Ori to use for Tapas (default: Init)')
     parser.add_argument('--lib_foc', action='store_true',
-                        help='Use LibFoc=1 for mm3d Tapas (default: False)')
+                        help='Use LibFoc=1 for mm3d Tapas (default: LibFoc=0)')
     parser.add_argument('--lib_pp', action='store_true',
-                        help='Use LibPP=1 for mm3d Tapas (default: False)')
+                        help='Use LibPP=1 for mm3d Tapas (default: LibPP=0)')
+    parser.add_argument('--lib_cd', action='store_true',
+                        help='Use LibCD=1 for mm3d Tapas (default: LibCD=0)')
     parser.add_argument('-n', '--nproc', type=int, default=1, help='number of sub-processes to use (default: 1).')
     return parser
 
@@ -116,29 +130,48 @@ def main():
         print('Joining scanned image halves.')
         os.makedirs('halves', exist_ok=True)
 
-        for fn_img in imlist:
-            print(fn_img)
-            join_hexagon(fn_img, blend=args.blend)
-            shutil.move(fn_img + '_a.tif', 'halves')
-            shutil.move(fn_img + '_b.tif', 'halves')
+        half_list = [fn.split('_a.tif')[0] for fn in glob('DZB*_a.tif')]
+        half_list.sort()
+
+        if len(half_list) == 0:
+            print('No image halves found, skipping.')
+        else:
+            for fn_img in half_list:
+                print(fn_img)
+                join_hexagon(fn_img, blend=args.blend)
+                shutil.move(fn_img + '_a.tif', 'halves')
+                shutil.move(fn_img + '_b.tif', 'halves')
 
     if do['reseau']:
         print('Finding Reseau marks in images.')
-        for fn_img in imlist:
-            find_reseau_grid(fn_img + '.tif')
+
+        # if we're doing all steps, check that we need to; if we explicitly asked to
+        # do this step, then do it.
+        if (args.steps == 'all' and not check_reseau()) or ('reseau' in args.steps):
+            for fn_img in imlist:
+                find_reseau_grid(fn_img + '.tif')
+        else:
+            print('All images have reseau marks found. To re-run, explicitly call with --steps reseau.')
 
     if do['erase']:
-        print('Erasing Reseau marks from images.')
-        for fn_img in imlist:
-            print(fn_img)
-            remove_crosses(fn_img + '.tif', nproc=args.nproc)
+        orig_imlist = glob('DZB*.tif', dir_fd='original')
+        measlist = glob('MeasuresIm*.tif.xml', dir_fd='Ori-InterneScan')
+        if len(orig_imlist) == len(measlist):
+            print('Reseau marks have already been erased, skipping.')
+
+        else:
+            print('Erasing Reseau marks from images.')
+            for fn_img in imlist:
+                print(fn_img)
+                remove_crosses(fn_img + '.tif', nproc=args.nproc)
 
     if do['resample']:
         os.makedirs('Orig', exist_ok=True)
         # now, resample the images
+        # TODO: parallelize this
         for fn_img in imlist:
             print('Resampling {}'.format(fn_img))
-            resample_hex(fn_img + '.tif', scale=70)
+            resample_hex(fn_img + '.tif', scale=args.scale)
             shutil.move(fn_img + '.tif', 'Orig')
 
     # run tapioca
@@ -149,7 +182,8 @@ def main():
 
     # run tapas
     if do['tapas']:
-        exit_code = micmac.tapas(args.camera_model, args.ori, lib_foc=args.lib_foc, lib_pp=args.lib_pp)
+        exit_code = micmac.tapas(args.camera_model, args.ori, lib_foc=args.lib_foc,
+                                 lib_pp=args.lib_pp, lib_cd=args.lib_cd)
         if exit_code != 0:
             raise RuntimeError('Error in mm3d Tapas - check Tapas output for details.')
 

@@ -25,10 +25,12 @@ from scipy import ndimage
 import numpy as np
 from shapely.ops import nearest_points, unary_union
 from shapely.geometry import LineString, MultiPoint, Point
+from shapely.geometry.polygon import Polygon, orient
 import geopandas as gpd
 # from llc import jit_filter_function
 from numba import jit
 from pybob.image_tools import match_hist, reshape_geoimg, create_mask_from_shapefile, nanmedian_filter
+from pybob.ddem_tools import nmad
 from spymicmac.micmac import get_im_meas, parse_im_meas
 
 
@@ -83,8 +85,13 @@ def wagon_wheel(size, width=3, mult=255):
     return mult * templ
 
 
-def notch_template():
-    pass
+def notch_template(size):
+
+    template = np.zeros((size, size), dtype=np.uint8)
+    template[-1, :] = 1
+    for ind in range(1, int(size/2) + 1):
+        template[-ind-1, ind:-ind] = 1
+    return 255 * template
 
 
 def make_template(img, pt, half_size):
@@ -100,11 +107,15 @@ def make_template(img, pt, half_size):
     return template, row_inds, col_inds
 
 
-def find_match(img, template, how='min'):
+def find_match(img, template, how='min', eq=True):
     assert how in ['min', 'max'], "have to choose min or max"
-    img_eq = filters.rank.equalize(img, footprint=morphology.disk(100))
-    # res = cross_filter(img_eq, template)
-    res = cv2.matchTemplate(img_eq, template, cv2.TM_CCORR_NORMED)
+
+    if eq:
+        img_eq = filters.rank.equalize(img, footprint=morphology.disk(100))
+        res = cv2.matchTemplate(img_eq, template, cv2.TM_CCORR_NORMED)
+    else:
+        res = cv2.matchTemplate(img, template, cv2.TM_CCORR_NORMED)
+
     i_off = (img.shape[0] - res.shape[0]) / 2
     j_off = (img.shape[1] - res.shape[1]) / 2
     if how == 'min':
@@ -789,6 +800,8 @@ def ocm_show_wagon_wheels(img, size, width=3, img_border=None):
     """
     if img_border is None:
         _, _, top, bot = get_rough_frame(img)
+        if top < 0 or bot > 1e10:
+            raise RuntimeError("Unable to find image border. Try running again with approximate values.")
     else:
         top, bot = img_border
 
@@ -814,6 +827,107 @@ def ocm_show_wagon_wheels(img, size, width=3, img_border=None):
     return np.concatenate((coords_top, coords_bot), axis=0)
 
 
+def find_rail_marks(img):
+    """
+    Find all rail marks along the bottom edge of a KH-4 style image.
+
+    :param array-like img: the image to find the rail marks in.
+    :returns: **coords** an Nx2 array of the location of the detected markers.
+    """
+    left, right, top, bot = get_rough_frame(img)
+    img_lowres = downsample_image(img, fact=10)
+
+    templ = np.zeros((21, 21), dtype=np.uint8)
+    templ[5:-5, 5:-5] = 255 * disk(5)  # rail marks are approximately 100 x 100 pixels, so lowres is 10 x 10
+    res = cv2.matchTemplate(img_lowres.astype(np.uint8), templ.astype(np.uint8), cv2.TM_CCORR_NORMED)
+
+    norm_res = res - res.mean()
+
+    coords = peak_local_max(norm_res, threshold_abs=2.5*norm_res.std(), min_distance=10).astype(np.float64)
+    coords += templ.shape[0] / 2 - 0.5
+    coords *= 10
+
+    bottom_rail = np.logical_and.reduce([coords[:, 1] > left,
+                                         coords[:, 1] < right,
+                                         np.abs(coords[:, 0] - bot) < 400])
+    out_coords = coords[bottom_rail]
+
+    valid = _refine_rail(coords[bottom_rail])
+
+    return out_coords[valid]
+
+
+def _refine_rail(coords):
+
+    valid = np.isfinite(coords[:, 1])
+    prev_valid = np.count_nonzero(valid)
+
+    nout = 1
+
+    while nout > 0:
+        p = np.polyfit(coords[valid, 1], coords[valid, 0], 1)
+        fit = np.polyval(p, coords[:, 1])
+
+        diff = coords[:, 0] - fit
+        valid = np.abs(diff - np.median(diff)) < 4 * nmad(diff)
+
+        nout = prev_valid - np.count_nonzero(valid)
+        prev_valid = np.count_nonzero(valid)
+
+    return valid
+
+
+def rotate_kh4(img):
+
+    rails = find_rail_marks(img)
+    slope, intercept = np.polyfit(rails[:, 1], rails[:, 0], 1)
+    angle = np.rad2deg(np.arctan(slope))
+    print('Calculated angle of rotation: {:.4f}'.format(angle))
+
+    return ndimage.rotate(img, angle)
+
+
+def find_kh4_notches(img, size=101):
+    left, right, top, bot = get_rough_frame(img)
+
+    templ = notch_template(size)
+
+    pcts = np.array([0.03, 0.5, 0.6, 0.97])
+
+    search_j = (left + pcts * (right - left)).astype(int)
+    search_i = top * np.ones(4).astype(int)
+
+    matches = []
+
+    for jj, ii in zip(search_j, search_i):
+        subimg, _, _ = make_template(img, [ii, jj], 400)
+        # res, this_i, this_j = find_match(subimg, templ, how='max', eq=False)
+        res = cv2.matchTemplate(subimg.astype(np.uint8), templ.astype(np.uint8), cv2.TM_CCORR_NORMED)
+
+        try:
+            this_i, this_j = peak_local_max(res, min_distance=50, num_peaks=1)[0]
+        except IndexError:
+            this_i = this_j = np.nan
+
+        matches.append((this_i - 400 + ii, this_j - 400 + jj))
+
+    return np.array(matches)
+
+
+def resample_kh4(img):
+    """
+
+    :param img:
+    :return:
+    """
+    rotated = rotate_kh4(img)
+    left, right, top, bot = get_rough_frame(rotated)
+    rails = find_rail_marks(rotated)
+
+
+    # left_notch =
+
+
 def find_crosses(img, cross):
     """
     Find all cross markers in an image.
@@ -831,7 +945,8 @@ def find_crosses(img, cross):
         img_inv = img.max() - simg
         res = cv2.matchTemplate(img_inv.astype(np.uint8), cross.astype(np.uint8), cv2.TM_CCORR_NORMED)
 
-        these_coords = peak_local_max(res, min_distance=2*cross.shape[0], threshold_abs=0.15).astype(np.float64)
+        these_coords = peak_local_max(res, min_distance=int(1.5*cross.shape[0]),
+                                      threshold_abs=np.median(res)).astype(np.float64)
 
         these_coords += cross.shape[0] / 2 - 0.5
 
@@ -872,20 +987,50 @@ def match_reseau_grid(img, coords, cross):
     # top, bot, left, right = find_grid_border(coords)
     left, right, top, bot = get_rough_frame(img)
 
-    scale = np.mean([(bot - top) / 23, (right - left) / 46.5])
+    lr_valid = left > 0 and right < 1e10
+    tb_valid = top > 0 and bot < 1e10
 
-    left_edge = LineString([(left + cross.shape[0], bot - cross.shape[0]),
-                            (left + cross.shape[0], top + cross.shape[0])])
-    right_edge = LineString([(right - cross.shape[0], bot - cross.shape[0]),
-                             (right - cross.shape[0], top + cross.shape[0])])
+    if lr_valid and tb_valid:
+        scale = np.mean([(bot - top - 3 * cross.shape[0]) / 22, (right - left - cross.shape[0]) / 46])
+
+    elif lr_valid and not tb_valid:
+        # if the left/right border is okay, use it to guess the top/bottom border
+        scale = (right - left - cross.shape[0]) / 46
+
+        if top > 0:
+            bot = int(top + scale * 22 + 1.5 * cross.shape[0])
+        elif bot < 1e10:
+            top = int(bot - scale * 22 - 1.5 * cross.shape[0])
+        else: # if both or wrong, use very approximate average values
+            top = 1200
+            bot = 34000
+
+    elif not lr_valid and tb_valid:
+        # if the top/bottom border is okay, use it to guess the left/right border
+        scale = (bot - top - 3 * cross.shape[0]) / 22
+        if left > 0:
+            right = int(left + scale * 46 + 0.5 * cross.shape[0])
+        elif right < 1e10:
+            left = int(right - scale * 46 - 0.5 * cross.shape[0])
+        else:
+            left = 2000
+            right = 68500
+    else:
+        # if we can't find the image border, try using the mark coordinates.
+        top, bot, left, right = find_grid_border(coords)
+
+    left_edge = LineString([(left + 0.5 * cross.shape[0], bot - 1.5 * cross.shape[0]),
+                            (left + 0.5 * cross.shape[0], top + 1.5 * cross.shape[0])])
+    right_edge = LineString([(right - 0.5 * cross.shape[0], bot - 1.5 * cross.shape[0]),
+                             (right - 0.5 * cross.shape[0], top + 1.5 * cross.shape[0])])
 
     II, JJ, search_grid = _search_grid(left_edge, right_edge, True)
 
     grid_df = pd.DataFrame()
     for ii, pr in enumerate(list(zip(II, JJ))):
         grid_df.loc[ii, 'gcp'] = 'GCP_{}_{}'.format(pr[0], pr[1])
-        grid_df.loc[ii, 'grid_j'] = left + scale * pr[1] + cross.shape[0]
-        grid_df.loc[ii, 'grid_i'] = bot - scale * pr[0] - 2 * cross.shape[0]
+        grid_df.loc[ii, 'grid_j'] = left + scale * pr[1] + 0.5 * cross.shape[0]
+        grid_df.loc[ii, 'grid_i'] = bot - scale * pr[0] - 1.5 * cross.shape[0]
 
     grid_df['search_j'] = np.array(search_grid)[:, 1]
     grid_df['search_i'] = np.array(search_grid)[:, 0]
@@ -1024,7 +1169,8 @@ def get_rough_frame(img):
 
     :param array-like img: the image to find a border for
     :return:
-        - **xmin**, **xmax**, **ymin**, **ymax** (*float*) -- the left, right, top, and bottom indices for the rough border.
+        - **xmin**, **xmax**, **ymin**, **ymax** (*float*) -- the left, right, top, and bottom indices
+            for the rough border.
     """
     img_lowres = downsample_image(img, fact=10)
 
@@ -1057,11 +1203,11 @@ def get_rough_frame(img):
     row_peaks = peak_local_max(np.diff(smooth_row), min_distance=20, threshold_rel=0.1, num_peaks=2).flatten()
     row_troughs = peak_local_max(-np.diff(smooth_row), min_distance=20, threshold_rel=0.1, num_peaks=2).flatten()
 
-    left_ind = max(row_peaks[np.where(row_peaks < 0.2 * rowmean.size)[0]])
-    right_ind = min(row_troughs[np.where(row_troughs > 0.8 * rowmean.size)[0]])
+    left_ind = np.max(row_peaks[np.where(row_peaks < 0.2 * rowmean.size)[0]], initial=-1e10)
+    right_ind = np.min(row_troughs[np.where(row_troughs > 0.8 * rowmean.size)[0]], initial=1e10)
 
-    top_ind = max(col_peaks[np.where(col_peaks < 0.2 * colmean.size)[0]])
-    bot_ind = min(col_troughs[np.where(col_troughs > 0.8 * colmean.size)[0]])
+    top_ind = np.max(col_peaks[np.where(col_peaks < 0.2 * colmean.size)[0]], initial=-1e10)
+    bot_ind = np.min(col_troughs[np.where(col_troughs > 0.8 * colmean.size)[0]], initial=1e10)
 
     # xmin = 10 * (sorted_row[min_ind] + 1)
     # xmax = 10 * (sorted_row[max_ind] + 1)
@@ -1107,6 +1253,10 @@ def _search_grid(left, right, joined=False):
     return i_grid, j_grid, search_pts
 
 
+def _outlier_filter(vals, n=3):
+    return np.abs(vals - np.nanmean(vals)) > n * np.nanstd(vals)
+
+
 def find_reseau_grid(fn_img, csize=361, return_val=False):
     """
     Find the locations of the Reseau marks in a scanned KH-9 image. Locations are saved
@@ -1138,14 +1288,38 @@ def find_reseau_grid(fn_img, csize=361, return_val=False):
 
     model, inliers = ransac((grid_df[['grid_j', 'grid_i']].values, grid_df[['match_j', 'match_i']].values),
                             AffineTransform, min_samples=10, residual_threshold=10, max_trials=5000)
-    residuals = model.residuals(grid_df.dropna()[['grid_j', 'grid_i']].values,
-                                grid_df.dropna()[['match_j', 'match_i']].values)
+    grid_df['resid'] = model.residuals(grid_df.dropna()[['grid_j', 'grid_i']].values,
+                                       grid_df.dropna()[['match_j', 'match_i']].values)
+
+    grid_df.loc[~inliers, ['match_j', 'match_i']] = np.nan
+
     dst = model(grid_df[['grid_j', 'grid_i']].values)
 
-    grid_df['resid'] = residuals
+    x_res = grid_df['match_j'] - dst[:, 0]
+    y_res = grid_df['match_i'] - dst[:, 1]
 
-    grid_df.loc[~inliers, 'match_j'] = dst[~inliers, 0]
-    grid_df.loc[~inliers, 'match_i'] = dst[~inliers, 1]
+    ux = x_res.values.reshape(23, 47)
+    uy = y_res.values.reshape(23, 47)
+
+    xdiff = ux - nanmedian_filter(ux, footprint=disk(3))
+    ydiff = uy - nanmedian_filter(uy, footprint=disk(3))
+
+    xout = _outlier_filter(xdiff, n=5)
+    yout = _outlier_filter(ydiff, n=5)
+
+    outliers = np.logical_or.reduce([~inliers, xout.flatten(), yout.flatten()])
+
+    ux[outliers.reshape(23, 47)] = np.nan
+    uy[outliers.reshape(23, 47)] = np.nan
+
+    ux[outliers.reshape(23, 47)] = nanmedian_filter(ux, footprint=disk(1))[outliers.reshape(23, 47)]
+    uy[outliers.reshape(23, 47)] = nanmedian_filter(uy, footprint=disk(1))[outliers.reshape(23, 47)]
+
+    grid_df.loc[outliers, 'match_j'] = dst[outliers, 0] + ux.flatten()[outliers]
+    grid_df.loc[outliers, 'match_i'] = dst[outliers, 1] + uy.flatten()[outliers]
+
+    grid_df.loc[np.isnan(grid_df['match_j']), 'match_j'] = dst[np.isnan(grid_df['match_j']), 0]
+    grid_df.loc[np.isnan(grid_df['match_i']), 'match_i'] = dst[np.isnan(grid_df['match_i']), 1]
 
     grid_df['im_row'] = grid_df['match_i']
     grid_df['im_col'] = grid_df['match_j']
@@ -1156,12 +1330,12 @@ def find_reseau_grid(fn_img, csize=361, return_val=False):
     print('Grid points found.')
     os.makedirs('match_imgs', exist_ok=True)
 
-    print('Mean x residual: {:.2f} pixels'.format(grid_df.dj.abs().mean()))
-    print('Mean y residual: {:.2f} pixels'.format(grid_df.di.abs().mean()))
-    print('Mean residual: {:.2f} pixels'.format(grid_df.resid.mean()))
+    print('Mean x residual: {:.2f} pixels'.format(grid_df.loc[~outliers, 'dj'].abs().mean()))
+    print('Mean y residual: {:.2f} pixels'.format(grid_df.loc[~outliers, 'di'].abs().mean()))
+    print('Mean residual: {:.2f} pixels'.format(grid_df.loc[~outliers, 'resid'].mean()))
 
     ax.quiver(grid_df.match_j, grid_df.match_i, grid_df.dj, grid_df.di, color='r')
-    ax.plot(grid_df.match_j[~inliers], grid_df.match_i[~inliers], 'b+')
+    ax.plot(grid_df.match_j[outliers], grid_df.match_i[outliers], 'b+')
 
     this_out = os.path.splitext(fn_img)[0]
     fig.savefig(os.path.join('match_imgs', this_out + '_matches.png'), bbox_inches='tight', dpi=200)
@@ -1254,8 +1428,8 @@ def remove_crosses(fn_img, nproc=1):
         pool.close()
         pool.join()
 
-    for subim, row, col, pt in zip(outputs, rows, cols, points):
-        img[pt[0] - row_[0]:pt[0] + row_[1] + 1, pt[1] - col_[0]:pt[1] + col_[1] + 1] = subim
+        for subim, row, col, pt in zip(outputs, rows, cols, points):
+            img[pt[0] - row_[0]:pt[0] + row_[1] + 1, pt[1] - col_[0]:pt[1] + col_[1] + 1] = subim
 
     os.makedirs('original', exist_ok=True)
     shutil.move(fn_img, 'original')
@@ -1327,7 +1501,15 @@ def join_halves(left, right, overlap, block_size=None, blend=True, trim=None):
     :param int trim: the amount to trim the right side of the image by. (default: None).
     :return:
     """
-    M = match_halves(left, right, overlap=overlap, block_size=block_size)
+    M, num_inliers = match_halves(left, right, overlap=overlap, block_size=block_size)
+
+    if num_inliers < 10:
+        print('Not enough tie points found. Re-trying with a larger overlap.')
+        M, num_inliers = match_halves(left, right, overlap=2*overlap, block_size=block_size)
+
+        if num_inliers < 10:
+            raise RuntimeError("Unable to find a reliable transformation between left and right halves.")
+
     out_shape = (left.shape[0], left.shape[1] + right.shape[1])
 
     combined_right = warp(right, M, output_shape=out_shape, preserve_range=True, order=3)
@@ -1387,8 +1569,9 @@ def match_halves(left, right, overlap, block_size=None):
 
     model, inliers = ransac((np.array(src_pts), np.array(dst_pts)), EuclideanTransform,
                         min_samples=10, residual_threshold=2, max_trials=25000)
+
     print('{} tie points found'.format(np.count_nonzero(inliers)))
-    return model
+    return model, np.count_nonzero(inliers)
 
 
 def resample_hex(fn_img, scale, ori='InterneScan'):

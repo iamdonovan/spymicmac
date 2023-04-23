@@ -99,8 +99,8 @@ def get_imlist(im_subset, dirname='.', strip_text=None):
     else:
         if len(im_subset) > 1:
             imlist = im_subset
-            # match_pattern = mmtools.get_match_pattern(imlist)
-            match_pattern = '|'.join(imlist)
+            match_pattern = mmtools.get_match_pattern(imlist)
+            # match_pattern = '|'.join(imlist)
         else:
             match_pattern = im_subset[0] + '.*tif'
             imlist = [f for f in glob('OIS*.tif') if re.search(match_pattern, f)]
@@ -839,21 +839,21 @@ def register_ortho(fn_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, landmask=
     print('{} matches with valid elevations'.format(gcps.shape[0]))
 
     # run ransac to find the matches between the transformed image and the master image make a coherent transformation
-    # residual_threshold is 10 pixels to allow for some local distortions, but get rid of the big blunders
-    # Mref, inliers_ref = ransac((gcps[['search_j', 'search_i']].values, gcps[['match_j', 'match_i']].values),
-    #                            AffineTransform, min_samples=6, residual_threshold=10, max_trials=5000)
-    # gcps['aff_resid'] = Mref.residuals(gcps[['search_j', 'search_i']].values,
-    #                                    gcps[['match_j', 'match_i']].values)
+    # residual_threshold is 20 pixels to allow for some local distortions, but get rid of the big blunders
+    Mref, inliers_ref = ransac((gcps[['search_j', 'search_i']].values, gcps[['match_j', 'match_i']].values),
+                               AffineTransform, min_samples=6, residual_threshold=20, max_trials=5000)
+    gcps['aff_resid'] = Mref.residuals(gcps[['search_j', 'search_i']].values,
+                                       gcps[['match_j', 'match_i']].values)
 
-    # valid = np.abs(gcps.aff_resid - gcps.aff_resid.median()) < nmad(gcps.aff_resid)
-    # gcps = gcps.loc[valid]
+    valid = np.abs(gcps.aff_resid - gcps.aff_resid.median()) < nmad(gcps.aff_resid)
+    gcps = gcps.loc[valid]
 
     # out = sliding_window_filter([ortho.shape[1], ortho.shape[0]], gcps,
     #                             min(1000, ortho.shape[1] / 4, ortho.shape[0] / 4),
     #                             mindist=500, how='aff_resid', is_ascending=False)
     # gcps = gcps.loc[out]
 
-    # print('{} valid matches found after estimating transformation'.format(gcps.shape[0]))
+    print('{} valid matches found after estimating transformation'.format(gcps.shape[0]))
 
     gcps.index = range(gcps.shape[0])  # make sure index corresponds to row we're writing out
     gcps['id'] = ['GCP{}'.format(i) for i in range(gcps.shape[0])]
@@ -881,14 +881,14 @@ def register_ortho(fn_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, landmask=
     gcps = mmtools.run_bascule(gcps, out_dir, match_pattern, subscript, ori)
     gcps['res_dist'] = np.sqrt(gcps.xres ** 2 + gcps.yres ** 2)
 
-    gcps = gcps[np.abs(gcps.res_dist - gcps.res_dist.median()) < 2 * nmad(gcps.res_dist)]
+    gcps = gcps.loc[np.abs(gcps.res_dist - gcps.res_dist.median()) < 2 * nmad(gcps.res_dist)]
     # gcps = gcps[np.logical_and(np.abs(gcps.xres - gcps.xres.median()) < 2 * nmad(gcps.xres),
     #                            np.abs(gcps.yres - gcps.yres.median()) < 2 * nmad(gcps.yres))]
 
     mmtools.save_gcps(gcps, out_dir, utm_str, subscript)
     gcps = mmtools.run_bascule(gcps, out_dir, match_pattern, subscript, ori)
     gcps['res_dist'] = np.sqrt(gcps.xres ** 2 + gcps.yres ** 2)
-    gcps = gcps[np.abs(gcps.res_dist - gcps.res_dist.median()) < 2 * nmad(gcps.res_dist)]
+    gcps = gcps.loc[np.abs(gcps.res_dist - gcps.res_dist.median()) < 2 * nmad(gcps.res_dist)]
     # gcps = gcps[np.logical_and(np.abs(gcps.xres - gcps.xres.median()) < 2 * nmad(gcps.xres),
     #                            np.abs(gcps.yres - gcps.yres.median()) < 2 * nmad(gcps.yres))]
 
