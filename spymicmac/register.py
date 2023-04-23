@@ -21,7 +21,7 @@ from skimage.transform import AffineTransform, warp
 from pybob.ddem_tools import nmad
 from pybob.image_tools import create_mask_from_shapefile
 from pybob.GeoImg import GeoImg
-from spymicmac import orientation, image, micmac, data
+from spymicmac import data, image, matching, micmac, orientation
 
 
 def sliding_window_filter(img_shape, pts_df, winsize, stepsize=None, mindist=2000, how='residual', is_ascending=True):
@@ -36,8 +36,7 @@ def sliding_window_filter(img_shape, pts_df, winsize, stepsize=None, mindist=200
     :param int mindist: the minimum distance (in pixels) to use between points (default: 2000)
     :param str how: how to sort pts_df to determine the 'best' points to keep (default: 'residual')
     :param bool is_ascending: whether the column named in 'how' should be sorted ascending or descending (default: True)
-    :return:
-        - **out_inds** (*array-like*) -- an array with the filtered indices
+    :return: **out_inds** (*array-like*) -- an array with the filtered indices
     """
     if stepsize is None:
         stepsize = winsize / 2
@@ -114,8 +113,7 @@ def get_utm_str(epsg):
         - get_utm_str(32708) -> 'UTM Zone 8S'
 
     :param int|str epsg: a str or int representing an EPSG Code
-    :return:
-        - **utm_str** (*str*) -- the UTM string representation
+    :return: **utm_str** (*str*) -- the UTM string representation
     """
     epsg_str = str(epsg)
     hemi_dict = {'6': 'N', '7': 'S'}
@@ -135,7 +133,7 @@ def warp_image(model, ref, img):
     :param GeometricTransform model: the transformation model between the coordinate systems
     :param GeoImg ref: the reference GeoImg
     :param GeoImg img: the GeoImg to be transformed
-    :returns:
+    :return:
         - **tfm_img** (*np.array*) -- the input image transformed to the same extent as the reference image
         - **this_model** (*AffineTransform*) -- the estimated Affine Transformation between the two images
         - **inliers** (*array-like*) -- a list of the inliers returned by skimage.measure.ransac
@@ -169,8 +167,7 @@ def get_footprint_overlap(fprints):
     Return the area where image footprints overlap.
 
     :param GeoDataFrame fprints: a GeoDataFrame of image footprints
-    :return:
-        - **intersection** (*shapely.Polygon*) -- the overlapping area (unary union) of the images.
+    :return: **intersection** (*shapely.Polygon*) -- the overlapping area (unary union) of the images.
     """
     if fprints.shape[0] == 1:
         return fprints.geometry.values[0]
@@ -337,8 +334,8 @@ def register_ortho(fn_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, landmask=
 
     rough_spacing = np.round(max(ref_img.shape) / 20 / 1000) * 1000
 
-    rough_gcps = image.find_grid_matches(rough_tfm, ref_img, mask_full, Minit,
-                                           spacing=int(rough_spacing), dstwin=int(rough_spacing))
+    rough_gcps = matching.find_grid_matches(rough_tfm, ref_img, mask_full, Minit,
+                                            spacing=int(rough_spacing), dstwin=int(rough_spacing))
 
     model, inliers = ransac((rough_gcps[['search_j', 'search_i']].values,
                              rough_gcps[['orig_j', 'orig_i']].values), AffineTransform,
@@ -357,8 +354,8 @@ def register_ortho(fn_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, landmask=
     plt.close(fig)
 
     # for each of these pairs (src, dst), find the precise subpixel match (or not...)
-    gcps = image.find_grid_matches(rough_tfm, ref_img, mask_full, model,
-                                     spacing=density, dstwin=_search_size(rough_tfm.shape))
+    gcps = matching.find_grid_matches(rough_tfm, ref_img, mask_full, model,
+                                      spacing=density, dstwin=_search_size(rough_tfm.shape))
 
     xy = np.array([ref_img.ij2xy((pt[1], pt[0])) for pt in gcps[['search_j', 'search_i']].values]).reshape(-1, 2)
     gcps['geometry'] = [Point(pt) for pt in xy]
@@ -429,7 +426,7 @@ def register_ortho(fn_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, landmask=
     micmac.write_image_mesures(imlist, gcps, out_dir, subscript, ort_dir=ort_dir)
 
     print('running mm3d GCPBascule to estimate terrain errors')
-    gcps = micmac.run_bascule(gcps, out_dir, match_pattern, subscript, ori)
+    gcps = micmac.bascule(gcps, out_dir, match_pattern, subscript, ori)
     gcps['res_dist'] = np.sqrt(gcps.xres ** 2 + gcps.yres ** 2)
 
     gcps = gcps.loc[np.abs(gcps.res_dist - gcps.res_dist.median()) < 2 * nmad(gcps.res_dist)]
@@ -437,7 +434,7 @@ def register_ortho(fn_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, landmask=
     #                            np.abs(gcps.yres - gcps.yres.median()) < 2 * nmad(gcps.yres))]
 
     micmac.save_gcps(gcps, out_dir, utm_str, subscript)
-    gcps = micmac.run_bascule(gcps, out_dir, match_pattern, subscript, ori)
+    gcps = micmac.bascule(gcps, out_dir, match_pattern, subscript, ori)
     gcps['res_dist'] = np.sqrt(gcps.xres ** 2 + gcps.yres ** 2)
     gcps = gcps.loc[np.abs(gcps.res_dist - gcps.res_dist.median()) < 2 * nmad(gcps.res_dist)]
     # gcps = gcps[np.logical_and(np.abs(gcps.xres - gcps.xres.median()) < 2 * nmad(gcps.xres),
@@ -445,8 +442,8 @@ def register_ortho(fn_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, landmask=
 
     micmac.save_gcps(gcps, out_dir, utm_str, subscript)
 
-    gcps = micmac.run_bascule(gcps, out_dir, match_pattern, subscript, ori)
-    gcps = micmac.run_campari(gcps, out_dir, match_pattern, subscript, ref_img.dx, ortho_res, allfree=allfree)
+    gcps = micmac.bascule(gcps, out_dir, match_pattern, subscript, ori)
+    gcps = micmac.campari(gcps, out_dir, match_pattern, subscript, ref_img.dx, ortho_res, allfree=allfree)
     gcps['camp_dist'] = np.sqrt(gcps.camp_xres ** 2 + gcps.camp_yres ** 2)
 
     niter = 0
@@ -461,10 +458,10 @@ def register_ortho(fn_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, landmask=
 
         gcps = gcps.loc[valid_inds]
         micmac.save_gcps(gcps, out_dir, utm_str, subscript)
-        gcps = micmac.run_bascule(gcps, out_dir, match_pattern, subscript, ori)
+        gcps = micmac.bascule(gcps, out_dir, match_pattern, subscript, ori)
         gcps['res_dist'] = np.sqrt(gcps.xres ** 2 + gcps.yres ** 2)
 
-        gcps = micmac.run_campari(gcps, out_dir, match_pattern, subscript, ref_img.dx, ortho_res, allfree=allfree)
+        gcps = micmac.campari(gcps, out_dir, match_pattern, subscript, ref_img.dx, ortho_res, allfree=allfree)
         gcps['camp_dist'] = np.sqrt(gcps.camp_xres ** 2 + gcps.camp_yres ** 2)
         niter += 1
 
@@ -635,8 +632,8 @@ def register_individual(dir_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, lan
             these_meas.loc[ii, 'search_i'] = pt[0]
 
             # TODO: choose src, dstwin size based on image size, "goodness" of transform
-            match_pt, this_z_corr, this_peak_corr = image.do_match(this_img.img, this_ref.img,
-                                                                   this_mask.img, pt, srcwin=20, dstwin=25)
+            match_pt, this_z_corr, this_peak_corr = matching.do_match(this_img.img, this_ref.img,
+                                                                      this_mask.img, pt, srcwin=20, dstwin=25)
             these_meas.loc[ii, 'match_j'] = match_pt[0]
             these_meas.loc[ii, 'match_i'] = match_pt[1]
 
@@ -703,7 +700,7 @@ def register_individual(dir_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, lan
                pretty_print=True, xml_declaration=True, encoding="utf-8")
 
     for ii in range(2):
-        gcps = micmac.run_bascule(gcps, out_dir, match_pattern, subscript, ori)
+        gcps = micmac.bascule(gcps, out_dir, match_pattern, subscript, ori)
 
         valid = np.abs(gcps.residual - gcps.residual.median()) < nmad(gcps.residual)
         gcps = gcps.loc[valid]
