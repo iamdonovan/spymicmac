@@ -1,5 +1,5 @@
-spymicmac.usgs
+spymicmac.data
 =================================
 
-.. automodule:: spymicmac.usgs
+.. automodule:: spymicmac.data
     :members:
