@@ -61,7 +61,13 @@ def resample_hex(fn_img, scale, ori='InterneScan'):
 
 
 def rotate_kh4(img):
+    """
+    Use the rail marks in a KH-4 image to rotate the image.
 
+    :param array-like img: the image to rotate.
+    :return:
+        - **rotated** (*array-like*) -- the rotated image
+    """
     rails = image.find_rail_marks(img)
     slope, intercept = np.polyfit(rails[:, 1], rails[:, 0], 1)
     angle = np.rad2deg(np.arctan(slope))
