@@ -785,8 +785,8 @@ def block_malt(imlist, nimg=3, ori='Relative', zoomf=8):
         tawny('{}_block{}'.format(dirmec, block))
 
 
-def run_bascule(in_gcps, outdir, img_pattern, sub, ori, outori='TerrainRelAuto',
-                fn_gcp='AutoGCPs', fn_meas='AutoMeasures'):
+def bascule(in_gcps, outdir, img_pattern, sub, ori, outori='TerrainRelAuto',
+            fn_gcp='AutoGCPs', fn_meas='AutoMeasures'):
     """
     Interface for running mm3d GCPBascule and reading the residuals from the resulting xml file.
 
@@ -817,9 +817,9 @@ def run_bascule(in_gcps, outdir, img_pattern, sub, ori, outori='TerrainRelAuto',
     return out_gcps
 
 
-def run_campari(in_gcps, outdir, img_pattern, sub, dx, ortho_res, allfree=True,
-                fn_gcp='AutoGCPs', fn_meas='AutoMeasures', inori='TerrainRelAuto',
-                outori='TerrainFinal', homol='Homol'):
+def campari(in_gcps, outdir, img_pattern, sub, dx, ortho_res, allfree=True,
+            fn_gcp='AutoGCPs', fn_meas='AutoMeasures', inori='TerrainRelAuto',
+            outori='TerrainFinal', homol='Homol'):
     """
     Interface for running mm3d Campari and reading the residuals from the residual xml file.
 
@@ -924,13 +924,13 @@ def iterate_campari(gcps, out_dir, match_pattern, subscript, dx, ortho_res, fn_g
     """
     niter = 0
 
-    gcps = run_bascule(gcps, out_dir, match_pattern, subscript, rel_ori, fn_gcp=fn_gcp, fn_meas=fn_meas, outori=inori)
+    gcps = bascule(gcps, out_dir, match_pattern, subscript, rel_ori, fn_gcp=fn_gcp, fn_meas=fn_meas, outori=inori)
 
     gcps['res_dist'] = np.sqrt(gcps.xres ** 2 + gcps.yres ** 2)
 
-    gcps = run_campari(gcps, out_dir, match_pattern, subscript, dx, ortho_res,
-                       inori=inori, outori=outori, fn_gcp=fn_gcp, fn_meas=fn_meas,
-                       allfree=allfree)
+    gcps = campari(gcps, out_dir, match_pattern, subscript, dx, ortho_res,
+                   inori=inori, outori=outori, fn_gcp=fn_gcp, fn_meas=fn_meas,
+                   allfree=allfree)
 
     gcps['camp_dist'] = np.sqrt(gcps.camp_xres ** 2 + gcps.camp_yres ** 2)
 
@@ -945,13 +945,13 @@ def iterate_campari(gcps, out_dir, match_pattern, subscript, dx, ortho_res, fn_g
         gcps = gcps.loc[valid_inds]
         save_gcps(gcps, out_dir, register.get_utm_str(gcps.crs.to_epsg), subscript, fn_gcp=fn_gcp, fn_meas=fn_meas)
 
-        gcps = run_bascule(gcps, out_dir, match_pattern, subscript, rel_ori, fn_gcp=fn_gcp,
-                           fn_meas=fn_meas, outori=inori)
+        gcps = bascule(gcps, out_dir, match_pattern, subscript, rel_ori, fn_gcp=fn_gcp,
+                       fn_meas=fn_meas, outori=inori)
         gcps['res_dist'] = np.sqrt(gcps.xres ** 2 + gcps.yres ** 2)
 
-        gcps = run_campari(gcps, out_dir, match_pattern, subscript, dx, ortho_res,
-                           inori=inori, outori=outori, fn_gcp=fn_gcp, fn_meas=fn_meas,
-                           allfree=allfree, homol=homol)
+        gcps = campari(gcps, out_dir, match_pattern, subscript, dx, ortho_res,
+                       inori=inori, outori=outori, fn_gcp=fn_gcp, fn_meas=fn_meas,
+                       allfree=allfree, homol=homol)
 
         gcps['camp_dist'] = np.sqrt(gcps.camp_xres ** 2 + gcps.camp_yres ** 2)
         niter += 1
