@@ -15,7 +15,6 @@ import lxml.builder as builder
 from PIL import Image
 from glob import glob
 from shapely.geometry.point import Point
-from shapely.geometry import LineString, MultiPoint
 from skimage.io import imread
 from skimage.measure import ransac
 from skimage.filters import median
@@ -26,8 +25,8 @@ from pybob.image_tools import create_mask_from_shapefile
 from pybob.GeoImg import GeoImg
 import spymicmac.image as imtools
 import spymicmac.micmac as mmtools
+from spymicmac.orientation import transform_points
 from spymicmac.data import get_usgs_footprints
-import urllib
 
 
 def sliding_window_filter(img_shape, pts_df, winsize, stepsize=None, mindist=2000, how='residual', is_ascending=True):
@@ -164,100 +163,6 @@ def get_utm_str(epsg):
     return utm_str
 
 
-def transform_centers(img_gt, ref, imlist, footprints, ori, imgeom=True):
-    """
-    Use the camera centers in relative space provided by MicMac Orientation files, along with camera footprints,
-    to estimate a transformation between the relative coordinate system and the absolute coordinate system.
-
-    :param array-like img_gt: the image GeoTransform (as read from a TFW file)
-    :param GeoImg ref: the reference image to use to determine the output image shape
-    :param list imlist: a list of of the images that were used for the relative orthophoto
-    :param GeoDataFrame footprints: the (approximate) image footprints - the centroid will be used for the absolute camera positions.
-    :param str ori: name of orientation directory
-    :param bool imgeom: calculate a transformation between image ij locations (True)
-    :return:
-        - **model** (*AffineTransform*) -- the estimated Affine Transformation between relative and absolute space
-        - **inliers** (*array-like*) -- a list of the inliers returned by skimage.measure.ransac
-        - **join** (*GeoDataFrame*) -- the joined image footprints and relative orientation files
-    """
-
-    rel_ori = mmtools.load_all_orientation(ori, imlist=imlist)
-
-    footprints = footprints.to_crs(epsg=ref.epsg).copy()
-
-    for i, row in footprints.iterrows():
-        footprints.loc[i, 'x'] = row['geometry'].centroid.x
-        footprints.loc[i, 'y'] = row['geometry'].centroid.y
-        footprints.loc[i, 'name'] = 'OIS-Reech_' + row['ID'] + '.tif'
-
-    join = footprints.set_index('name').join(rel_ori.set_index('name'), lsuffix='abs', rsuffix='rel')
-    join.dropna(inplace=True)
-
-    if join.shape[0] > 3:
-        width_ratio = _point_spread(rel_ori.geometry)
-        # if the points are very linear, we want to add a point to keep the transformation from being too sheared
-        if width_ratio > 10:
-            ind1, ind2 = _find_add([Point(row.xrel, row.yrel) for ii, row in join.iterrows()])
-
-            ref_pts = np.concatenate([join[['xabs', 'yabs']].values,
-                                      _get_points([Point(join['xabs'].values[ind1], join['yabs'].values[ind1]),
-                                                   Point(join['xabs'].values[ind2], join['yabs'].values[ind2])])])
-            rel_pts = np.concatenate([join[['xrel', 'yrel']].values,
-                                      _get_points([Point(join['xrel'].values[ind1], join['yrel'].values[ind1]),
-                                                   Point(join['xrel'].values[ind2], join['yrel'].values[ind2])])])
-        else:
-            ref_pts = join[['xabs', 'yabs']].values
-            rel_pts = join[['xrel', 'yrel']].values
-
-    else:
-        # if we only have 2 points, we add two (midpoint, perpendicular to midpoint) using _get_points()
-        # this ensures that we can actually get an affine transformation
-        ref_pts = _get_points([Point(row.xabs, row.yabs) for ii, row in join.iterrows()])
-        rel_pts = _get_points([Point(row.xrel, row.yrel) for ii, row in join.iterrows()])
-
-    if imgeom:
-        model, inliers = transform_points(ref, ref_pts, img_gt, rel_pts)
-    else:
-        model, inliers = _transform(ref_pts, rel_pts)
-
-    print('{} inliers for center transformation'.format(np.count_nonzero(inliers)))
-    return model, inliers, join
-
-
-def transform_points(ref, ref_pts, rel_gt, rel_pts):
-    """
-    Given x,y points and two "geo"-referenced images, finds an affine transformation between the two images.
-
-    :param GeoImg ref: the reference image
-    :param np.array ref_pts: an Mx2 array of the x,y points in the reference image
-    :param array-like rel_gt: the "geo" transform for the second image, as read from a .tfw file.
-    :param np.array rel_pts: an Mx2 array of the x,y points in the second image.
-    :returns:
-        - **model** (*AffineTransform*) -- the estimated Affine Transformation between relative and absolute space
-        - **inliers** (*array-like*) -- a list of the inliers returned by skimage.measure.ransac
-    """
-    ref_ij = np.array([ref.xy2ij(pt) for pt in ref_pts])
-    rel_ij = np.array([((pt[0] - rel_gt[4]) / rel_gt[0],
-                        (pt[1] - rel_gt[5]) / rel_gt[3]) for pt in rel_pts])
-
-    model, inliers = _transform(ref_ij[:, ::-1], rel_ij)
-
-    return model, inliers
-
-
-def _transform(ref_pts, rel_pts):
-    if ref_pts.shape[0] > 3:
-        model, inliers = ransac((ref_pts, rel_pts), AffineTransform, min_samples=3,
-                                residual_threshold=100, max_trials=5000)
-    else:
-        model = AffineTransform()
-        model.estimate(ref_pts, rel_pts)
-        residuals = model.residuals(ref_pts, rel_pts)
-        inliers = residuals <= 1
-
-    return model, inliers
-
-
 def warp_image(model, ref, img):
     """
     Given a transformation model between two coordinate systems, warp an image to a reference image
@@ -292,56 +197,6 @@ def warp_image(model, ref, img):
 def _to_tfw(gt):
     # convert from gdal GeoTransform to TFW format
     return [gt[1], gt[2], gt[4], gt[5], gt[0], gt[3]]
-
-
-def _find_add(pts):
-    # find two points that are (a) far from the center of a distribution, and (b) far from each other
-    cent = MultiPoint(pts).centroid
-    cdist = [cent.distance(pt) for pt in pts]
-
-    # find the point furthest from the centroid
-    pt1 = pts[np.argmax(cdist)]
-
-    # find the point furthest from that point
-    pdist = [pt1.distance(pt) for pt in pts]
-
-    return np.argmax(cdist), np.argmax(pdist)
-
-
-def _point_spread(pts):
-    # get the ratio of the length to the width of the minimum rotated rectangle covering a set of points
-    rect = MultiPoint(pts).minimum_rotated_rectangle
-    verts = [Point(pt) for pt in list(zip(rect.boundary.xy[0], rect.boundary.xy[1]))]
-    dists = [verts[0].distance(pt) for pt in verts[1:]]
-
-    dists.remove(max(dists))  # remove the longest - this is a diagonal
-    dists.remove(min(dists))  # remove the shortest - this is the same point
-
-    return max(dists) / min(dists)
-
-
-def _get_points(centers):
-    pt1 = centers[0]  # the first point
-    pt2 = centers[1]  # the second point
-
-    line = LineString([pt1, pt2])  # form a line between point 1, point 2
-    norm = _norm_vector(line)  # get the normal vector to the line
-
-    pt12 = line.centroid  # get the midpoint of the line
-    # get a point perpendicular to the line at a distance of line.length from the midpoint
-    endpt = Point(pt12.x + line.length * norm[0], pt12.y + line.length * norm[1])
-
-    pts = [(p.x, p.y) for p in [pt1, pt2, pt12, endpt]]
-
-    return np.array(pts)
-
-
-def _norm_vector(line):
-    x, y = line.xy
-    a = np.array([x[-1] - x[0], y[-1] - y[0]])
-    b = np.array([a[1], -a[0]])
-    b = b / np.linalg.norm(a)
-    return b
 
 
 def refine_lowres_tfm(rough_tfm, ref, mask, Minit):
