@@ -4,5 +4,5 @@ sPyMicMac is a python package to help in the processing of KH-9 and historical a
 from . import image
 from . import micmac
 from . import register
-from . import usgs
+from . import data
 # from . import ee_tools

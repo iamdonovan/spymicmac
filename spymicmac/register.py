@@ -26,7 +26,8 @@ from pybob.image_tools import create_mask_from_shapefile
 from pybob.GeoImg import GeoImg
 import spymicmac.image as imtools
 import spymicmac.micmac as mmtools
-from spymicmac.usgs import get_usgs_footprints
+from spymicmac.data import get_usgs_footprints
+import urllib
 
 
 def sliding_window_filter(img_shape, pts_df, winsize, stepsize=None, mindist=2000, how='residual', is_ascending=True):

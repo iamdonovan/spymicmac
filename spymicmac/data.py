@@ -1,9 +1,13 @@
 """
-sPyMicMac.usgs is a collection of tools for interfacing with USGS Earth Explorer.
+spymicmac.data is a collection of tools for handling external datasets
 """
 import os
+import urllib
 import netrc
 import geopandas as gpd
+import numpy as np
+from glob import glob
+from osgeo import gdal
 from shapely.geometry.polygon import Polygon
 from usgs import api, USGSAuthExpiredError
 
@@ -131,3 +135,78 @@ def landsat_to_gdf(results):
 
     return meta_gdf.set_crs(epsg=4326)
 
+
+def download_cop30_vrt(imlist=None, footprints=None, imgsource='DECLASSII', globstr='OIS*.tif'):
+    """
+    Create a VRT using Copernicus 30m DSM tiles that intersect image footprints. Creates Copernicus_DSM.vrt using files
+        downloaded to cop30_dem/ within the current directory.
+
+    :param list imlist: a list of image filenames. If None, uses globstr to search for images in the current directory.
+    :param GeoDataFrame footprints: a GeoDataFrame of image footprints. If None, uses spymicmac.usgs.get_usgs_footprints
+        to download footprints based on imlist.
+    :param str imgsource: the EE Dataset name for the images (default: DECLASSII)
+    :param str globstr: the search string to use to find images in the current directory.
+    :return:
+    """
+
+    if imlist is None:
+        imlist = glob(globstr)
+        imlist.sort()
+
+    clean_imlist = [im.split('OIS-Reech_')[-1].split('.tif')[0] for im in imlist]
+
+    if footprints is None:
+        footprints = get_usgs_footprints(clean_imlist, dataset=imgsource)
+
+    # now, get the envelope
+    xmin, ymin, xmax, ymax = footprints.unary_union.bounds
+
+    lat_min = int(np.floor(ymin))
+    lat_max = int(np.ceil(ymax))
+
+    lon_min = int(np.floor(xmin))
+    lon_max = int(np.ceil(xmax))
+
+    lats = np.arange(lat_min, lat_max)
+    lons = np.arange(lon_min, lon_max)
+
+    Lons, Lats = np.meshgrid(lons, lats)
+
+    pairs = list(zip(Lons.flatten(), Lats.flatten()))
+
+    tiles = []
+    for pair in pairs:
+        tiles.append(format_cop30(lat_prefix(pair[1]) + '{:02d}'.format(abs(pair[1])),
+                                  lon_prefix(pair[0]) + '{:03d}'.format(abs(pair[0]))))
+
+    # now, download the tiles using boto3
+    os.makedirs('cop30_dem', exist_ok=True)
+
+    for tile in tiles:
+        this_url = '/'.join(['https://copernicus-dem-30m.s3.amazonaws.com', tile, tile + '.tif'])
+        try:
+            urllib.request.urlretrieve(this_url, os.path.join('cop30_dem', tile + '.tif'))
+        except urllib.error.HTTPError:
+            print(f'No tile found for {tile}')
+
+    filelist = glob(os.path.join('cop30_dem', '*DEM.tif'))
+    out_vrt = gdal.BuildVRT('Copernicus_DSM.vrt', filelist, srcNodata=0)
+    out_vrt = None
+
+
+def lon_prefix(lon):
+    if lon < 0:
+        return 'W'
+    else:
+        return 'E'
+
+
+def lat_prefix(lat):
+    if lat < 0:
+        return 'S'
+    else:
+        return 'N'
+
+
+def format_cop30(lat, lon):
+    return f'Copernicus_DSM_COG_10_{lat}_00_{lon}_00_DEM'

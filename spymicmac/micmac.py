@@ -24,7 +24,7 @@ from skimage.transform import AffineTransform
 from pybob.GeoImg import GeoImg
 from pybob.ddem_tools import nmad
 from pybob.image_tools import create_mask_from_shapefile
-from spymicmac.usgs import get_usgs_footprints
+from spymicmac.data import get_usgs_footprints
 from spymicmac.register import get_utm_str
 
 
