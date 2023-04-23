@@ -17,8 +17,7 @@ from skimage.io import imread, imsave
 from pybob.GeoImg import GeoImg
 from pybob.ddem_tools import nmad
 from pybob.image_tools import create_mask_from_shapefile
-from spymicmac.data import get_usgs_footprints
-from spymicmac.register import get_utm_str
+from spymicmac import data, register
 
 
 ######################################################################################################################
@@ -42,7 +41,7 @@ def write_neighbour_images(imlist, fprints=None, nameField='ID', prefix='OIS-Ree
     NamedRel = E.SauvegardeNamedRel()
 
     if fprints is None:
-        fprints = get_usgs_footprints(imlist, dataset=dataset)
+        fprints = data.get_usgs_footprints(imlist, dataset=dataset)
     else:
         fprints = fprints[fprints[nameField].isin(imlist)]
 
@@ -959,7 +958,7 @@ def iterate_campari(gcps, out_dir, match_pattern, subscript, dx, ortho_res, fn_g
             break
 
         gcps = gcps.loc[valid_inds]
-        save_gcps(gcps, out_dir, get_utm_str(gcps.crs.to_epsg), subscript, fn_gcp=fn_gcp, fn_meas=fn_meas)
+        save_gcps(gcps, out_dir, register.get_utm_str(gcps.crs.to_epsg), subscript, fn_gcp=fn_gcp, fn_meas=fn_meas)
 
         gcps = run_bascule(gcps, out_dir, match_pattern, subscript, rel_ori, fn_gcp=fn_gcp,
                            fn_meas=fn_meas, outori=inori)

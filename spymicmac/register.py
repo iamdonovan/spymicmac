@@ -19,10 +19,7 @@ from skimage.transform import AffineTransform, warp
 from pybob.ddem_tools import nmad
 from pybob.image_tools import create_mask_from_shapefile
 from pybob.GeoImg import GeoImg
-import spymicmac.image as imtools
-import spymicmac.micmac as mmtools
-from spymicmac.orientation import transform_points, transform_centers
-from spymicmac.data import get_usgs_footprints
+from . import orientation, image, micmac, data
 
 
 def sliding_window_filter(img_shape, pts_df, winsize, stepsize=None, mindist=2000, how='residual', is_ascending=True):
@@ -95,7 +92,7 @@ def get_imlist(im_subset, dirname='.', strip_text=None):
     else:
         if len(im_subset) > 1:
             imlist = im_subset
-            match_pattern = mmtools.get_match_pattern(imlist)
+            match_pattern = micmac.get_match_pattern(imlist)
             # match_pattern = '|'.join(imlist)
         else:
             match_pattern = im_subset[0] + '.*tif'
@@ -152,7 +149,7 @@ def warp_image(model, ref, img):
     ref_pts = model.inverse(rel_pts)
 
     # get the new transformation - have to go from gdal geotransform to tfw geotransform first
-    this_model, inliers = transform_points(ref, ref_pts, _to_tfw(img.gt), rel_pts)
+    this_model, inliers = orientation.transform_points(ref, ref_pts, _to_tfw(img.gt), rel_pts)
 
     # transform the image
     tfm_img = warp(img.img, this_model, output_shape=ref.img.shape, preserve_range=True)
@@ -180,7 +177,7 @@ def get_mask(footprints, img, imlist, landmask=None, glacmask=None):
         - **fmask** (*GeoImg*) -- the georeferenced footprint mask
         - **img** (*GeoImg*) -- the GeoImg, cropped to a 10 pixel buffer around the image footprints
     """
-    fmask, fprint = imtools.get_footprint_mask(footprints, img, imlist, fprint_out=True)
+    fmask, fprint = image.get_footprint_mask(footprints, img, imlist, fprint_out=True)
     fmask_geo = img.copy(new_raster=fmask)
 
     xmin, ymin, xmax, ymax = fprint.buffer(img.dx * 10).bounds
@@ -189,7 +186,7 @@ def get_mask(footprints, img, imlist, landmask=None, glacmask=None):
 
     fmask = fmask_geo.crop_to_extent([xmin, xmax, ymin, ymax], pixel_size=img.dx).img == 1
 
-    mask = imtools.make_binary_mask(img.img, erode=3, mask_value=np.nan)
+    mask = image.make_binary_mask(img.img, erode=3, mask_value=np.nan)
     if landmask is not None:
         lmask = create_mask_from_shapefile(img, landmask)
         mask[~lmask] = 0
@@ -262,18 +259,18 @@ def register_ortho(fn_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, landmask=
     if footprints is None:
         clean_imlist = [im.split('OIS-Reech_')[-1].split('.tif')[0] for im in imlist]
         print('Attempting to get image footprints from USGS EarthExplorer.')
-        footprints = get_usgs_footprints(clean_imlist, dataset=imgsource)
+        footprints = data.get_usgs_footprints(clean_imlist, dataset=imgsource)
     else:
         footprints = gpd.read_file(footprints)
 
     mask_full, _, ref_img = get_mask(footprints, ref_img, imlist, landmask, glacmask)
 
-    Minit, _, centers = transform_centers(ortho_gt, ref_img, imlist, footprints, 'Ori-{}'.format(ori))
+    Minit, _, centers = orientation.transform_centers(ortho_gt, ref_img, imlist, footprints, 'Ori-{}'.format(ori))
     rough_tfm = warp(ortho, Minit, output_shape=ref_img.shape, preserve_range=True)
 
     rough_spacing = np.round(max(ref_img.shape) / 20 / 1000) * 1000
 
-    rough_gcps = imtools.find_grid_matches(rough_tfm, ref_img, mask_full, Minit,
+    rough_gcps = image.find_grid_matches(rough_tfm, ref_img, mask_full, Minit,
                                            spacing=int(rough_spacing), dstwin=int(rough_spacing))
 
     model, inliers = ransac((rough_gcps[['search_j', 'search_i']].values,
@@ -293,7 +290,7 @@ def register_ortho(fn_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, landmask=
     plt.close(fig)
 
     # for each of these pairs (src, dst), find the precise subpixel match (or not...)
-    gcps = imtools.find_grid_matches(rough_tfm, ref_img, mask_full, model,
+    gcps = image.find_grid_matches(rough_tfm, ref_img, mask_full, model,
                                      spacing=density, dstwin=_search_size(rough_tfm.shape))
 
     xy = np.array([ref_img.ij2xy((pt[1], pt[0])) for pt in gcps[['search_j', 'search_i']].values]).reshape(-1, 2)
@@ -347,14 +344,14 @@ def register_ortho(fn_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, landmask=
     gcps.to_file(os.path.join(out_dir, 'AutoGCPs{}.shp'.format(subscript)))
 
     print('writing AutoGCPs.txt')
-    mmtools.write_auto_gcps(gcps, subscript, out_dir, utm_str)
+    micmac.write_auto_gcps(gcps, subscript, out_dir, utm_str)
 
     print('converting AutoGCPs.txt to AutoGCPs.xml')
     subprocess.Popen(['mm3d', 'GCPConvert', 'AppInFile',
                       os.path.join(out_dir, 'AutoGCPs{}.txt'.format(subscript))]).wait()
 
     print('writing AutoMeasures.txt')
-    mmtools.write_auto_mesures(gcps, subscript, out_dir)
+    micmac.write_auto_mesures(gcps, subscript, out_dir)
 
     print('running get_autogcp_locations.sh to get rough image locations for each point')
     subprocess.Popen(['get_autogcp_locations.sh', 'Ori-{}'.format(ori),
@@ -362,27 +359,27 @@ def register_ortho(fn_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, landmask=
 
     # print('searching for points in orthorectified images')
     print('finding image measures')
-    mmtools.write_image_mesures(imlist, gcps, out_dir, subscript, ort_dir=ort_dir)
+    micmac.write_image_mesures(imlist, gcps, out_dir, subscript, ort_dir=ort_dir)
 
     print('running mm3d GCPBascule to estimate terrain errors')
-    gcps = mmtools.run_bascule(gcps, out_dir, match_pattern, subscript, ori)
+    gcps = micmac.run_bascule(gcps, out_dir, match_pattern, subscript, ori)
     gcps['res_dist'] = np.sqrt(gcps.xres ** 2 + gcps.yres ** 2)
 
     gcps = gcps.loc[np.abs(gcps.res_dist - gcps.res_dist.median()) < 2 * nmad(gcps.res_dist)]
     # gcps = gcps[np.logical_and(np.abs(gcps.xres - gcps.xres.median()) < 2 * nmad(gcps.xres),
     #                            np.abs(gcps.yres - gcps.yres.median()) < 2 * nmad(gcps.yres))]
 
-    mmtools.save_gcps(gcps, out_dir, utm_str, subscript)
-    gcps = mmtools.run_bascule(gcps, out_dir, match_pattern, subscript, ori)
+    micmac.save_gcps(gcps, out_dir, utm_str, subscript)
+    gcps = micmac.run_bascule(gcps, out_dir, match_pattern, subscript, ori)
     gcps['res_dist'] = np.sqrt(gcps.xres ** 2 + gcps.yres ** 2)
     gcps = gcps.loc[np.abs(gcps.res_dist - gcps.res_dist.median()) < 2 * nmad(gcps.res_dist)]
     # gcps = gcps[np.logical_and(np.abs(gcps.xres - gcps.xres.median()) < 2 * nmad(gcps.xres),
     #                            np.abs(gcps.yres - gcps.yres.median()) < 2 * nmad(gcps.yres))]
 
-    mmtools.save_gcps(gcps, out_dir, utm_str, subscript)
+    micmac.save_gcps(gcps, out_dir, utm_str, subscript)
 
-    gcps = mmtools.run_bascule(gcps, out_dir, match_pattern, subscript, ori)
-    gcps = mmtools.run_campari(gcps, out_dir, match_pattern, subscript, ref_img.dx, ortho_res, allfree=allfree)
+    gcps = micmac.run_bascule(gcps, out_dir, match_pattern, subscript, ori)
+    gcps = micmac.run_campari(gcps, out_dir, match_pattern, subscript, ref_img.dx, ortho_res, allfree=allfree)
     gcps['camp_dist'] = np.sqrt(gcps.camp_xres ** 2 + gcps.camp_yres ** 2)
 
     niter = 0
@@ -396,11 +393,11 @@ def register_ortho(fn_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, landmask=
             break
 
         gcps = gcps.loc[valid_inds]
-        mmtools.save_gcps(gcps, out_dir, utm_str, subscript)
-        gcps = mmtools.run_bascule(gcps, out_dir, match_pattern, subscript, ori)
+        micmac.save_gcps(gcps, out_dir, utm_str, subscript)
+        gcps = micmac.run_bascule(gcps, out_dir, match_pattern, subscript, ori)
         gcps['res_dist'] = np.sqrt(gcps.xres ** 2 + gcps.yres ** 2)
 
-        gcps = mmtools.run_campari(gcps, out_dir, match_pattern, subscript, ref_img.dx, ortho_res, allfree=allfree)
+        gcps = micmac.run_campari(gcps, out_dir, match_pattern, subscript, ref_img.dx, ortho_res, allfree=allfree)
         gcps['camp_dist'] = np.sqrt(gcps.camp_xres ** 2 + gcps.camp_yres ** 2)
         niter += 1
 
@@ -483,7 +480,7 @@ def register_individual(dir_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, lan
     if footprints is None:
         clean_imlist = [im.split('OIS-Reech_')[-1].split('.tif')[0] for im in imlist]
         print('Attempting to get image footprints from USGS EarthExplorer.')
-        footprints = get_usgs_footprints(clean_imlist, dataset=imgsource)
+        footprints = data.get_usgs_footprints(clean_imlist, dataset=imgsource)
     else:
         footprints = gpd.read_file(footprints)
 
@@ -493,7 +490,8 @@ def register_individual(dir_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, lan
     if not is_geo:
         with open(os.path.join(dir_ortho, 'Orthophotomosaic.tfw'), 'r') as f:
             ortho_gt = [float(l.strip()) for l in f.readlines()]
-        model, _, centers = transform_centers(ortho_gt, ref_img, imlist, footprints, 'Ori-{}'.format(ori), imgeom=False)
+        model, _, centers = orientation.transform_centers(ortho_gt, ref_img, imlist,
+                                                          footprints, 'Ori-{}'.format(ori), imgeom=False)
 
     # get a grid of points from the reference image, spaced by $density
     x, y = ref_img.xy()
@@ -519,7 +517,7 @@ def register_individual(dir_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, lan
     gcps.to_file(os.path.join(out_dir, 'AutoGCPs{}.shp'.format(subscript)))
 
     print('writing AutoGCPs.txt')
-    mmtools.write_auto_gcps(gcps, subscript, out_dir, utm_str)
+    micmac.write_auto_gcps(gcps, subscript, out_dir, utm_str)
 
     print('converting AutoGCPs.txt to AutoGCPs.xml')
     subprocess.Popen(['mm3d', 'GCPConvert', 'AppInFile',
@@ -570,8 +568,8 @@ def register_individual(dir_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, lan
             these_meas.loc[ii, 'search_i'] = pt[0]
 
             # TODO: choose src, dstwin size based on image size, "goodness" of transform
-            match_pt, this_z_corr, this_peak_corr = imtools.do_match(this_img.img, this_ref.img,
-                                                                     this_mask.img, pt, srcwin=20, dstwin=25)
+            match_pt, this_z_corr, this_peak_corr = image.do_match(this_img.img, this_ref.img,
+                                                                   this_mask.img, pt, srcwin=20, dstwin=25)
             these_meas.loc[ii, 'match_j'] = match_pt[0]
             these_meas.loc[ii, 'match_i'] = match_pt[1]
 
@@ -638,9 +636,9 @@ def register_individual(dir_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, lan
                pretty_print=True, xml_declaration=True, encoding="utf-8")
 
     for ii in range(2):
-        gcps = mmtools.run_bascule(gcps, out_dir, match_pattern, subscript, ori)
+        gcps = micmac.run_bascule(gcps, out_dir, match_pattern, subscript, ori)
 
         valid = np.abs(gcps.residual - gcps.residual.median()) < nmad(gcps.residual)
         gcps = gcps.loc[valid]
 
-        mmtools.save_gcps(gcps, out_dir, utm_str, subscript)
+        micmac.save_gcps(gcps, out_dir, utm_str, subscript)

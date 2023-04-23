@@ -7,8 +7,7 @@ from osgeo import gdal
 from skimage import io
 from scipy import ndimage
 import numpy as np
-from spymicmac import image
-from spymicmac.micmac import parse_im_meas
+from spymicmac import image, micmac
 
 
 def downsample(img, fact=4):
@@ -32,8 +31,8 @@ def resample_hex(fn_img, scale, ori='InterneScan'):
     :param int scale: the number of pixels per mm of the scanned image
     :param str ori: the Ori directory that contains both MeasuresCamera.xml and MeasuresIm (default: InterneScan)
     """
-    cam_meas = parse_im_meas(os.path.join('Ori-{}'.format(ori), 'MeasuresCamera.xml'))
-    img_meas = parse_im_meas(os.path.join('Ori-{}'.format(ori), 'MeasuresIm-{}.xml'.format(fn_img)))
+    cam_meas = micmac.parse_im_meas(os.path.join('Ori-{}'.format(ori), 'MeasuresCamera.xml'))
+    img_meas = micmac.parse_im_meas(os.path.join('Ori-{}'.format(ori), 'MeasuresIm-{}.xml'.format(fn_img)))
 
     all_meas = img_meas.set_index('name').join(cam_meas.set_index('name'), lsuffix='_img', rsuffix='_cam')
     all_meas['i_cam'] *= scale

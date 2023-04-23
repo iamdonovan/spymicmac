@@ -27,8 +27,7 @@ import geopandas as gpd
 from numba import jit
 from pybob.image_tools import match_hist, reshape_geoimg, create_mask_from_shapefile, nanmedian_filter
 from pybob.ddem_tools import nmad
-from spymicmac.micmac import get_im_meas, parse_im_meas
-from spymicmac.resample import downsample
+from spymicmac import micmac, resample
 
 
 ######################################################################################################################
@@ -832,7 +831,7 @@ def find_rail_marks(img):
     :returns: **coords** an Nx2 array of the location of the detected markers.
     """
     left, right, top, bot = get_rough_frame(img)
-    img_lowres = downsample(img, fact=10)
+    img_lowres = resample.downsample(img, fact=10)
 
     templ = np.zeros((21, 21), dtype=np.uint8)
     templ[5:-5, 5:-5] = 255 * disk(5)  # rail marks are approximately 100 x 100 pixels, so lowres is 10 x 10
@@ -1132,7 +1131,7 @@ def get_rough_frame(img):
         - **xmin**, **xmax**, **ymin**, **ymax** (*float*) -- the left, right, top, and bottom indices
             for the rough border.
     """
-    img_lowres = downsample(img, fact=10)
+    img_lowres = resample.downsample(img, fact=10)
 
     rowmean = img_lowres.mean(axis=0)
     smooth_row = _moving_average(rowmean, n=5)
@@ -1230,7 +1229,7 @@ def find_reseau_grid(fn_img, csize=361, return_val=False):
     """
     print('Reading {}'.format(fn_img))
     img = io.imread(fn_img)
-    img_lowres = downsample(img, fact=10)
+    img_lowres = resample.downsample(img, fact=10)
 
     print('Image read.')
     cross = cross_template(csize, width=3)
@@ -1303,7 +1302,7 @@ def find_reseau_grid(fn_img, csize=361, return_val=False):
     E = builder.ElementMaker()
     ImMes = E.MesureAppuiFlottant1Im(E.NameIm(fn_img))
 
-    pt_els = get_im_meas(grid_df, E)
+    pt_els = micmac.get_im_meas(grid_df, E)
     for p in pt_els:
         ImMes.append(p)
     os.makedirs('Ori-InterneScan', exist_ok=True)
@@ -1346,7 +1345,7 @@ def remove_crosses(fn_img, nproc=1):
     """
     fn_meas = os.path.join('Ori-InterneScan', 'MeasuresIm-{}.xml'.format(fn_img))
     img = io.imread(fn_img)
-    gcps = parse_im_meas(fn_meas)
+    gcps = micmac.parse_im_meas(fn_meas)
 
     pt = np.round([gcps.i[0], gcps.j[0]]).astype(int)
     subim, row_, col_ = make_template(img, pt, 200)

@@ -14,8 +14,7 @@ from shapely.geometry import LineString, MultiPoint
 from skimage.transform import AffineTransform
 from skimage.measure import ransac
 from pybob.ddem_tools import nmad
-from spymicmac.register import get_utm_str
-from spymicmac.micmac import rename_gcps, write_auto_gcps
+from . import register, micmac
 
 
 def combine_block_measures(blocks, fn_out='CombinedAutoMeasures', fn_mes='AutoMeasures_block',
@@ -39,7 +38,7 @@ def combine_block_measures(blocks, fn_out='CombinedAutoMeasures', fn_mes='AutoMe
         # load dirname/AutoMeasures_block{b}-S2D.xml
         this_root = ET.parse(os.path.join(dirname, fn_mes + '{}-S2D.xml'.format(b))).getroot()
 
-        this_mes_dict, this_gcp_dict = rename_gcps(this_root, ngcp=ngcp)
+        this_mes_dict, this_gcp_dict = micmac.rename_gcps(this_root, ngcp=ngcp)
         mes_dicts.append(this_mes_dict)
         gcp_dicts.append(this_gcp_dict)
 
@@ -58,7 +57,7 @@ def combine_block_measures(blocks, fn_out='CombinedAutoMeasures', fn_mes='AutoMe
     out_gcp.set_crs(gcp_shps[0].crs, inplace=True)
     out_gcp.to_file(fn_out + '.shp')
 
-    write_auto_gcps(out_gcp, '', dirname, get_utm_str(out_gcp.crs.to_epsg), outname=fn_out)
+    micmac.write_auto_gcps(out_gcp, '', dirname, register.get_utm_str(out_gcp.crs.to_epsg), outname=fn_out)
 
     echo = subprocess.Popen('echo', stdout=subprocess.PIPE)
     p = subprocess.Popen(['mm3d', 'GCPConvert', 'AppInFile',
