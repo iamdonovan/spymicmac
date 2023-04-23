@@ -16,8 +16,7 @@ def downsample(img, fact=4):
 
     :param array-like img: the image to rescale
     :param numeric fact: the number by which to divide the image width and height (default: 4)
-    :return:
-        - **rescaled** (*array-like*) -- the rescaled image
+    :return: **rescaled** (*array-like*) -- the rescaled image
     """
     _img = PIL.Image.fromarray(img)
     return np.array(_img.resize((np.array(_img.size) / fact).astype(int), PIL.Image.Resampling.LANCZOS))
@@ -65,8 +64,7 @@ def rotate_kh4(img):
     Use the rail marks in a KH-4 image to rotate the image.
 
     :param array-like img: the image to rotate.
-    :return:
-        - **rotated** (*array-like*) -- the rotated image
+    :return: **rotated** (*array-like*) -- the rotated image
     """
     rails = image.find_rail_marks(img)
     slope, intercept = np.polyfit(rails[:, 1], rails[:, 0], 1)
@@ -78,8 +76,9 @@ def rotate_kh4(img):
 
 def resample_kh4(img):
     """
+    **INCOMPLETE**
 
-    :param img:
+    :param array-like img: the image to resample
     :return:
     """
     rotated = rotate_kh4(img)
