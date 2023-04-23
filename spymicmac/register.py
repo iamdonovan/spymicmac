@@ -12,6 +12,8 @@ import geopandas as gpd
 import lxml.etree as etree
 import lxml.builder as builder
 from glob import glob
+from rtree import index
+from shapely.ops import unary_union
 from shapely.geometry.point import Point
 from skimage.io import imread
 from skimage.measure import ransac
@@ -162,6 +164,71 @@ def _to_tfw(gt):
     return [gt[1], gt[2], gt[4], gt[5], gt[0], gt[3]]
 
 
+def get_footprint_overlap(fprints):
+    """
+    Return the area where image footprints overlap.
+
+    :param GeoDataFrame fprints: a GeoDataFrame of image footprints
+    :return:
+        - **intersection** (*shapely.Polygon*) -- the overlapping area (unary union) of the images.
+    """
+    if fprints.shape[0] == 1:
+        return fprints.geometry.values[0]
+
+    idx = index.Index()
+
+    for pos, row in fprints.iterrows():
+        idx.insert(pos, row['geometry'].bounds)
+
+    intersections = []
+    for poly in fprints['geometry']:
+        merged = unary_union([fprints.loc[pos, 'geometry'] for pos in idx.intersection(poly.bounds)
+                              if fprints.loc[pos, 'geometry'] != poly])
+        intersections.append(poly.intersection(merged))
+
+    intersection = unary_union(intersections)
+
+    # return intersection.minimum_rotated_rectangle
+    return intersection
+
+
+def get_footprint_mask(shpfile, geoimg, filelist, fprint_out=False):
+    """
+    Return a footprint mask for an image.
+
+    :param str|GeoDataFrame shpfile: a filename or a GeoDataFrame representation of the footprints.
+    :param GeoImg geoimg: the image to create a mask for.
+    :param list filelist: a list of image names to use to create the footprint mask.
+    :param bool fprint_out: return the polygon representation of the footprint mask.
+    :return:
+        - **mask** (*array-like*) -- the footprint mask
+        - **fprint** (*shapely.Polygon*) -- the footprint polygon, if requested.
+    """
+    imlist = [im.split('OIS-Reech_')[-1].split('.tif')[0] for im in filelist]
+    if isinstance(shpfile, str):
+        footprints_shp = gpd.read_file(shpfile)
+        fp = footprints_shp[footprints_shp.ID.isin(imlist)].copy()
+    else:
+        fp = shpfile[shpfile.ID.isin(imlist)].copy()
+
+    fprint = get_footprint_overlap(fp.to_crs(geoimg.proj4))
+
+    tmp_gdf = gpd.GeoDataFrame(columns=['geometry'])
+    tmp_gdf.loc[0, 'geometry'] = fprint
+    tmp_gdf.crs = geoimg.proj4
+    tmp_gdf.to_file('tmp_fprint.shp')
+
+    maskout = create_mask_from_shapefile(geoimg, 'tmp_fprint.shp')
+
+    for f in glob('tmp_fprint.*'):
+        os.remove(f)
+    if fprint_out:
+        return maskout, fprint
+    else:
+        return maskout
+
+
+# copied from pymmaster.mmaster_tools
 def get_mask(footprints, img, imlist, landmask=None, glacmask=None):
     """
     Create a mask for an image from different sources.
