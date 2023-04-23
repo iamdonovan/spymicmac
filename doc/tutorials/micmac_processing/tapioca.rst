@@ -8,8 +8,8 @@ have very many images, you can use ``Tapioca`` to find the tie points by matchin
 
     mm3d Tapioca MulScale "OIS.*tif" 400 1200
 
-kh-9 hexagon
--------------
+kh-9 hexagon mapping camera
+-----------------------------
 
 When working with KH-9 images, the single ``Tapioca`` call will usually be sufficient, and you can move on to the
 next step: :doc:`tapas`.

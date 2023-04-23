@@ -1,5 +1,6 @@
 computing the relative orthophoto
 =================================
+
 Once you have the relative orientation, you can use `Malt <https://micmac.ensg.eu/index.php/Malt>`_ to compute
 a relative DEM and orthoimages:
 
@@ -24,17 +25,16 @@ DEM. To generate an orthomosaic, we use `Tawny <https://micmac.ensg.eu/index.php
 
 .. code-block:: sh
 
-    mm3d Tawny Ortho-MEC-Malt Out=Orthophotomosaic.tif RadiomEgal=0
+    mm3d Tawny Ortho-MEC-Relative Out=Orthophotomosaic.tif RadiomEgal=0
 
 Here, we use ``RadiomEgal=0`` to use the images as-is, rather than attempting to balance the radiometry (as this
 can lead to undesirable results). Finally, you might need to re-combine the image tiles using
-`mosaic_micmac_tiles.py <https://mmaster-workflows.readthedocs.io/en/v0.1/pymmaster/python/scripts/mosaic_micmac_tiles.html>`_,
-depending on how large they are:
+:py:meth:`spymicmac.micmac.mosaic_micmac_tiles` (or :doc:`../../spymicmac/scripts/mosaic_micmac_tiles`) depending on
+how large they are:
 
 .. code-block:: sh
 
-    cd Ortho-MEC-Malt
-    mosaic_micmac_tiles.py -filename Orthophotomosaic
+    mosaic_micmac_tiles Orthophotomosaic -imgdir Ortho-MEC-Relative
 
 Once this is complete, you can move on to the next step: registering the orthoimage and automatically finding control
 points using an external DEM and satellite image.

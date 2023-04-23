@@ -10,7 +10,7 @@ The other main difference is the use of :doc:`../../spymicmac/modules/register` 
 using an orthorectified image and external DEM.
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 1
 
    setup_files
    ../preprocessing/index
