@@ -4,7 +4,7 @@ from setuptools import find_packages, setup
 readme = Path(__file__).parent / 'README.md'
 
 setup(name='spymicmac',
-      version='0.1.2-dev',
+      version='0.2-dev',
       description='a python package for processing KH-9 and historical aerial imagery using MicMac',
       long_description=readme.read_text(),
       long_description_content_type='text/markdown',
