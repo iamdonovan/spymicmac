@@ -21,7 +21,7 @@ from skimage.transform import AffineTransform, warp
 from pybob.ddem_tools import nmad
 from pybob.image_tools import create_mask_from_shapefile
 from pybob.GeoImg import GeoImg
-from . import orientation, image, micmac, data
+from spymicmac import orientation, image, micmac, data
 
 
 def sliding_window_filter(img_shape, pts_df, winsize, stepsize=None, mindist=2000, how='residual', is_ascending=True):
@@ -244,7 +244,7 @@ def get_mask(footprints, img, imlist, landmask=None, glacmask=None):
         - **fmask** (*GeoImg*) -- the georeferenced footprint mask
         - **img** (*GeoImg*) -- the GeoImg, cropped to a 10 pixel buffer around the image footprints
     """
-    fmask, fprint = image.get_footprint_mask(footprints, img, imlist, fprint_out=True)
+    fmask, fprint = get_footprint_mask(footprints, img, imlist, fprint_out=True)
     fmask_geo = img.copy(new_raster=fmask)
 
     xmin, ymin, xmax, ymax = fprint.buffer(img.dx * 10).bounds
