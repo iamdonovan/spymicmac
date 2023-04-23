@@ -147,8 +147,7 @@ def load_all_orientation(ori, imlist=None):
 
     :param str ori: the orientation directory to read
     :param list imlist: the images to load. If not set, loads all orientation files from the given directory.
-    :return:
-        - **df** (*pandas.DataFrame*) -- a DataFrame containing the orientation parameters for each image
+    :return: **ori_df** (*pandas.DataFrame*) -- a DataFrame containing the orientation parameters for each image
     """
     df = pd.DataFrame()
     points = []
@@ -193,8 +192,7 @@ def extend_line(df, first, last):
     :param GeoDataFrame df: a GeoDataFrame containing the camera positions and image names
     :param str first: the name of the image to start interpolating from.
     :param str last: the name of the image to end interpolating at.
-    :return:
-        - **outpt** (*shapely.Point*) -- the new point along the flightline.
+    :return: **outpt** (*shapely.Point*) -- the new point along the flightline.
     """
     firstImg = df.loc[df.name.str.contains(first), 'geometry'].values[0]
     lastImg = df.loc[df.name.str.contains(last), 'geometry'].values[0]
@@ -215,8 +213,8 @@ def interp_line(df, first, last, nimgs=None, pos=None):
     :param str last: the name of the image to end interpolating at.
     :param int nimgs: the number of images to interpolate (default: calculated based on the image numbers)
     :param int pos: which image position to return (default: all images between first and last)
-    :return:
-        - **ptList** (*list*) -- a list containing the interpolated camera positions (or, a tuple of the requested position).
+    :return: **ptList** (*list*) -- a list containing the interpolated camera positions (or, a tuple of the requested
+      position).
     """
     if nimgs is None:
         nimgs = np.abs(int(last) - int(first)).astype(int)
@@ -407,7 +405,7 @@ def transform_points(ref, ref_pts, rel_gt, rel_pts):
     :param np.array ref_pts: an Mx2 array of the x,y points in the reference image
     :param array-like rel_gt: the "geo" transform for the second image, as read from a .tfw file.
     :param np.array rel_pts: an Mx2 array of the x,y points in the second image.
-    :returns:
+    :return:
         - **model** (*AffineTransform*) -- the estimated Affine Transformation between relative and absolute space
         - **inliers** (*array-like*) -- a list of the inliers returned by skimage.measure.ransac
     """
