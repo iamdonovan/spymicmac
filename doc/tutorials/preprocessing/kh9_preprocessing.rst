@@ -20,7 +20,7 @@ the example below.
     :width: 49%
 
 |br| In ``spymicmac``, the function to join the images is :py:meth:`spymicmac.image.join_hexagon`, with a corresponding
-commandline tool :doc:`../../spymicmac/scripts/join_hexagon`.
+command-line tool :doc:`../../spymicmac/scripts/join_hexagon`.
 
 Normally, the scans are labelled 'a' and 'b', with 'a' corresponding to the left-hand scan, and 'b' corresponding to
 the right-hand scan. This is what :py:meth:`spymicmac.image.join_hexagon` is expecting - that the overlap between the
@@ -41,9 +41,9 @@ overlapping part.
 
 reseau field
 -------------
-To help correct some of the distortion in the images caused by film storage, :py:meth:`spymicmac.image` includes
+To help correct some of the distortion in the images caused by film storage, :py:meth:`spymicmac.matching` includes
 a routine to automatically find the Reseau markers in the image and use their locations to resample the images using
-:py:meth:`spymicmac.image.resample_hex`.
+:py:meth:`spymicmac.resample.resample_hex`.
 
 In the images below, you can see the difference between the expected location of each Reseau marker and the
 automatically detected locations:
@@ -52,12 +52,12 @@ automatically detected locations:
     :width: 98%
     :alt: a KH-9 image with the Reseau field warping shown
 
-To run the routine, use either :py:meth:`spymicmac.image.find_reseau_grid` or
+To run the routine, use either :py:meth:`spymicmac.matching.find_reseau_grid` or
 :doc:`../../spymicmac/scripts/find_reseau_grid`. This will produce a ``MeasuresIm`` file that will be read by
-:py:meth:`spymicmac.image.resample_hex`.
+:py:meth:`spymicmac.resample.resample_hex`.
 
 .. note::
-    Before running :py:meth:`spymicmac.image.resample_hex`, you will also need to run
+    Before running :py:meth:`spymicmac.resample.resample_hex`, you will also need to run
     :doc:`../../spymicmac/scripts/generate_micmac_measures` in order to generate the ``MeasuresCamera.xml`` file needed,
     then move ``MeasuresCamera.xml`` to the ``Ori-InterneScan`` directory in the correct folder.
 
@@ -66,7 +66,7 @@ cross removal
 --------------
 
 Once you have found the Reseau marks in each image half, you can "remove" the Reseau marks using either
-:py:meth:`spymicmac.image.remove_crosses` or :doc:`../../spymicmac/scripts/remove_crosses`.
+:py:meth:`spymicmac.matching.remove_crosses` or :doc:`../../spymicmac/scripts/remove_crosses`.
 
 .. image:: ../../img/fixed_cross.png
     :width: 600
