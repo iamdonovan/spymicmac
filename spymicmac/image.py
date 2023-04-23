@@ -1428,8 +1428,8 @@ def remove_crosses(fn_img, nproc=1):
         pool.close()
         pool.join()
 
-    for subim, row, col, pt in zip(outputs, rows, cols, points):
-        img[pt[0] - row_[0]:pt[0] + row_[1] + 1, pt[1] - col_[0]:pt[1] + col_[1] + 1] = subim
+        for subim, row, col, pt in zip(outputs, rows, cols, points):
+            img[pt[0] - row_[0]:pt[0] + row_[1] + 1, pt[1] - col_[0]:pt[1] + col_[1] + 1] = subim
 
     os.makedirs('original', exist_ok=True)
     shutil.move(fn_img, 'original')
