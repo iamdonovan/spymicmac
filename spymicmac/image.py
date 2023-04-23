@@ -5,21 +5,18 @@ import os
 import shutil
 from glob import glob
 import multiprocessing as mp
-from functools import partial
 from itertools import chain
-import PIL.Image
 import cv2
-from osgeo import gdal
 import matplotlib.pyplot as plt
 import pandas as pd
 import lxml.etree as etree
 import lxml.builder as builder
 from rtree import index
 from skimage import exposure, transform, morphology, io, filters
-from skimage.morphology import binary_closing, binary_dilation, disk
+from skimage.morphology import binary_dilation, disk
 from skimage.measure import ransac
 from skimage.feature import peak_local_max
-from skimage.transform import warp, AffineTransform, EuclideanTransform, PiecewiseAffineTransform
+from skimage.transform import warp, AffineTransform, EuclideanTransform
 from scipy.interpolate import RectBivariateSpline as RBS
 from scipy import ndimage
 import numpy as np
@@ -27,11 +24,11 @@ from shapely.ops import nearest_points, unary_union
 from shapely.geometry import LineString, MultiPoint, Point
 from shapely.geometry.polygon import Polygon, orient
 import geopandas as gpd
-# from llc import jit_filter_function
 from numba import jit
 from pybob.image_tools import match_hist, reshape_geoimg, create_mask_from_shapefile, nanmedian_filter
 from pybob.ddem_tools import nmad
 from spymicmac.micmac import get_im_meas, parse_im_meas
+from spymicmac.resample import downsample
 
 
 ######################################################################################################################
@@ -835,7 +832,7 @@ def find_rail_marks(img):
     :returns: **coords** an Nx2 array of the location of the detected markers.
     """
     left, right, top, bot = get_rough_frame(img)
-    img_lowres = downsample_image(img, fact=10)
+    img_lowres = downsample(img, fact=10)
 
     templ = np.zeros((21, 21), dtype=np.uint8)
     templ[5:-5, 5:-5] = 255 * disk(5)  # rail marks are approximately 100 x 100 pixels, so lowres is 10 x 10
@@ -877,16 +874,6 @@ def _refine_rail(coords):
     return valid
 
 
-def rotate_kh4(img):
-
-    rails = find_rail_marks(img)
-    slope, intercept = np.polyfit(rails[:, 1], rails[:, 0], 1)
-    angle = np.rad2deg(np.arctan(slope))
-    print('Calculated angle of rotation: {:.4f}'.format(angle))
-
-    return ndimage.rotate(img, angle)
-
-
 def find_kh4_notches(img, size=101):
     left, right, top, bot = get_rough_frame(img)
 
@@ -912,20 +899,6 @@ def find_kh4_notches(img, size=101):
         matches.append((this_i - 400 + ii, this_j - 400 + jj))
 
     return np.array(matches)
-
-
-def resample_kh4(img):
-    """
-
-    :param img:
-    :return:
-    """
-    rotated = rotate_kh4(img)
-    left, right, top, bot = get_rough_frame(rotated)
-    rails = find_rail_marks(rotated)
-
-
-    # left_notch =
 
 
 def find_crosses(img, cross):
@@ -1150,19 +1123,6 @@ def find_reseau_border(img, rough_ext, cross, tsize=300):
     return left_edge, right_edge
 
 
-def downsample_image(img, fact=4):
-    """
-    Rescale an image using Lanczos resampling
-
-    :param array-like img: the image to rescale
-    :param numeric fact: the number by which to divide the image width and height (default: 4)
-    :return:
-        - **rescaled** (*array-like*) -- the rescaled image
-    """
-    _img = PIL.Image.fromarray(img)
-    return np.array(_img.resize((np.array(_img.size) / fact).astype(int), PIL.Image.Resampling.LANCZOS))
-
-
 def get_rough_frame(img):
     """
     Find the rough location of an image frame/border.
@@ -1172,7 +1132,7 @@ def get_rough_frame(img):
         - **xmin**, **xmax**, **ymin**, **ymax** (*float*) -- the left, right, top, and bottom indices
             for the rough border.
     """
-    img_lowres = downsample_image(img, fact=10)
+    img_lowres = downsample(img, fact=10)
 
     rowmean = img_lowres.mean(axis=0)
     smooth_row = _moving_average(rowmean, n=5)
@@ -1270,7 +1230,7 @@ def find_reseau_grid(fn_img, csize=361, return_val=False):
     """
     print('Reading {}'.format(fn_img))
     img = io.imread(fn_img)
-    img_lowres = downsample_image(img, fact=10)
+    img_lowres = downsample(img, fact=10)
 
     print('Image read.')
     cross = cross_template(csize, width=3)
@@ -1572,40 +1532,3 @@ def match_halves(left, right, overlap, block_size=None):
 
     print('{} tie points found'.format(np.count_nonzero(inliers)))
     return model, np.count_nonzero(inliers)
-
-
-def resample_hex(fn_img, scale, ori='InterneScan'):
-    """
-    Resample a KH-9 Mapping Camera image based on the reseau grid, using gdal.Warp
-
-    :param str fn_img: the filename of the image to resample
-    :param int scale: the number of pixels per mm of the scanned image
-    :param str ori: the Ori directory that contains both MeasuresCamera.xml and MeasuresIm (default: InterneScan)
-    """
-    cam_meas = parse_im_meas(os.path.join('Ori-{}'.format(ori), 'MeasuresCamera.xml'))
-    img_meas = parse_im_meas(os.path.join('Ori-{}'.format(ori), 'MeasuresIm-{}.xml'.format(fn_img)))
-
-    all_meas = img_meas.set_index('name').join(cam_meas.set_index('name'), lsuffix='_img', rsuffix='_cam')
-    all_meas['i_cam'] *= scale
-    all_meas['j_cam'] *= scale
-
-    gcp_list = [gdal.GCP(row.j_cam, row.i_cam, 1, row.j_img, row.i_img) for _, row in all_meas.iterrows()]
-
-    ds = gdal.Open(fn_img)
-    ds.SetGCPs(gcp_list, '')
-    ds.FlushCache()
-    ds = None
-
-    out_ds = gdal.Warp('tmp_{}'.format(fn_img), fn_img, xRes=1, yRes=1,
-                       outputBounds=[0, 0, all_meas.j_cam.max(), all_meas.i_cam.max()],
-                       resampleAlg=gdal.GRA_Lanczos)
-    meta_shp = '{"shape": ' + '[{}, {}]'.format(out_ds.RasterYSize, out_ds.RasterXSize) + '}'
-    out_ds.SetMetadata({'TIFFTAG_IMAGEDESCRIPTION': meta_shp})
-    out_ds.FlushCache()
-    out_ds = None
-
-    img = io.imread('tmp_{}'.format(fn_img))
-    io.imsave('OIS-Reech_{}'.format(fn_img), np.flipud(img).astype(np.uint8))
-
-    os.remove('tmp_{}'.format(fn_img))
-    os.remove('{}.aux.xml'.format(fn_img))
