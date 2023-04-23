@@ -1,5 +1,5 @@
 """
-spymicmac.image is a collection of tools for working with aerial images.
+spymicmac.image is a collection of tools for working with images.
 """
 import os
 import shutil

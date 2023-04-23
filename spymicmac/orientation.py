@@ -1,3 +1,6 @@
+"""
+spymicmac.orientation is a collection of tools for working with image orientation using micmac.
+"""
 import os
 import subprocess
 from collections import defaultdict
