@@ -123,8 +123,8 @@ def get_gcp_meas(im_name, meas_name, in_dir, E, nodist=None, gcp_name='GCP'):
     :param lxml.builder.ElementMaker E: an ElementMaker object for writing to the xml file.
     :param str nodist: the name of the directory
     :param str gcp_name: the prefix (e.g., GCP0, GCP1, etc.) for the GCP name (default: GCP).
-    :return:
-        - **this_im_meas** (*lxml.builder.ElementMaker*) -- an ElementMaker object with the GCP location in the image.
+    :return: **this_im_meas** (*lxml.builder.ElementMaker*) -- an ElementMaker object with the GCP location in
+      the image.
     """
     im = gdal.Open(os.path.sep.join([in_dir, im_name]))
     maxj = im.RasterXSize
@@ -155,8 +155,7 @@ def get_im_meas(gcps, E):
 
     :param pandas.DataFrame gcps: a DataFrame with the GCPs to find image locations for.
     :param lxml.builder.ElementMaker E: an ElementMaker object for writing to the xml file.
-    :return:
-        - **pt_els** (*list*) -- a list of ElementMaker objects corresponding to each GCP image location.
+    :return: **pt_els** (*list*) -- a list of ElementMaker objects corresponding to each GCP image location.
     """
     pt_els = []
     for ind, row in gcps.iterrows():
@@ -173,8 +172,7 @@ def parse_im_meas(fn_meas):
     Read an xml file with GCP image locations into a pandas DataFrame.
 
     :param fn_meas: the name of the measures file to read.
-    :return:
-        - **gcp_df** (*pandas.DataFrame*) -- a DataFrame with gcp names and image locations.
+    :return: **gcp_df** (*pandas.DataFrame*) -- a DataFrame with gcp names and image locations.
     """
     gcp_df = pd.DataFrame()
     root = ET.parse(fn_meas).getroot()
@@ -376,8 +374,7 @@ def get_match_pattern(imlist):
     Given a list of image names, return a match pattern that can be passed to MicMac command line functions.
 
     :param list imlist: a list of image names.
-    :return:
-        - **pattern** (*str*) -- a match pattern (e.g., "OIS.*tif") that can be passed to MicMac functions.
+    :return: **pattern** (*str*) -- a match pattern (e.g., "OIS.*tif") that can be passed to MicMac functions.
     """
     imlist.sort()
 
@@ -420,8 +417,7 @@ def get_valid_image_points(shape, pts, pts_nodist):
     :param shape: the shape of the image (rows, columns) to determine valid points for.
     :param pandas.DataFrame pts: a DataFrame containing point locations (i, j)
     :param pandas.DataFrame pts_nodist: a DataFrame containing point locations (i, j) calculated using no camera distortion.
-    :return:
-        - **valid_pts** (*array-like*) -- an array of the points that are located within the image shape.
+    :return: **valid_pts** (*array-like*) -- an array of the points that are located within the image shape.
     """
     maxi, maxj = shape
 
@@ -551,8 +547,7 @@ def get_bascule_residuals(fn_basc, gcp_df):
 
     :param str fn_basc: the GCPBascule xml file to read the residuals from.
     :param pandas.DataFrame gcp_df: a DataFrame with the GCPs to read the residuals for.
-    :return:
-        - **gcp_df** (*pandas.DataFrame*) -- the input GCPs with the Bascule residuals added.
+    :return: **gcp_df** (*pandas.DataFrame*) -- the input GCPs with the Bascule residuals added.
     """
     root = ET.parse(fn_basc).getroot()
     gcp_res = root.findall('Residus')
@@ -585,8 +580,7 @@ def get_campari_residuals(fn_resids, gcp_df):
 
     :param fn_resids: the Campari residual xml file to read.
     :param pandas.DataFrame gcp_df: a DataFrame with the GCPs to read the residuals for.
-    :return:
-        - **gcp_df** (*pandas.DataFrame*) -- the input GCPs with the Campari residuals added.
+    :return: **gcp_df** (*pandas.DataFrame*) -- the input GCPs with the Campari residuals added.
     """
     camp_root = ET.parse(fn_resids).getroot()
 
@@ -689,7 +683,6 @@ def tapas(cam_model, ori_out, img_pattern='OIS.*tif', in_cal=None, lib_foc=True,
     :param bool lib_foc: allow the focal length to be calibrated (default: True)
     :param bool lib_pp: allow the principal point to be calibrated (default: True)
     :param bool lib_cd: allow the center of distortion to be calibrated (default: True)
-    :return:
     """
     echo = subprocess.Popen('echo', stdout=subprocess.PIPE)
 
@@ -728,8 +721,6 @@ def malt(imlist, ori, zoomf=1, zoomi=None, dirmec='MEC-Malt', seed_img=None, see
     :param str seed_img: a DEM to pass to Malt as DEMInitImg. Note that if seed_img is set, seed_xml
         must also be set. (default: not used)
     :param str seed_xml: an XML file corresponding to the seed_img (default: not used)
-
-    :return:
     """
     echo = subprocess.Popen('echo', stdout=subprocess.PIPE)
 
@@ -763,7 +754,6 @@ def tawny(dirmec, radiomegal=False):
 
     :param str dirmec: the MEC directory to use
     :param bool radiomegal: run Tawny with RadiomEgal=1 (default: False)
-    :return:
     """
     echo = subprocess.Popen('echo', stdout=subprocess.PIPE)
 
@@ -780,7 +770,6 @@ def block_malt(imlist, nimg=3, ori='Relative', zoomf=8):
     :param int nimg: the number of images to use in a block (default: 3)
     :param str ori: the name of the orientation directory (e.g., Ori-Relative). (default: Relative)
     :param int zoomf: the final Zoom level to use (default: 8)
-    :return:
     """
     dirmec = 'MEC-' + ori
 
@@ -811,8 +800,7 @@ def run_bascule(in_gcps, outdir, img_pattern, sub, ori, outori='TerrainRelAuto',
         fn_gcp + sub + '.xml' (e.g., default: AutoGCPs -> AutoGCPs_block0.xml)
     :param str fn_meas: the filename pattern for the measures file. The file that will be loaded will be
         fn_meas + sub + '-S2D.xml' (e.g., default: AutoMeasures -> AutoMeasures_block0-S2D.xml)
-    :return:
-        - **out_gcps** (*pandas.DataFrame*) -- the input gcps with the updated Bascule residuals.
+    :return: **out_gcps** (*pandas.DataFrame*) -- the input gcps with the updated Bascule residuals.
     """
     fn_gcp = fn_gcp + sub + '.xml'
     fn_meas = fn_meas + sub + '-S2D.xml'
@@ -849,8 +837,7 @@ def run_campari(in_gcps, outdir, img_pattern, sub, dx, ortho_res, allfree=True,
     :param str inori: the input orientation to Campari (default: Ori-TerrainRelAuto -> TerrainRelAuto)
     :param str outori: the output orientation from Campari (default: Ori-TerrainFinal -> TerrainFinal)
     :param str homol: the Homologue directory to use (default: Homol)
-    :return:
-        - **out_gcps** (*pandas.DataFrame*) -- the input gcps with the updated Campari residuals.
+    :return: **out_gcps** (*pandas.DataFrame*) -- the input gcps with the updated Campari residuals.
     """
     echo = subprocess.Popen('echo', stdout=subprocess.PIPE)
 
@@ -879,7 +866,6 @@ def remove_worst_mesures(fn_meas, ori):
 
     :param str fn_meas: the filename for the measures file.
     :param str ori: the orientation directory output from Campari (e.g., Ori-TerrainFinal -> TerrainFinal)
-    :return:
     """
     camp_root = ET.parse('Ori-{}/Residus.xml'.format(ori)).getroot()
     auto_root = ET.parse(fn_meas).getroot()
@@ -934,8 +920,7 @@ def iterate_campari(gcps, out_dir, match_pattern, subscript, dx, ortho_res, fn_g
     :param str homol: the Homologue directory to use (default: Homol)
     :param bool allfree: run Campari with AllFree=1 (True), or AllFree=0 (False). (default: True)
     :param int max_iter: the maximum number of iterations to run. (default: 5)
-    :return:
-        - **gcps** (*pandas.DataFrame*) -- the gcps with updated residuals after the iterative process.
+    :return: **gcps** (*pandas.DataFrame*) -- the gcps with updated residuals after the iterative process.
     """
     niter = 0
 
@@ -1097,7 +1082,6 @@ def mosaic_micmac_tiles(filename, dirname='.'):
 
     :param str filename: MicMac filename to mosaic together
     :param str dirname: Directory containing images to Mosaic (default: .)
-    :return:
     """
     filelist = glob(os.path.sep.join([dirname, '{}_Tile*'.format(filename)]))
 
@@ -1120,7 +1104,7 @@ def arrange_tiles(flist, filename, dirname='.'):
     ncols = arr_inds[:, 0].max() + 1
     img_arr = np.array(np.zeros((nrows, ncols)), dtype='object')
     for i in range(nrows):
-         for j in range(ncols):
-             img_arr[i, j] = imread(os.path.sep.join([dirname, '{}_Tile_{}_{}.tif'.format(filename, j, i)]))
+        for j in range(ncols):
+            img_arr[i, j] = imread(os.path.sep.join([dirname, '{}_Tile_{}_{}.tif'.format(filename, j, i)]))
     return img_arr
 
