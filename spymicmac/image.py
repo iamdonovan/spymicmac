@@ -28,8 +28,7 @@ def highpass_filter(img):
     Subtract a low-pass from an image, to return a highpass filter.
 
     :param array-like img: the image to filter.
-    :return:
-        - **highpass** (*array-like*) -- the highpass-filtered image
+    :return: **highpass** (*array-like*) -- the highpass-filtered image
     """
     v = img.copy()
     v[np.isnan(img)] = 0
@@ -51,7 +50,8 @@ def splitter(img, nblocks, overlap=0):
     :param array-like img: the image to split
     :param tuple nblocks: the number of blocks to create along each axis (m, n)
     :param int overlap: the number of pixels to overlap each block. (default: 0)
-    :returns:
+
+    :return:
         - **blocks** (*list*) -- a list of the image blocks created
         - **top_inds** (*list*) -- a list of the original row index of the top edge of each block
         - **left_inds** (*list*) -- a list of the original column index of the left edge of each block
@@ -106,8 +106,7 @@ def stretch_image(img, scale=(0.0, 1.0), mult=255, imgmin=0, outtype=np.uint8, m
     :param int|float imgmin: the minimum value in the output image (default: 0)
     :param numpy.dtype outtype: the numpy datatype to return the stretched image as. (default: np.uint8)
     :param array-like mask: a mask of pixels to ignore when calculating quantiles.
-    :return:
-        - **stretched** (*array-like*) -- the stretched image.
+    :return: **stretched** (*array-like*) -- the stretched image.
     """
     if mask is None:
         maxval = np.nanquantile(img, max(scale))
@@ -131,7 +130,7 @@ def remove_scanner_stripes(img, dtype=np.uint8, scan_axis=1):
     :param int scan_axis: the axis corresponding to the direction of the stripes. A scan_axis of 1 corresponds to
         horizontal stripes (the default), while a scan_axis of 0 corresponds to vertical stripes.
 
-    :returns: **destriped**: the original image with the stripes (mostly) removed.
+    :return: **destriped**: the original image with the stripes (mostly) removed.
     """
     assert scan_axis in [0, 1], "scan_axis corresponds to image axis of scan direction [0, 1]"
     if scan_axis == 0:
@@ -156,8 +155,7 @@ def contrast_enhance(fn_img, mask_value=None, qmin=0.02, qmax=0.98, gamma=1.25, 
     :param float gamma: the value to use for the gamma adjustment
     :param int disksize: the filter disk size (input to skimage.morphology.disk; default: 3)
     :param int|float imgmin: the minimum value in the output image (default: 0)
-    :return:
-        - **enhanced** (*array-like*) -- the contrast-enhanced image.
+    :return: **enhanced** (*array-like*) -- the contrast-enhanced image.
     """
     img = io.imread(fn_img)
     if mask_value is not None:
@@ -184,8 +182,7 @@ def make_binary_mask(img, mult_value=255, erode=0, mask_value=0):
     :param int|float mult_value: the value indicating a non-masked value (default: 255).
     :param int erode: the size of the erosion operation to apply (default: 0).
     :param int mask_value: the value to mask in the image (default: 0).
-    :return:
-        - **mask** (*array-like*) the binary mask.
+    :return: **mask** (*array-like*) the binary mask.
     """
     _mask = mult_value * np.ones(img.shape, dtype=np.uint8)
     if np.isfinite(mask_value):
@@ -205,17 +202,13 @@ def balance_image(img):
     Apply contrast-limited adaptive histogram equalization (CLAHE) on an image, then apply a de-noising filter.
 
     :param array-like img: the image to balance.
-    :return:
-        - **img_filt** (*array-like*) -- the balanced, filtered image.
+    :return: **img_filt** (*array-like*) -- the balanced, filtered image.
     """
     img_eq = (255 * exposure.equalize_adapthist(img)).astype(np.uint8)
     img_filt = filters.median(img_eq, footprint=disk(1))
     return img_filt
 
 
-######################################################################################################################
-# GCP matching tools
-######################################################################################################################
 # thanks to SO user Jamie for this answer
 # https://stackoverflow.com/a/14314054
 def _moving_average(a, n=5):
@@ -229,9 +222,7 @@ def get_rough_frame(img):
     Find the rough location of an image frame/border.
 
     :param array-like img: the image to find a border for
-    :return:
-        - **xmin**, **xmax**, **ymin**, **ymax** (*float*) -- the left, right, top, and bottom indices
-            for the rough border.
+    :return: **xmin**, **xmax**, **ymin**, **ymax** (*float*) -- the left, right, top, and bottom indices for the rough border.
     """
     img_lowres = resample.downsample(img, fact=10)
 
@@ -297,8 +288,7 @@ def get_parts_list(im_pattern):
     Find all of the parts of a scanned image that match a given filename pattern
 
     :param str im_pattern: the image pattern to match
-    :returns:
-        - **parts_list** (*list*) -- a list of all parts of the image that match the pattern.
+    :return: **parts_list** (*list*) -- a list of all parts of the image that match the pattern.
     """
     imlist = glob(im_pattern + '*.tif')
     imlist.sort()
@@ -355,7 +345,6 @@ def join_halves(left, right, overlap, block_size=None, blend=True, trim=None):
     :param int block_size: the number of rows each sub-block should cover. Defaults to overlap.
     :param bool blend: apply a linear blend between the two scanned halves (default: True).
     :param int trim: the amount to trim the right side of the image by. (default: None).
-    :return:
     """
     M, num_inliers = matching.match_halves(left, right, overlap=overlap, block_size=block_size)
 
