@@ -2,7 +2,7 @@
 import argparse
 import multiprocessing as mp
 import numpy as np
-from spymicmac.image import find_reseau_grid
+from spymicmac.matching import find_reseau_grid
 
 
 def batch_wrapper(argsin):

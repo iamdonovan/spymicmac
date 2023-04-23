@@ -3,7 +3,9 @@ import argparse
 import shutil
 import tarfile
 from glob import glob
-from spymicmac.image import join_hexagon, find_reseau_grid, resample_hex, remove_crosses
+from spymicmac.image import join_hexagon
+from spymicmac.matching import find_reseau_grid, remove_crosses
+from spymicmac.resample import resample_hex
 from spymicmac import micmac
 
 

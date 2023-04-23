@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 import argparse
-import spymicmac.micmac as mt
+from spymicmac import micmac
 
 
 def _argparser():
@@ -16,9 +16,9 @@ def _argparser():
 def main():
     parser = _argparser()
     args = parser.parse_args()
-    mt.init_autocal()
-    mt.create_localchantier_xml()
-    mt.generate_measures_files(joined=args.joined)
+    micmac.init_autocal()
+    micmac.create_localchantier_xml()
+    micmac.generate_measures_files(joined=args.joined)
 
 
 if __name__ == "__main__":

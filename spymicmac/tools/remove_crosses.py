@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 import argparse
-from spymicmac.image import remove_crosses
+from spymicmac.matching import remove_crosses
 
 
 def _argparser():

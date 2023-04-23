@@ -2,7 +2,6 @@ import os
 import argparse
 from glob import glob
 from skimage.io import imread, imsave
-from pybob.bob_tools import mkdir_p
 from spymicmac.image import balance_image
 
 
@@ -16,7 +15,7 @@ def main():
     parser = _argparser()
     args = parser.parse_args()
 
-    mkdir_p('balanced')
+    os.makedirs('balanced', exist_ok=True)
 
     imlist = glob('OIS*.tif')
     imlist.sort()

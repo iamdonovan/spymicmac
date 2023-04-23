@@ -1,6 +1,6 @@
 import argparse
 import geopandas as gpd
-from spymicmac.register import download_cop30_vrt
+from spymicmac.data import download_cop30_vrt
 
 
 def _argparser():
