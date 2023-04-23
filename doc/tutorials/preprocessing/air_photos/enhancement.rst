@@ -16,15 +16,15 @@ Occasionally, scanned images will have artefacts, such as the prominent striping
 
 |br|
 
-The `pybob <https://pybob.readthedocs.io/en/latest/>`_ function ``pybob.image_tools.crippen_filter()``, based
+The :py:meth:`spymicmac.image` function :py:meth:`spymicmac.image.remove_scanner_stripes`, based
 on a technique described in [Crippen1989]_
 (`pdf <https://www.asprs.org/wp-content/uploads/pers/1989journal/mar/1989_mar_327-331.pdf>`_), can be used to remove
 these stripes - note the use of ``scan_axis=1`` to indicate a scan from left to right, rather than top to bottom:
 
 .. code-block:: python
 
-    from pybob.image_tools import crippen_filter
-    filtered = crippen_filter(img, scan_axis=1)
+    from spymicmac.image import remove_scanner_stripes
+    filtered = remove_scanner_stripes(img, scan_axis=1)
 
 The result shows a significant reduction in the striping:
 
@@ -79,7 +79,7 @@ de-noising
 
 In many cases, there may also be some noise in the images - this can be seen above, for example. One way to reduce
 this noise is to use a `median filter <https://scikit-image.org/docs/dev/api/skimage.filters.html#skimage.filters.median>`_,
-similar to what is done in :py:meth:`sPyMicMac.image.contrast_enhance`:
+similar to what is done in :py:meth:`spymicmac.image.contrast_enhance`:
 
 .. code-block:: python
 
