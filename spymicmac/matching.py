@@ -29,10 +29,11 @@ from spymicmac import image, micmac, resample
 ######################################################################################################################
 def cross_template(shape, width=3):
     """
+    Create a cross-shaped template for matching reseau or fiducial marks.
 
-    :param shape:
-    :param width:
-    :return:
+    :param int shape: the output shape of the template
+    :param int width: the width of the cross at the center of the template (default: 3 pixels).
+    :return: **cross** (*array-like*) -- the cross template
     """
     if isinstance(shape, int):
         rows = shape
@@ -52,41 +53,13 @@ def cross_template(shape, width=3):
     return cross
 
 
-def find_cross(img, pt, cross, tsize=300):
-    """
-    Find the center of a Reseau mark (cross, or '+' shape).
-
-    :param array-like img: the image to use.
-    :param tuple pt: the initial search location.
-    :param array-like cross: the Reseau mark template to use.
-    :param int tsize: the search grid half-size (default: 300 -> 601x601)
-    :return:
-        - **center_i** (*float*) -- the row coordinate of the cross center.
-        - **center_j** (*float*) -- the column coordinate of the cross center.
-    """
-    subimg, _, _ = make_template(img, pt, tsize)
-    res, this_i, this_j = find_match(subimg, cross)
-    inv_res = res.max() - res
-
-    pks = peak_local_max(inv_res, min_distance=5, num_peaks=2)
-    this_z_corrs = []
-    for pk in pks:
-        max_ = inv_res[pk[0], pk[1]]
-        this_z_corrs.append((max_ - inv_res.mean()) / inv_res.std())
-    if max(this_z_corrs) > 4 and max(this_z_corrs)/min(this_z_corrs) > 1.15:
-        return this_i-tsize+pt[0], this_j-tsize+pt[1]
-    else:
-        return np.nan, np.nan
-
-
 def find_crosses(img, cross):
     """
     Find all cross markers in an image.
 
     :param array-like img: the image
     :param array-like cross: the cross template to use
-    :returns:
-        - **grid_df** (*pandas.DataFrame*) -- a dataframe of marker locations and offsets
+    :return: **grid_df** (*pandas.DataFrame*) -- a dataframe of marker locations and offsets
     """
 
     sub_coords = []
@@ -131,8 +104,7 @@ def match_reseau_grid(img, coords, cross):
     :param array-like img: the image to use
     :param array-like coords: the coordinates of the potential matches
     :param array-like cross: the cross template to use.
-    :returns:
-        - **grid_df** (*pandas.DataFrame*) -- a DataFrame of grid locations and match points
+    :return: **grid_df** (*pandas.DataFrame*) -- a DataFrame of grid locations and match points
     """
     matchpoints = MultiPoint(coords[:, ::-1])
     # top, bot, left, right = find_grid_border(coords)
@@ -324,8 +296,7 @@ def find_reseau_grid(fn_img, csize=361, return_val=False):
     :param str fn_img: the image filename.
     :param int csize: the size of the cross template (default: 361 -> 361x361)
     :param bool return_val: return a pandas DataFrame of the Reseau mark locations (default: False).
-    :return:
-        - **gcps_df** (*pandas.DataFrame*) -- a DataFrame of the Reseau mark locations (if return_val=True).
+    :return: **gcps_df** (*pandas.DataFrame*) -- a DataFrame of the Reseau mark locations (if return_val=True).
     """
     print('Reading {}'.format(fn_img))
     img = io.imread(fn_img)
@@ -424,7 +395,7 @@ def wagon_wheel(size, width=3, mult=255):
     :param int width: the width/thickness of the cross, in pixels
     :param mult: a multiplier to use for the template [default: 255]
 
-    :returns: **template** (*array-like*) the wagon wheel template
+    :return: **template** (*array-like*) the wagon wheel template
     """
     cross = cross_template(size, width)
     cross[cross > 1] = 0
@@ -450,7 +421,7 @@ def ocm_show_wagon_wheels(img, size, width=3, img_border=None):
     :param int width: the width/thickness of the cross, in pixels (default: 3)
     :param img_border: the approximate top and bottom rows of the image frame. If not set,
         calls get_rough_frame() on the image.
-    :returns: **coords** an Nx2 array of the location of the detected markers.
+    :return: **coords** an Nx2 array of the location of the detected markers.
     """
     if img_border is None:
         _, _, top, bot = image.get_rough_frame(img)
@@ -486,7 +457,7 @@ def find_rail_marks(img):
     Find all rail marks along the bottom edge of a KH-4 style image.
 
     :param array-like img: the image to find the rail marks in.
-    :returns: **coords** an Nx2 array of the location of the detected markers.
+    :return: **coords** (*array-like*) -- an Nx2 array of the location of the detected markers.
     """
     left, right, top, bot = image.get_rough_frame(img)
     img_lowres = resample.downsample(img, fact=10)
@@ -532,9 +503,10 @@ def _refine_rail(coords):
 
 def notch_template(size):
     """
+    Create a notch-shaped ("^") template.
 
-    :param size:
-    :return:
+    :param int size: the size of the template, in pixels
+    :return: **template** (*array-like*) -- the notch template
     """
     template = np.zeros((size, size), dtype=np.uint8)
     template[-1, :] = 1
@@ -545,10 +517,11 @@ def notch_template(size):
 
 def find_kh4_notches(img, size=101):
     """
+    Find all 4 notches along the top of a KH-4 style image.
 
-    :param img:
-    :param size:
-    :return:
+    :param array-like img: the image.
+    :param int size: the size of the notch template to use.
+    :return: **coords** (*array-like*) -- a 4x2 array of notch locations
     """
     left, right, top, bot = image.get_rough_frame(img)
 
@@ -581,11 +554,15 @@ def find_kh4_notches(img, size=101):
 ######################################################################################################################
 def make_template(img, pt, half_size):
     """
+    Return a sub-section of an image to use for matching.
 
-    :param img:
-    :param pt:
-    :param half_size:
+    :param array-like img: the image from which to create the template
+    :param tuple pt: the (row, column) center of the template
+    :param int half_size: the half-size of the template; template size will be 2 * half_size + 1
     :return:
+        - **template** (*array-like*) -- the template
+        - **row_inds** (*list*) -- the number of rows above/below the center of the template
+        - **col_inds** (*list*) -- the number of columns left/right of the center of the template
     """
     nrows, ncols = img.shape
     row, col = np.round(pt).astype(int)
@@ -601,12 +578,16 @@ def make_template(img, pt, half_size):
 
 def find_match(img, template, how='min', eq=True):
     """
+    Given an image and a template, find a match using openCV's normed cross-correlation.
 
-    :param img:
-    :param template:
-    :param how:
-    :param eq:
+    :param array-like img: the image to find a match in
+    :param array-like template: the template to use for matching
+    :param str how: determines whether the match is the minimum or maximum correlation (default: min)
+    :param bool eq: use a rank equalization filter before matching the templates (default: True)
     :return:
+        - **res** (*array-like*) -- the correlation image
+        - **match_i** (*float*) -- the row location of the match
+        - **match_j** (*float*) -- the column location of the match
     """
     assert how in ['min', 'max'], "have to choose min or max"
 
@@ -690,8 +671,7 @@ def find_grid_matches(tfm_img, refgeo, mask, initM=None, spacing=200, srcwin=60,
     :param int spacing: the grid spacing, in pixels (default: 200 pixels)
     :param int srcwin: the half-size of the template window.
     :param int dstwin: the half-size of the search window.
-    :return:
-        - **gcps** (*pandas.DataFrame*) -- a DataFrame with GCP locations, match strength, and other information.
+    :return: **gcps** (*pandas.DataFrame*) -- a DataFrame with GCP locations, match strength, and other information.
     """
     match_pts = []
     z_corrs = []
@@ -746,7 +726,7 @@ def do_match(dest_img, ref_img, mask, pt, srcwin, dstwin):
     :param array-like pt: the index (i, j) to search for a match for.
     :param int srcwin: the half-size of the template window.
     :param int dstwin: the half-size of the search window.
-    :returns:
+    :return:
         - **match_pt** (*tuple*) -- the matching point (j, i) found in dest_img
         - **z_corr** (*float*) -- number of standard deviations (z-score) above other potential matches
         - **peak_corr** (*float*) -- the correlation value of the matched point
@@ -794,7 +774,19 @@ def do_match(dest_img, ref_img, mask, pt, srcwin, dstwin):
 
 
 def get_matches(img1, img2, mask1=None, mask2=None, dense=False):
+    """
+    Return keypoint matches found using openCV's ORB implementation.
 
+    :param array-like img1: the first image to match
+    :param array-like img2: the second image to match
+    :param array-like mask1: a mask to use for the first image. (default: no mask)
+    :param array-like mask2: a mask to use for the second image. (default: no mask)
+    :param bool dense: compute matches over sub-blocks (True) or the entire image (False). (default: False)
+    :return:
+        - **keypoints** (*tuple*) -- the keypoint locations for the first and second image.
+        - **descriptors** (*tuple*) -- the descriptors for the first and second image.
+        - **matches** (*list*) -- a list of matching keypoints between the first and second image
+    """
     if dense:
         if np.any(np.array(img1.shape) < 100) or np.any(np.array(img2.shape) < 100):
             kp1, des1 = get_dense_keypoints(img1.astype(np.uint8), mask1, nblocks=1, return_des=True)
@@ -888,8 +880,7 @@ def match_halves(left, right, overlap, block_size=None):
     :param array-like right: the right-hand image scan.
     :param int overlap: the estimated overlap between the two images, in pixels.
     :param int block_size: the number of rows each sub-block should cover. Defaults to overlap.
-    :return:
-        - **model** (*EuclideanTransform*) -- the estimated Euclidean transformation between the two image halves.
+    :return: **model** (*EuclideanTransform*) -- the estimated Euclidean transformation between the two image halves.
     """
     src_pts = []
     dst_pts = []
