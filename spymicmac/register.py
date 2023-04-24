@@ -350,7 +350,7 @@ def register_ortho(fn_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, landmask=
     ax[0].imshow(rough_tfm[::10, ::10], extent=[0, rough_tfm.shape[1], rough_tfm.shape[0], 0], cmap='gray')
     ax[1].imshow(ref_img.img[::10, ::10], extent=[0, ref_img.shape[1], ref_img.shape[0], 0], cmap='gray')
 
-    plt.savefig('initial_transformation{}.png'.format(subscript), dpi=200, bbox_inches='tight')
+    fig.savefig('initial_transformation{}.png'.format(subscript), dpi=200, bbox_inches='tight')
     plt.close(fig)
 
     # for each of these pairs (src, dst), find the precise subpixel match (or not...)
@@ -393,8 +393,9 @@ def register_ortho(fn_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, landmask=
     gcps['aff_resid'] = Mref.residuals(gcps[['search_j', 'search_i']].values,
                                        gcps[['match_j', 'match_i']].values)
 
-    valid = np.abs(gcps.aff_resid - gcps.aff_resid.median()) < nmad(gcps.aff_resid)
-    gcps = gcps.loc[valid]
+    # valid = np.abs(gcps.aff_resid - gcps.aff_resid.median()) < nmad(gcps.aff_resid)
+    # gcps = gcps.loc[valid]
+    gcps = gcps.loc[inliers_ref]
 
     # out = sliding_window_filter([ortho.shape[1], ortho.shape[0]], gcps,
     #                             min(1000, ortho.shape[1] / 4, ortho.shape[0] / 4),
@@ -442,28 +443,8 @@ def register_ortho(fn_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, landmask=
 
     micmac.save_gcps(gcps, out_dir, utm_str, subscript)
 
-    gcps = micmac.bascule(gcps, out_dir, match_pattern, subscript, ori)
-    gcps = micmac.campari(gcps, out_dir, match_pattern, subscript, ref_img.dx, ortho_res, allfree=allfree)
-    gcps['camp_dist'] = np.sqrt(gcps.camp_xres ** 2 + gcps.camp_yres ** 2)
-
-    niter = 0
-    while any([np.any(np.abs(gcps.camp_res - gcps.camp_res.median()) > 2 * nmad(gcps.camp_res)),
-               np.any(np.abs(gcps.camp_dist - gcps.camp_dist.median()) > 2 * nmad(gcps.camp_dist)),
-               gcps.camp_res.max() > 2]) and niter <= 5:
-        valid_inds = np.logical_and.reduce((np.abs(gcps.camp_res - gcps.camp_res.median()) < 2 * nmad(gcps.camp_res),
-                                            gcps.camp_res < gcps.camp_res.max(),
-                                            gcps.z_corr > gcps.z_corr.min()))
-        if np.count_nonzero(valid_inds) < 10:
-            break
-
-        gcps = gcps.loc[valid_inds]
-        micmac.save_gcps(gcps, out_dir, utm_str, subscript)
-        gcps = micmac.bascule(gcps, out_dir, match_pattern, subscript, ori)
-        gcps['res_dist'] = np.sqrt(gcps.xres ** 2 + gcps.yres ** 2)
-
-        gcps = micmac.campari(gcps, out_dir, match_pattern, subscript, ref_img.dx, ortho_res, allfree=allfree)
-        gcps['camp_dist'] = np.sqrt(gcps.camp_xres ** 2 + gcps.camp_yres ** 2)
-        niter += 1
+    # now, iterate campari to refine the orientation
+    gcps = micmac.iterate_campari(gcps, out_dir, match_pattern, subscript, ref_img.dx, ortho_res, allfree=allfree)
 
     # final write of gcps to disk.
     gcps.to_file(os.path.join(out_dir, 'AutoGCPs{}.shp'.format(subscript)))
