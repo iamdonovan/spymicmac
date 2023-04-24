@@ -20,13 +20,14 @@ from pybob.ddem_tools import nmad
 from . import register, micmac
 
 
-def combine_block_measures(blocks, fn_out='CombinedAutoMeasures', fn_mes='AutoMeasures_block',
-                           fn_gcp='AutoGCPs_block', dirname='auto_gcps'):
+def combine_block_measures(blocks, meas_out='AutoMeasures', gcp_out='AutoGCPs',
+                           fn_mes='AutoMeasures_block', fn_gcp='AutoGCPs_block', dirname='auto_gcps'):
     """
     Combine GCPs and Measures files from multiple sub-blocks into a single file.
 
     :param list blocks: a list of the sub-block numbers to combine
-    :param str fn_out: the output filename (no extensions). (default: CombinedAutoMeasures)
+    :param str meas_out: the output filename for the Measures file (no extension). (default: AutoMeasures)
+    :param str gcp_out: the output filename for the GCP file (no extension). (default: AutoGCPs)
     :param str fn_mes: the name pattern of the measures files to combine (default: AutoMeasures_block)
     :param str fn_gcp: the name pattern of the GCP files to combine (default: AutoGCPs_block)
     :param str dirname: the output directory where the files are saved (default: auto_gcps)
@@ -58,13 +59,13 @@ def combine_block_measures(blocks, fn_out='CombinedAutoMeasures', fn_mes='AutoMe
     out_gcp.sort_values('id', ignore_index=True, inplace=True)
 
     out_gcp.set_crs(gcp_shps[0].crs, inplace=True)
-    out_gcp.to_file(fn_out + '.shp')
+    out_gcp.to_file(os.path.join(dirname, gcp_out + '.shp'))
 
-    micmac.write_auto_gcps(out_gcp, '', dirname, register.get_utm_str(out_gcp.crs.to_epsg), outname=fn_out)
+    micmac.write_auto_gcps(out_gcp, '', dirname, register.get_utm_str(out_gcp.crs.to_epsg), outname=gcp_out)
 
     echo = subprocess.Popen('echo', stdout=subprocess.PIPE)
     p = subprocess.Popen(['mm3d', 'GCPConvert', 'AppInFile',
-                          os.path.join(dirname, fn_out + '.txt')], stdin=echo.stdout)
+                          os.path.join(dirname, gcp_out + '.txt')], stdin=echo.stdout)
     p.wait()
 
     # now have to combine mes_dicts based on key names
@@ -88,7 +89,39 @@ def combine_block_measures(blocks, fn_out='CombinedAutoMeasures', fn_mes='AutoMe
         MesureSet.append(this_im_mes)
 
     tree = etree.ElementTree(MesureSet)
-    tree.write(os.path.join(dirname, fn_out + '-S2D.xml'), pretty_print=True, xml_declaration=True, encoding="utf-8")
+    tree.write(os.path.join(dirname, meas_out + '-S2D.xml'), pretty_print=True, xml_declaration=True, encoding="utf-8")
+
+
+def block_orientation(blocks, meas_out='AutoMeasures', gcp_out='AutoGCPs',
+                      fn_mes='AutoMeasures_block', fn_gcp='AutoGCPs_block', dirname='auto_gcps',
+                      rel_ori='Relative', outori='TerrainFinal', homol='Homol',
+                      ref_dx=15, ortho_res=8, allfree=True, max_iter=1):
+    """
+    Combine GCPs, Measures files, and Ori directories from multiple sub-blocks into a single file and orientation.
+
+    :param list blocks: a list of the sub-block numbers to combine
+    :param str meas_out: the output filename for the Measures file (no extension). (default: AutoMeasures)
+    :param str gcp_out: the output filename for the GCP file (no extension). (default: AutoGCPs)
+    :param str fn_mes: the name pattern of the measures files to combine (default: AutoMeasures_block)
+    :param str fn_gcp: the name pattern of the GCP files to combine (default: AutoGCPs_block)
+    :param str dirname: the output directory where the files are saved (default: auto_gcps)
+    :param str rel_ori: the name of the relative orientation to input to GCPBascule (default: Relative -> Ori-Relative)
+    :param str outori: the output orientation from Campari (default: TerrainFinal -> Ori-TerrainFinal)
+    :param str homol: the Homologue directory to use (default: Homol)
+    :param int|float ref_dx: the pixel resolution of the reference image, in meters. (default: 15)
+    :param int|float ortho_res: the pixel resolution of the orthoimage being used, in meters. (default: 8)
+    :param bool allfree: run Campari with AllFree=1 (True), or AllFree=0 (False). (default: True)
+    :param int max_iter: the maximum number of iterations to run. (default: 1)
+    :return: **gcps** (*GeoDataFrame*) -- the combined GCPs output from spymicmac.micmac.iterate_campari
+    """
+    combine_block_measures(blocks, meas_out=meas_out, gcp_out=gcp_out, fn_mes=fn_mes, fn_gcp=fn_gcp, dirname=dirname)
+
+    gcps = gpd.read_file(os.path.join(dirname, gcp_out + '.shp'))
+
+    gcps = micmac.iterate_campari(gcps, dirname, "OIS.*tif", '', ref_dx, ortho_res, fn_gcp=gcp_out,
+                                  fn_meas=meas_out, rel_ori=rel_ori, outori=outori, homol=homol,
+                                  allfree=allfree, max_iter=max_iter)
+    return gcps
 
 
 ######################################################################################################################
