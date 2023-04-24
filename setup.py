@@ -38,6 +38,7 @@ setup(name='spymicmac',
       entry_points={
           'console_scripts': [
               'balance_images = spymicmac.tools.balance_images:main',
+              'block_orientation = spymicmac.tools.block_orientation:main',
               'combine_auto_measures = spymicmac.tools.combine_auto_measures:main',
               'create_localchantier_xml = spymicmac.tools.create_localchantier_xml:main',
               'download_cop30_vrt = spymicmac.tools.download_cop30_vrt:main',
