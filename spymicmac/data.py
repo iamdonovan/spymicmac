@@ -7,9 +7,11 @@ import netrc
 import geopandas as gpd
 import numpy as np
 from glob import glob
+import pyproj
 from osgeo import gdal
 from shapely.geometry.polygon import Polygon
 from usgs import api, USGSAuthExpiredError
+from pybob.GeoImg import GeoImg
 
 
 def get_login_creds():
@@ -204,3 +206,23 @@ def lat_prefix(lat):
 
 def format_cop30(lat, lon):
     return f'Copernicus_DSM_COG_10_{lat}_00_{lon}_00_DEM'
+
+
+def to_wgs84_ellipsoid(fn_dem):
+    """
+    Convert a DEM to WGS84 ellipsoid heights, using the EGM08 Geoid.
+
+    :param str fn_dem: the filename of the DEM to convert.
+    """
+    proj_data = pyproj.datadir.get_data_dir()
+
+    if not os.path.exists(os.path.join(proj_data, 'egm08_25.gtx')):
+        print('Downloading egm08_25.gtx from osgeo.org')
+        this_url = 'https://download.osgeo.org/proj/vdatum/egm08_25/egm08_25.gtx'
+        urllib.request.urlretrieve(this_url, os.path.join(proj_data, 'egm08_25.gtx'))
+
+    dem = GeoImg(fn_dem)
+    geoid = GeoImg(os.path.join(proj_data, 'egm08_25.gtx')).reproject(dem)
+
+    ell = dem.copy(new_raster=(dem.img + geoid.img))
+    ell.write(os.path.splitext(fn_dem)[0] + '_ell.tif')
