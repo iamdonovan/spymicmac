@@ -418,9 +418,8 @@ def register_ortho(fn_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, landmask=
     print('writing AutoMeasures.txt')
     micmac.write_auto_mesures(gcps, subscript, out_dir)
 
-    print('running get_autogcp_locations.sh to get rough image locations for each point')
-    subprocess.Popen(['get_autogcp_locations.sh', 'Ori-{}'.format(ori),
-                      os.path.join(out_dir, 'AutoMeasures{}.txt'.format(subscript))] + imlist).wait()
+    print('running get_autogcp_locations to get rough image locations for each point')
+    micmac.get_autogcp_locations(f'Ori-{ori}', os.path.join(out_dir, f'AutoMeasures{subscript}.txt'), imlist)
 
     # print('searching for points in orthorectified images')
     print('finding image measures')

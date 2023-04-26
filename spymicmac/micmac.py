@@ -1110,7 +1110,7 @@ def arrange_tiles(flist, filename, dirname='.'):
 
 
 # converted from bash script
-def get_autogcp_location(ori, meas_file, imlist):
+def get_autogcp_locations(ori, meas_file, imlist):
     """
     Find location of automatically-detected control points in individual images using mm3d XYZ2Im.
 
