@@ -1118,7 +1118,7 @@ def get_autogcp_locations(ori, meas_file, imlist):
     :param str meas_file: The Measures file to find image locations for
     :param list imlist: a list of image names
     """
-    nodist = '-'.join(ori, 'NoDist')
+    nodist = '-'.join([ori, 'NoDist'])
 
     # copy the orientation directory to a new, "nodist" directory
     shutil.copytree(ori, nodist, dirs_exist_ok=True)
@@ -1129,7 +1129,7 @@ def get_autogcp_locations(ori, meas_file, imlist):
 
 
     for im in imlist:
-        _update_autocal(nodist, autocal)
+        _update_autocal(nodist, im)
 
         p = subprocess.Popen(['mm3d', 'XYZ2Im', os.path.join(nodist, f'Orientation-{im}.xml'),
                               meas_file, f'NoDist-{im}.txt'])
@@ -1153,10 +1153,14 @@ def _remove_distortion_coeffs(fn_xml):
     tree.write(fn_xml, encoding="utf-8", xml_declaration=True)
 
 
-def _update_autocal(ori, autocal, im):
+def _update_autocal(ori, im):
     fn_xml = os.path.join(ori, f'Orientation-{im}.xml')
     root = ET.parse(fn_xml).getroot()
-    root.find('OrientationConique').find('FileInterne').text = os.path.join(ori, autocal)
+
+    old_autocal = root.find('OrientationConique').find('FileInterne').text
+    old_autocal = os.path.join(ori, os.path.basename(old_autocal))
+
+    root.find('OrientationConique').find('FileInterne').text = old_autocal
 
     tree = ET.ElementTree(root)
     tree.write(fn_xml, encoding="utf-8", xml_declaration=True)
