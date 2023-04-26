@@ -1108,3 +1108,55 @@ def arrange_tiles(flist, filename, dirname='.'):
             img_arr[i, j] = imread(os.path.sep.join([dirname, '{}_Tile_{}_{}.tif'.format(filename, j, i)]))
     return img_arr
 
+
+# converted from bash script
+def get_autogcp_location(ori, meas_file, imlist):
+    """
+    Find location of automatically-detected control points in individual images using mm3d XYZ2Im.
+
+    :param str ori: The orientation directory name (e.g., Ori-Relative)
+    :param str meas_file: The Measures file to find image locations for
+    :param list imlist: a list of image names
+    """
+    nodist = '-'.join(ori, 'NoDist')
+
+    # copy the orientation directory to a new, "nodist" directory
+    shutil.copytree(ori, nodist)
+
+    autocals = glob('AutoCal*.xml', root_dir=nodist)
+    for autocal in autocals:
+        _remove_distortion_coeffs(os.path.join(nodist, autocal))
+
+
+    for im in imlist:
+        _update_autocal(nodist, autocal)
+
+        p = subprocess.Popen(['mm3d', 'XYZ2Im', os.path.join(nodist, f'Orientation-{im}.xml'),
+                              meas_file, f'NoDist-{im}.txt'])
+        p.wait()
+
+        p = subprocess.Popen(['mm3d', 'XYZ2Im', os.path.join(ori, f'Orientation-{im}.xml'),
+                              meas_file, f'Auto-{im}.txt'])
+        p.wait()
+
+
+def _remove_distortion_coeffs(fn_xml):
+    root = ET.parse(fn_xml).getroot()
+
+    dist_coeffs = root.find('CalibrationInternConique').find('CalibDistortion').find('ModRad').findall('CoeffDist')
+    inv_coeffs = root.find('CalibrationInternConique').find('CalibDistortion').find('ModRad').findall('CoeffDistInv')
+
+    for coeff in dist_coeffs + inv_coeffs:
+        coeff.text = '0.0'
+
+    tree = ET.ElementTree(root)
+    tree.write(fn_xml, encoding="utf-8", xml_declaration=True)
+
+
+def _update_autocal(ori, autocal, im):
+    fn_xml = os.path.join(ori, f'Orientation-{im}.xml')
+    root = ET.parse(fn_xml).getroot()
+    root.find('OrientationConique').find('FileInterne').text = os.path.join(ori, autocal)
+
+    tree = ET.ElementTree(root)
+    tree.write(fn_xml, encoding="utf-8", xml_declaration=True)
