@@ -1121,7 +1121,7 @@ def get_autogcp_locations(ori, meas_file, imlist):
     nodist = '-'.join(ori, 'NoDist')
 
     # copy the orientation directory to a new, "nodist" directory
-    shutil.copytree(ori, nodist)
+    shutil.copytree(ori, nodist, dirs_exist_ok=True)
 
     autocals = glob('AutoCal*.xml', root_dir=nodist)
     for autocal in autocals:
