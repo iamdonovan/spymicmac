@@ -2,6 +2,7 @@
 spymicmac.micmac is a collection of tools for interfacing with MicMac
 """
 import os
+import re
 import subprocess
 import shutil
 import numpy as np
@@ -1109,6 +1110,78 @@ def arrange_tiles(flist, filename, dirname='.'):
     return img_arr
 
 
+def post_process(projstr, out_name, dirmec, do_ortho=True):
+    """
+    Apply georeferencing and masking to the final DEM and Correlation images (optionally, the orthomosaic as well).
+
+    Output files are written as follows:
+        - DEM: post_processed/{out_name}_Z.tif
+        - Hillshade: post_processed/{out_name}_HS.tif
+        - Correlation: post_processed/{out_name}_CORR.tif
+        - Orthomosaic: post_processed/{out_name}_Ortho.tif
+
+    :param str projstr: A string corresponding to the DEM's CRS that GDAL can use to georeference the rasters.
+    :param str out_name: The name that the output files should have.
+    :param str dirmec: The MEC directory to process files from (e.g., MEC-Malt)
+    :param bool do_ortho: Post-process the orthomosaic in Ortho-{dirmec}, as well. Assumes that you have run
+        mm3d Tawny with Out=Orthophotomosaic first.
+    """
+    # TODO: re-implement this with geoutils/xdem instead of subprocess calls
+    os.makedirs('post_processed', exist_ok=True)
+
+    # first, the stuff in MEC
+    dem_list = sorted(glob('Z_Num*STD-MALT.tif', root_dir=dirmec))
+    level = int(re.findall(r'\d+', dem_list[-1].split('_')[1])[0])
+    zoomf = int(re.findall(r'\d+', dem_list[-1].split('_')[2])[0])
+
+    shutil.copy(os.path.join(dirmec, f'Z_Num{level}_DeZoom{zoomf}_STD-MALT.tfw'),
+                os.path.join(dirmec, f'Correl_STD-MALT_Num_{level-1}.tfw'))
+
+    shutil.copy(os.path.join(dirmec, f'Z_Num{level}_DeZoom{zoomf}_STD-MALT.tfw'),
+                os.path.join(dirmec, f'AutoMask_STD-MALT_Num_{level-1}.tfw'))
+
+    subprocess.Popen(['gdal_translate', '-a_nodata', '0', '-a_srs', projstr,
+                      os.path.join(dirmec, f'Correl_STD-MALT_Num_{level-1}.tif'),
+                      'tmp_corr.tif']).wait()
+
+    subprocess.Popen(['gdal_translate', '-a_srs', projstr,
+                      os.path.join(dirmec, f'Z_Num{level}_DeZoom{zoomf}_STD-MALT.tif'),
+                      'tmp_geo.tif']).wait()
+
+    subprocess.Popen(['gdal_translate', '-a_nodata', '0', '-a_srs', projstr,
+                      os.path.join(dirmec, f'AutoMask_STD-MALT_Num_{level-1}.tif'),
+                      'tmp_mask.tif']).wait()
+
+    subprocess.Popen(['gdal_calc.py', '--quiet', '-A', 'tmp_mask.tif', '-B', 'tmp_geo.tif',
+                      '--outfile={}'.format(os.path.join('post_processed', f'{out_name}_Z.tif')),
+                      '--calc="B*(A>0)"', '--NoDataValue=-9999']).wait()
+
+    subprocess.Popen(['gdaldem', 'hillshade', os.path.join('post_processed', f'{out_name}_Z.tif'),
+                      os.path.join('post_processed', f'{out_name}_HS.tif')]).wait()
+
+    subprocess.Popen(['gdal_calc.py', '--quiet', '-A', 'tmp_corr.tif',
+                      '--outfile={}'.format(os.path.join('post_processed', f'{out_name}_CORR.tif')),
+                      '--calc="((A.astype(float)-127)/128)*100"', '--NoDataValue=-9999']).wait()
+
+    # clean up the temporary files
+    os.remove('tmp_geo.tif')
+    os.remove('tmp_corr.tif')
+
+    # now, mask the ortho image(s)
+    if do_ortho:
+        ortho = os.path.join('Ortho-' + dirmec, 'Orthophotomosaic.tif')
+
+        subprocess.Popen(['gdal_translate', '-a_nodata', '0', '-a_srs', projstr, ortho, 'tmp_ortho.tif']).wait()
+
+        # TODO: re-size the mask to fit the ortho image, if needed
+        subprocess.Popen(['gdal_calc.py', '--quiet', '-A', 'tmp_mask.tif', '-B', 'tmp_ortho.tif',
+                          '--outfile={}'.format(os.path.join('post_processed', f'{out_name}_Ortho.tif')),
+                          '--calc="B*(A>0)"', '--NoDataValue=0']).wait()
+        os.remove('tmp_ortho.tif')
+
+    os.remove('tmp_mask.tif')
+
+
 # converted from bash script
 def get_autogcp_locations(ori, meas_file, imlist):
     """
@@ -1126,7 +1199,6 @@ def get_autogcp_locations(ori, meas_file, imlist):
     autocals = glob('AutoCal*.xml', root_dir=nodist)
     for autocal in autocals:
         _remove_distortion_coeffs(os.path.join(nodist, autocal))
-
 
     for im in imlist:
         _update_autocal(nodist, im)
