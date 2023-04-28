@@ -2,6 +2,6 @@ create_localchantier_xml
 =================================
 
 .. argparse::
-   :filename: ../spymicmac/tools/create_localchantier_xml.py
+   :module: spymicmac.tools.create_localchantier_xml
    :func: _argparser
    :prog: create_localchantier_xml

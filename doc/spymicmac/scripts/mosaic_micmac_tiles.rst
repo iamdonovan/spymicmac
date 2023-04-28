@@ -2,6 +2,6 @@ mosaic_micmac_tiles
 =================================
 
 .. argparse::
-   :filename: ../spymicmac/tools/mosaic_micmac_tiles.py
+   :module: spymicmac.tools.mosaic_micmac_tiles
    :func: _argparser
    :prog: mosaic_micmac_tiles

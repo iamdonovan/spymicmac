@@ -2,6 +2,6 @@ download_cop30_vrt
 =================================
 
 .. argparse::
-   :filename: ../spymicmac/tools/download_cop30_vrt.py
+   :module: spymicmac.tools.download_cop30_vrt
    :func: _argparser
    :prog: download_cop30_vrt

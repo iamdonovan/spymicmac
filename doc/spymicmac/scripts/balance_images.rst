@@ -2,6 +2,6 @@ balance_images
 =================================
 
 .. argparse::
-   :filename: ../spymicmac/tools/balance_images.py
+   :module: spymicmac.tools.balance_images
    :func: _argparser
    :prog: balance_images

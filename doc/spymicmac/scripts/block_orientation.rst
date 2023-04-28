@@ -2,6 +2,6 @@ block_orientation
 =================================
 
 .. argparse::
-   :filename: ../spymicmac/tools/block_orientation.py
+   :module: spymicmac.tools.block_orientation
    :func: _argparser
    :prog: block_orientation

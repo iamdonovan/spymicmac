@@ -2,6 +2,6 @@ register_ortho
 =================================
 
 .. argparse::
-   :filename: ../spymicmac/tools/register_ortho.py
+   :module: spymicmac.tools.register_ortho
    :func: _argparser
    :prog: register_ortho

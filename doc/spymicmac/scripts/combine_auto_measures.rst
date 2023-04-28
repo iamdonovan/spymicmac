@@ -2,6 +2,6 @@ combine_auto_measures
 =================================
 
 .. argparse::
-   :filename: ../spymicmac/tools/combine_auto_measures.py
+   :module: spymicmac.tools.combine_auto_measures
    :func: _argparser
    :prog: combine_auto_measures
