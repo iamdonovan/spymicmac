@@ -219,13 +219,6 @@ To generate an orthomosaic, run the following command:
 
 
 You can also run :doc:`../../spymicmac/scripts/post_process_micmac` to apply the AutoMask to the DEM and
-georeference the correlation mask:
-
-.. code-block:: sh
-
-    post_process_micmac.sh -z "8 +north" -n NAME
-
-Replacing ``"8 +north"`` with the UTM zone corresponding to the UTM zone of your reference datasets, and ``NAME`` with
-an output filename for the DEM.
+Orthomosaic, and georeference the correlation mask.
 
 And that's it. You should now have an orthorectified KH-9 (or air photo) mosaic, and a DEM. Enjoy.
