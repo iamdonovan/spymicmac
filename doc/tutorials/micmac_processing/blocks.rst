@@ -27,6 +27,9 @@ Measures files for each block, so that ``Campari`` can be used to create a singl
 images. You can also run :py:meth:`spymicmac.micmac.iterate_campari` to iteratively run ``Campari``, removing any
 outlier GCPs to further refine/correct the orientation.
 
+Or, you can use :py:meth:`spymicmac.orientation.block_orientation` or the corresponding command-line tool
+:doc:`../../spymicmac/scripts/block_orientation` to combine the steps of both.
+
 The screenshot below shows the point cloud file for a set of 1455 historic images acquired over the Juneau Icefield.
 
 .. image:: ../../img/final_ori.png
