@@ -2,30 +2,23 @@
 spymicmac.micmac is a collection of tools for interfacing with MicMac
 """
 import os
+import re
 import subprocess
 import shutil
-from collections import defaultdict
 import numpy as np
 from osgeo import gdal
 import pandas as pd
-import geopandas as gpd
 import lxml.etree as etree
 import lxml.builder as builder
 import difflib
 import xml.etree.ElementTree as ET
 from glob import glob
-from scipy.interpolate import LinearNDInterpolator
-from shapely.geometry.point import Point
-from shapely.geometry import LineString
 from shapely.strtree import STRtree
 from skimage.io import imread, imsave
-from skimage.measure import ransac
-from skimage.transform import AffineTransform
 from pybob.GeoImg import GeoImg
 from pybob.ddem_tools import nmad
 from pybob.image_tools import create_mask_from_shapefile
-from spymicmac.data import get_usgs_footprints
-from spymicmac.register import get_utm_str
+from spymicmac import data, register
 
 
 ######################################################################################################################
@@ -49,7 +42,7 @@ def write_neighbour_images(imlist, fprints=None, nameField='ID', prefix='OIS-Ree
     NamedRel = E.SauvegardeNamedRel()
 
     if fprints is None:
-        fprints = get_usgs_footprints(imlist, dataset=dataset)
+        fprints = data.get_usgs_footprints(imlist, dataset=dataset)
     else:
         fprints = fprints[fprints[nameField].isin(imlist)]
 
@@ -131,8 +124,8 @@ def get_gcp_meas(im_name, meas_name, in_dir, E, nodist=None, gcp_name='GCP'):
     :param lxml.builder.ElementMaker E: an ElementMaker object for writing to the xml file.
     :param str nodist: the name of the directory
     :param str gcp_name: the prefix (e.g., GCP0, GCP1, etc.) for the GCP name (default: GCP).
-    :return:
-        - **this_im_meas** (*lxml.builder.ElementMaker*) -- an ElementMaker object with the GCP location in the image.
+    :return: **this_im_meas** (*lxml.builder.ElementMaker*) -- an ElementMaker object with the GCP location in
+      the image.
     """
     im = gdal.Open(os.path.sep.join([in_dir, im_name]))
     maxj = im.RasterXSize
@@ -163,8 +156,7 @@ def get_im_meas(gcps, E):
 
     :param pandas.DataFrame gcps: a DataFrame with the GCPs to find image locations for.
     :param lxml.builder.ElementMaker E: an ElementMaker object for writing to the xml file.
-    :return:
-        - **pt_els** (*list*) -- a list of ElementMaker objects corresponding to each GCP image location.
+    :return: **pt_els** (*list*) -- a list of ElementMaker objects corresponding to each GCP image location.
     """
     pt_els = []
     for ind, row in gcps.iterrows():
@@ -181,8 +173,7 @@ def parse_im_meas(fn_meas):
     Read an xml file with GCP image locations into a pandas DataFrame.
 
     :param fn_meas: the name of the measures file to read.
-    :return:
-        - **gcp_df** (*pandas.DataFrame*) -- a DataFrame with gcp names and image locations.
+    :return: **gcp_df** (*pandas.DataFrame*) -- a DataFrame with gcp names and image locations.
     """
     gcp_df = pd.DataFrame()
     root = ET.parse(fn_meas).getroot()
@@ -384,8 +375,7 @@ def get_match_pattern(imlist):
     Given a list of image names, return a match pattern that can be passed to MicMac command line functions.
 
     :param list imlist: a list of image names.
-    :return:
-        - **pattern** (*str*) -- a match pattern (e.g., "OIS.*tif") that can be passed to MicMac functions.
+    :return: **pattern** (*str*) -- a match pattern (e.g., "OIS.*tif") that can be passed to MicMac functions.
     """
     imlist.sort()
 
@@ -428,8 +418,7 @@ def get_valid_image_points(shape, pts, pts_nodist):
     :param shape: the shape of the image (rows, columns) to determine valid points for.
     :param pandas.DataFrame pts: a DataFrame containing point locations (i, j)
     :param pandas.DataFrame pts_nodist: a DataFrame containing point locations (i, j) calculated using no camera distortion.
-    :return:
-        - **valid_pts** (*array-like*) -- an array of the points that are located within the image shape.
+    :return: **valid_pts** (*array-like*) -- an array of the points that are located within the image shape.
     """
     maxi, maxj = shape
 
@@ -559,8 +548,7 @@ def get_bascule_residuals(fn_basc, gcp_df):
 
     :param str fn_basc: the GCPBascule xml file to read the residuals from.
     :param pandas.DataFrame gcp_df: a DataFrame with the GCPs to read the residuals for.
-    :return:
-        - **gcp_df** (*pandas.DataFrame*) -- the input GCPs with the Bascule residuals added.
+    :return: **gcp_df** (*pandas.DataFrame*) -- the input GCPs with the Bascule residuals added.
     """
     root = ET.parse(fn_basc).getroot()
     gcp_res = root.findall('Residus')
@@ -593,8 +581,7 @@ def get_campari_residuals(fn_resids, gcp_df):
 
     :param fn_resids: the Campari residual xml file to read.
     :param pandas.DataFrame gcp_df: a DataFrame with the GCPs to read the residuals for.
-    :return:
-        - **gcp_df** (*pandas.DataFrame*) -- the input GCPs with the Campari residuals added.
+    :return: **gcp_df** (*pandas.DataFrame*) -- the input GCPs with the Campari residuals added.
     """
     camp_root = ET.parse(fn_resids).getroot()
 
@@ -697,7 +684,6 @@ def tapas(cam_model, ori_out, img_pattern='OIS.*tif', in_cal=None, lib_foc=True,
     :param bool lib_foc: allow the focal length to be calibrated (default: True)
     :param bool lib_pp: allow the principal point to be calibrated (default: True)
     :param bool lib_cd: allow the center of distortion to be calibrated (default: True)
-    :return:
     """
     echo = subprocess.Popen('echo', stdout=subprocess.PIPE)
 
@@ -736,8 +722,6 @@ def malt(imlist, ori, zoomf=1, zoomi=None, dirmec='MEC-Malt', seed_img=None, see
     :param str seed_img: a DEM to pass to Malt as DEMInitImg. Note that if seed_img is set, seed_xml
         must also be set. (default: not used)
     :param str seed_xml: an XML file corresponding to the seed_img (default: not used)
-
-    :return:
     """
     echo = subprocess.Popen('echo', stdout=subprocess.PIPE)
 
@@ -771,7 +755,6 @@ def tawny(dirmec, radiomegal=False):
 
     :param str dirmec: the MEC directory to use
     :param bool radiomegal: run Tawny with RadiomEgal=1 (default: False)
-    :return:
     """
     echo = subprocess.Popen('echo', stdout=subprocess.PIPE)
 
@@ -788,7 +771,6 @@ def block_malt(imlist, nimg=3, ori='Relative', zoomf=8):
     :param int nimg: the number of images to use in a block (default: 3)
     :param str ori: the name of the orientation directory (e.g., Ori-Relative). (default: Relative)
     :param int zoomf: the final Zoom level to use (default: 8)
-    :return:
     """
     dirmec = 'MEC-' + ori
 
@@ -804,8 +786,8 @@ def block_malt(imlist, nimg=3, ori='Relative', zoomf=8):
         tawny('{}_block{}'.format(dirmec, block))
 
 
-def run_bascule(in_gcps, outdir, img_pattern, sub, ori, outori='TerrainRelAuto',
-                fn_gcp='AutoGCPs', fn_meas='AutoMeasures'):
+def bascule(in_gcps, outdir, img_pattern, sub, ori, outori='TerrainRelAuto',
+            fn_gcp='AutoGCPs', fn_meas='AutoMeasures'):
     """
     Interface for running mm3d GCPBascule and reading the residuals from the resulting xml file.
 
@@ -819,8 +801,7 @@ def run_bascule(in_gcps, outdir, img_pattern, sub, ori, outori='TerrainRelAuto',
         fn_gcp + sub + '.xml' (e.g., default: AutoGCPs -> AutoGCPs_block0.xml)
     :param str fn_meas: the filename pattern for the measures file. The file that will be loaded will be
         fn_meas + sub + '-S2D.xml' (e.g., default: AutoMeasures -> AutoMeasures_block0-S2D.xml)
-    :return:
-        - **out_gcps** (*pandas.DataFrame*) -- the input gcps with the updated Bascule residuals.
+    :return: **out_gcps** (*pandas.DataFrame*) -- the input gcps with the updated Bascule residuals.
     """
     fn_gcp = fn_gcp + sub + '.xml'
     fn_meas = fn_meas + sub + '-S2D.xml'
@@ -837,9 +818,9 @@ def run_bascule(in_gcps, outdir, img_pattern, sub, ori, outori='TerrainRelAuto',
     return out_gcps
 
 
-def run_campari(in_gcps, outdir, img_pattern, sub, dx, ortho_res, allfree=True,
-                fn_gcp='AutoGCPs', fn_meas='AutoMeasures', inori='TerrainRelAuto',
-                outori='TerrainFinal', homol='Homol'):
+def campari(in_gcps, outdir, img_pattern, sub, dx, ortho_res, allfree=True,
+            fn_gcp='AutoGCPs', fn_meas='AutoMeasures', inori='TerrainRelAuto',
+            outori='TerrainFinal', homol='Homol'):
     """
     Interface for running mm3d Campari and reading the residuals from the residual xml file.
 
@@ -857,8 +838,7 @@ def run_campari(in_gcps, outdir, img_pattern, sub, dx, ortho_res, allfree=True,
     :param str inori: the input orientation to Campari (default: Ori-TerrainRelAuto -> TerrainRelAuto)
     :param str outori: the output orientation from Campari (default: Ori-TerrainFinal -> TerrainFinal)
     :param str homol: the Homologue directory to use (default: Homol)
-    :return:
-        - **out_gcps** (*pandas.DataFrame*) -- the input gcps with the updated Campari residuals.
+    :return: **out_gcps** (*pandas.DataFrame*) -- the input gcps with the updated Campari residuals.
     """
     echo = subprocess.Popen('echo', stdout=subprocess.PIPE)
 
@@ -887,7 +867,6 @@ def remove_worst_mesures(fn_meas, ori):
 
     :param str fn_meas: the filename for the measures file.
     :param str ori: the orientation directory output from Campari (e.g., Ori-TerrainFinal -> TerrainFinal)
-    :return:
     """
     camp_root = ET.parse('Ori-{}/Residus.xml'.format(ori)).getroot()
     auto_root = ET.parse(fn_meas).getroot()
@@ -942,39 +921,38 @@ def iterate_campari(gcps, out_dir, match_pattern, subscript, dx, ortho_res, fn_g
     :param str homol: the Homologue directory to use (default: Homol)
     :param bool allfree: run Campari with AllFree=1 (True), or AllFree=0 (False). (default: True)
     :param int max_iter: the maximum number of iterations to run. (default: 5)
-    :return:
-        - **gcps** (*pandas.DataFrame*) -- the gcps with updated residuals after the iterative process.
+    :return: **gcps** (*pandas.DataFrame*) -- the gcps with updated residuals after the iterative process.
     """
     niter = 0
 
-    gcps = run_bascule(gcps, out_dir, match_pattern, subscript, rel_ori, fn_gcp=fn_gcp, fn_meas=fn_meas, outori=inori)
+    gcps = bascule(gcps, out_dir, match_pattern, subscript, rel_ori, fn_gcp=fn_gcp, fn_meas=fn_meas, outori=inori)
 
     gcps['res_dist'] = np.sqrt(gcps.xres ** 2 + gcps.yres ** 2)
 
-    gcps = run_campari(gcps, out_dir, match_pattern, subscript, dx, ortho_res,
-                       inori=inori, outori=outori, fn_gcp=fn_gcp, fn_meas=fn_meas,
-                       allfree=allfree)
+    gcps = campari(gcps, out_dir, match_pattern, subscript, dx, ortho_res,
+                   inori=inori, outori=outori, fn_gcp=fn_gcp, fn_meas=fn_meas,
+                   allfree=allfree)
 
     gcps['camp_dist'] = np.sqrt(gcps.camp_xres ** 2 + gcps.camp_yres ** 2)
 
     while any([np.any(np.abs(gcps.camp_res - gcps.camp_res.median()) > 2 * nmad(gcps.camp_res)),
                np.any(np.abs(gcps.camp_dist - gcps.camp_dist.median()) > 2 * nmad(gcps.camp_dist)),
-               gcps.camp_res.max() > 2]) and niter <= 5:
+               gcps.camp_res.max() > 2]) and niter <= max_iter:
         valid_inds = np.logical_and.reduce((np.abs(gcps.camp_res - gcps.camp_res.median()) < 2 * nmad(gcps.camp_res),
                                             gcps.camp_res < gcps.camp_res.max()))
         if np.count_nonzero(valid_inds) < 10:
             break
 
         gcps = gcps.loc[valid_inds]
-        save_gcps(gcps, out_dir, get_utm_str(gcps.crs.to_epsg), subscript, fn_gcp=fn_gcp, fn_meas=fn_meas)
+        save_gcps(gcps, out_dir, register.get_utm_str(gcps.crs.to_epsg), subscript, fn_gcp=fn_gcp, fn_meas=fn_meas)
 
-        gcps = run_bascule(gcps, out_dir, match_pattern, subscript, rel_ori, fn_gcp=fn_gcp,
-                           fn_meas=fn_meas, outori=inori)
+        gcps = bascule(gcps, out_dir, match_pattern, subscript, rel_ori, fn_gcp=fn_gcp,
+                       fn_meas=fn_meas, outori=inori)
         gcps['res_dist'] = np.sqrt(gcps.xres ** 2 + gcps.yres ** 2)
 
-        gcps = run_campari(gcps, out_dir, match_pattern, subscript, dx, ortho_res,
-                           inori=inori, outori=outori, fn_gcp=fn_gcp, fn_meas=fn_meas,
-                           allfree=allfree, homol=homol)
+        gcps = campari(gcps, out_dir, match_pattern, subscript, dx, ortho_res,
+                       inori=inori, outori=outori, fn_gcp=fn_gcp, fn_meas=fn_meas,
+                       allfree=allfree, homol=homol)
 
         gcps['camp_dist'] = np.sqrt(gcps.camp_xres ** 2 + gcps.camp_yres ** 2)
         niter += 1
@@ -1071,327 +1049,6 @@ def save_gcps(in_gcps, outdir, utmstr, sub, fn_gcp='AutoGCPs', fn_meas='AutoMeas
                   encoding="utf-8", xml_declaration=True)
 
 
-def combine_block_measures(blocks, fn_out='CombinedAutoMeasures', fn_mes='AutoMeasures_block',
-                           fn_gcp='AutoGCPs_block', dirname='auto_gcps'):
-    """
-    Combine GCPs and Measures files from multiple sub-blocks into a single file.
-
-    :param list blocks: a list of the sub-block numbers to combine
-    :param str fn_out: the output filename (no extensions). (default: CombinedAutoMeasures)
-    :param str fn_mes: the name pattern of the measures files to combine (default: AutoMeasures_block)
-    :param str fn_gcp: the name pattern of the GCP files to combine (default: AutoGCPs_block)
-    :param str dirname: the output directory where the files are saved (default: auto_gcps)
-    """
-    ngcp = 0 # keep track of the number of GCPs
-
-    mes_dicts = list()
-    gcp_dicts = list()
-    gcp_shps = list()
-
-    for b in blocks:
-        # load dirname/AutoMeasures_block{b}-S2D.xml
-        this_root = ET.parse(os.path.join(dirname, fn_mes + '{}-S2D.xml'.format(b))).getroot()
-
-        this_mes_dict, this_gcp_dict = rename_gcps(this_root, ngcp=ngcp)
-        mes_dicts.append(this_mes_dict)
-        gcp_dicts.append(this_gcp_dict)
-
-        ngcp += len(this_gcp_dict)
-        # load dirname/AutoGCPs_block{b}.shp
-        this_gcp = gpd.read_file(os.path.join(dirname, fn_gcp + '{}.shp'.format(b)))
-
-        for ii, row in this_gcp.iterrows():
-            this_gcp.loc[ii, 'id'] = this_gcp_dict[row['id']]
-
-        gcp_shps.append(this_gcp)
-
-    out_gcp = gpd.GeoDataFrame(pd.concat(gcp_shps, ignore_index=True))
-    out_gcp.sort_values('id', ignore_index=True, inplace=True)
-
-    out_gcp.set_crs(gcp_shps[0].crs, inplace=True)
-    out_gcp.to_file(fn_out + '.shp')
-
-    write_auto_gcps(out_gcp, '', dirname, get_utm_str(out_gcp.crs.to_epsg), outname=fn_out)
-
-    echo = subprocess.Popen('echo', stdout=subprocess.PIPE)
-    p = subprocess.Popen(['mm3d', 'GCPConvert', 'AppInFile',
-                          os.path.join(dirname, fn_out + '.txt')], stdin=echo.stdout)
-    p.wait()
-
-    # now have to combine mes_dicts based on key names
-    comb_dict = defaultdict(list)
-
-    for d in mes_dicts:
-        for im, mes in d.items():
-            comb_dict[im].append(mes)
-
-    # now have to create new AutoMeasures file from comb_dict
-    E = builder.ElementMaker()
-    MesureSet = E.SetOfMesureAppuisFlottants()
-
-    # have to write combined measures to a single file
-    for im, mes in comb_dict.items():
-        this_im_mes = E.MesureAppuiFlottant1Im(E.NameIm(im))
-        for m in mes[0]:
-            this_mes = E.OneMesureAF1I(E.NamePt(m.find('NamePt').text), E.PtIm(m.find('PtIm').text))
-            this_im_mes.append(this_mes)
-
-        MesureSet.append(this_im_mes)
-
-    tree = etree.ElementTree(MesureSet)
-    tree.write(os.path.join(dirname, fn_out + '-S2D.xml'), pretty_print=True, xml_declaration=True, encoding="utf-8")
-
-
-######################################################################################################################
-# orientation tools - used for visualizing, manipulating camera orientation files
-######################################################################################################################
-def load_orientation(fn_img, ori):
-    """
-    Read camera position and rotation information from an Orientation xml file.
-
-    :param str fn_img: the name of the image to read the orientation file for.
-    :param str ori: the name of the orientation directory (e.g., Ori-Relative).
-    :return:
-        - **centre** (*list*) -- the camera position (x, y, z)
-        - **l1** (*list*) -- the L1 orientation parameters
-        - **l2** (*list*) -- the L2 orientation parameters
-        - **l3** (*list*) -- the L3 orientation parameters
-        - **prof** (*float*) -- the 'Profondeur' value from the xml file.
-        - **altisol** (*float*) -- the 'AltiSol' value from the xml file.
-
-    """
-    ori_root = ET.parse(os.path.join(ori, 'Orientation-{}.xml'.format(fn_img))).getroot()
-    if ori_root.tag != 'OrientationConique':
-        ori_coniq = ori_root.find('OrientationConique')
-    else:
-        ori_coniq = ori_root
-    centre = [float(p) for p in ori_coniq.find('Externe').find('Centre').text.split()]
-    rotMat = ori_coniq.find('Externe').find('ParamRotation').find('CodageMatr')
-
-    if rotMat is not None:
-        l1 = [float(p) for p in rotMat.find('L1').text.split()]
-        l2 = [float(p) for p in rotMat.find('L2').text.split()]
-        l3 = [float(p) for p in rotMat.find('L3').text.split()]
-    else:
-        l1 = [np.nan, np.nan, np.nan]
-        l2 = [np.nan, np.nan, np.nan]
-        l3 = [np.nan, np.nan, np.nan]
-
-    prof = ori_coniq.find('Externe').find('Profondeur')
-    if prof is not None:
-        prof = prof.text
-    else:
-        prof = np.nan
-
-    altisol = ori_coniq.find('Externe').find('AltiSol')
-    if altisol is not None:
-        altisol = altisol.text
-    else:
-        altisol = np.nan
-
-    return centre, l1, l2, l3, prof, altisol
-
-
-def load_all_orientation(ori, imlist=None):
-    """
-    Load all of the orientation parameters for a set of images from a given directory.
-
-    :param str ori: the orientation directory to read
-    :param list imlist: the images to load. If not set, loads all orientation files from the given directory.
-    :return:
-        - **df** (*pandas.DataFrame*) -- a DataFrame containing the orientation parameters for each image
-    """
-    df = pd.DataFrame()
-    points = []
-
-    if imlist is None:
-        imlist = [os.path.basename(g).split('Orientation-')[1].split('.xml')[0] for g in
-                  glob(os.path.join(ori, '*.tif.xml'))]
-        imlist.sort()
-
-    for i, fn_img in enumerate(imlist):
-        centre, l1, l2, l3, prof, altisol = load_orientation(fn_img, ori)
-
-        df.loc[i, 'name'] = fn_img
-        points.append(Point(centre[0], centre[1], centre[2]))
-        df.loc[i, 'x'] = centre[0]
-        df.loc[i, 'y'] = centre[1]
-        df.loc[i, 'z'] = centre[2]
-
-        df.loc[i, 'l11'] = l1[0]
-        df.loc[i, 'l12'] = l1[1]
-        df.loc[i, 'l13'] = l1[2]
-
-        df.loc[i, 'l21'] = l2[0]
-        df.loc[i, 'l22'] = l2[1]
-        df.loc[i, 'l23'] = l2[2]
-
-        df.loc[i, 'l31'] = l3[0]
-        df.loc[i, 'l32'] = l3[1]
-        df.loc[i, 'l33'] = l3[2]
-
-        df.loc[i, 'profondeur'] = prof
-        df.loc[i, 'altisol'] = altisol
-
-    df['geometry'] = points
-    return df
-
-
-def extend_line(df, first, last):
-    """
-    Extend a flightline using existing camera positions.
-
-    :param GeoDataFrame df: a GeoDataFrame containing the camera positions and image names
-    :param str first: the name of the image to start interpolating from.
-    :param str last: the name of the image to end interpolating at.
-    :return:
-        - **outpt** (*shapely.Point*) -- the new point along the flightline.
-    """
-    firstImg = df.loc[df.name.str.contains(first), 'geometry'].values[0]
-    lastImg = df.loc[df.name.str.contains(last), 'geometry'].values[0]
-    dx = firstImg.x - lastImg.x
-    dy = firstImg.y - lastImg.y
-    dz = firstImg.z - lastImg.z
-    outpt = Point(firstImg.x + dx, firstImg.y + dy, firstImg.z + dz)
-
-    return outpt
-
-
-def interp_line(df, first, last, nimgs=None, pos=None):
-    """
-    Interpolate camera positions along a flightline.
-
-    :param GeoDataFrame df: a GeoDataFrame containing the camera positions and image names
-    :param str first: the name of the image to start interpolating from.
-    :param str last: the name of the image to end interpolating at.
-    :param int nimgs: the number of images to interpolate (default: calculated based on the image numbers)
-    :param int pos: which image position to return (default: all images between first and last)
-    :return:
-        - **ptList** (*list*) -- a list containing the interpolated camera positions (or, a tuple of the requested position).
-    """
-    if nimgs is None:
-        nimgs = np.abs(int(last) - int(first)).astype(int)
-    firstImg = df.loc[df.name.str.contains(first), 'geometry'].values[0]
-    lastImg = df.loc[df.name.str.contains(last), 'geometry'].values[0]
-    flightLine = LineString([firstImg, lastImg])
-    avgDist = flightLine.length / nimgs
-    if pos is not None:
-        return flightLine.interpolate(pos * avgDist)
-    else:
-        ptList = []
-        for i in range(1, nimgs):
-            ptList.append((i, flightLine.interpolate(i * avgDist)))
-        return ptList
-
-
-def update_center(fn_img, ori, new_center):
-    """
-    Update the camera position in an Orientation file.
-
-    :param str fn_img: the name of the image to update the orientation for (e.g., 'OIS-Reech_ARCSEA000590122.tif')
-    :param str ori: the name of the orientation directory (e.g., 'Ori-Relative')
-    :param list new_center: a list of the new camera position [x, y, z]
-    """
-    ori_root = ET.parse(os.path.join(ori, 'Orientation-{}.xml'.format(fn_img))).getroot()
-    if ori_root.tag != 'OrientationConique':
-        ori_coniq = ori_root.find('OrientationConique')
-    else:
-        ori_coniq = ori_root
-
-    ori_coniq.find('Externe').find('Centre').text = ' '.join([str(f) for f in new_center])
-
-    tree = ET.ElementTree(ori_root)
-    tree.write(os.path.join(ori, 'Orientation-{}.xml'.format(fn_img)),
-               encoding="utf-8", xml_declaration=True)
-
-
-def update_pose(fn_img, ori, new_rot):
-    """
-    Update the camera pose (rotation matrix) in an Orientation file.
-
-    :param str fn_img: the name of the image to update the orientation for (e.g., 'OIS-Reech_ARCSEA000590122.tif')
-    :param str ori: the name of the orientation directory (e.g., 'Ori-Relative')
-    :param array-like new_rot: the new 3x3 rotation matrix
-    """
-    ori_root = ET.parse(os.path.join(ori, 'Orientation-{}.xml'.format(fn_img))).getroot()
-    if ori_root.tag != 'OrientationConique':
-        ori_coniq = ori_root.find('OrientationConique')
-    else:
-        ori_coniq = ori_root
-
-    for ii, row in enumerate(new_rot):
-        ori_coniq.find('Externe').find('ParamRotation')\
-            .find('CodageMatr').find('L{}'.format(ii+1)).text = ' '.join([str(f) for f in row])
-
-    tree = ET.ElementTree(ori_root)
-    tree.write(os.path.join(ori, 'Orientation-{}.xml'.format(fn_img)),
-               encoding="utf-8", xml_declaration=True)
-
-
-def update_params(fn_img, ori, profondeur, altisol):
-    """
-    Update the profondeur and altisol parameters in an orientation file.
-
-    :param str fn_img: the name of the image to update the orientation for (e.g., 'OIS-Reech_ARCSEA000590122.tif')
-    :param str ori: the name of the orientation directory (e.g., 'Ori-Relative')
-    :param float profondeur: the new profondeur value
-    :param float altisol: the new altisol value
-    """
-    ori_root = ET.parse(os.path.join(ori, 'Orientation-{}.xml'.format(fn_img))).getroot()
-    if ori_root.tag != 'OrientationConique':
-        ori_coniq = ori_root.find('OrientationConique')
-    else:
-        ori_coniq = ori_root
-
-    ori_coniq.find('Externe').find('AltiSol').text = str(altisol)
-    ori_coniq.find('Externe').find('Profondeur').text = str(profondeur)
-
-    tree = ET.ElementTree(ori_root)
-    tree.write(os.path.join(ori, 'Orientation-{}.xml'.format(fn_img)),
-               encoding="utf-8", xml_declaration=True)
-
-
-def fix_orientation(cameras, ori_df, ori, nsig=4):
-    """
-    Correct erroneous Tapas camera positions using an estimated affine transformation between the absolute camera locations
-    and the relative locations read from the orientation directory.
-
-    Once the positions have been updated, you should re-run Tapas using the InOri set to the directory; e.g., if you
-    have updated Ori-Relative, you should run:
-
-        mm3d Tapas RadialBasic "OIS.*tif" InOri=Relative Out=Relative LibFoc=0
-
-    :param pandas.DataFrame cameras: A DataFrame containing camera positions (x, y, z) and a 'name' column that contains
-        the image names.
-    :param pandas.DataFrame ori_df: A DataFrame output from sPyMicMac.micmac.load_all_orientations, or that contains
-        a 'name' column and camera positions in relative space (x, y, z)
-    :param str ori: the Orientation directory to update (e.g., Ori-Relative)
-    :param int|float nsig: the number of normalized absolute deviations from the median residual value to consider
-        a camera an outlier (default: 4)
-    """
-    join = cameras.set_index('name').join(ori_df.set_index('name'), lsuffix='abs', rsuffix='rel')
-
-    model = AffineTransform()
-    model.estimate(join.dropna()[['xabs', 'yabs']].values, join.dropna()[['xrel', 'yrel']].values)
-
-    res = model.residuals(join[['xabs', 'yabs']].values, join[['xrel', 'yrel']].values)
-
-    outliers = res - np.nanmedian(res) > nsig * nmad(res)
-    if np.count_nonzero(outliers) > 0:
-        interp = LinearNDInterpolator(join.loc[~outliers, ['xrel', 'yrel']].values, join.loc[~outliers, 'zrel'])
-        print('found {} outliers using nsig={}'.format(np.count_nonzero(outliers), nsig))
-        for name, row in join[outliers].iterrows():
-            new_x, new_y = model(row[['xabs', 'yabs']].values)[0]
-            new_z = interp(new_x, new_y)
-
-            print('new location for {}: {}, {}, {}'.format(name, new_x, new_y, new_z))
-            print('writing new Orientation file for {}'.format(name))
-            update_center(name, ori, [new_x, new_y, new_z])
-
-
-######################################################################################################################
-#
-######################################################################################################################
 def dem_to_text(fn_dem, fn_out='dem_pts.txt', spacing=100):
     """
     Write elevations from a DEM raster to a text file for use in mm3d PostProc Banana.
@@ -1426,7 +1083,6 @@ def mosaic_micmac_tiles(filename, dirname='.'):
 
     :param str filename: MicMac filename to mosaic together
     :param str dirname: Directory containing images to Mosaic (default: .)
-    :return:
     """
     filelist = glob(os.path.sep.join([dirname, '{}_Tile*'.format(filename)]))
 
@@ -1449,7 +1105,134 @@ def arrange_tiles(flist, filename, dirname='.'):
     ncols = arr_inds[:, 0].max() + 1
     img_arr = np.array(np.zeros((nrows, ncols)), dtype='object')
     for i in range(nrows):
-         for j in range(ncols):
-             img_arr[i, j] = imread(os.path.sep.join([dirname, '{}_Tile_{}_{}.tif'.format(filename, j, i)]))
+        for j in range(ncols):
+            img_arr[i, j] = imread(os.path.sep.join([dirname, '{}_Tile_{}_{}.tif'.format(filename, j, i)]))
     return img_arr
 
+
+def post_process(projstr, out_name, dirmec, do_ortho=True):
+    """
+    Apply georeferencing and masking to the final DEM and Correlation images (optionally, the orthomosaic as well).
+
+    Output files are written as follows:
+        - DEM: post_processed/{out_name}_Z.tif
+        - Hillshade: post_processed/{out_name}_HS.tif
+        - Correlation: post_processed/{out_name}_CORR.tif
+        - Orthomosaic: post_processed/{out_name}_Ortho.tif
+
+    :param str projstr: A string corresponding to the DEM's CRS that GDAL can use to georeference the rasters.
+    :param str out_name: The name that the output files should have.
+    :param str dirmec: The MEC directory to process files from (e.g., MEC-Malt)
+    :param bool do_ortho: Post-process the orthomosaic in Ortho-{dirmec}, as well. Assumes that you have run
+        mm3d Tawny with Out=Orthophotomosaic first.
+    """
+    # TODO: re-implement this with geoutils/xdem instead of subprocess calls
+    os.makedirs('post_processed', exist_ok=True)
+
+    # first, the stuff in MEC
+    dem_list = sorted(glob('Z_Num*STD-MALT.tif', root_dir=dirmec))
+    level = int(re.findall(r'\d+', dem_list[-1].split('_')[1])[0])
+    zoomf = int(re.findall(r'\d+', dem_list[-1].split('_')[2])[0])
+
+    shutil.copy(os.path.join(dirmec, f'Z_Num{level}_DeZoom{zoomf}_STD-MALT.tfw'),
+                os.path.join(dirmec, f'Correl_STD-MALT_Num_{level-1}.tfw'))
+
+    shutil.copy(os.path.join(dirmec, f'Z_Num{level}_DeZoom{zoomf}_STD-MALT.tfw'),
+                os.path.join(dirmec, f'AutoMask_STD-MALT_Num_{level-1}.tfw'))
+
+    subprocess.Popen(['gdal_translate', '-a_nodata', '0', '-a_srs', projstr,
+                      os.path.join(dirmec, f'Correl_STD-MALT_Num_{level-1}.tif'),
+                      'tmp_corr.tif']).wait()
+
+    subprocess.Popen(['gdal_translate', '-a_srs', projstr,
+                      os.path.join(dirmec, f'Z_Num{level}_DeZoom{zoomf}_STD-MALT.tif'),
+                      'tmp_geo.tif']).wait()
+
+    subprocess.Popen(['gdal_translate', '-a_nodata', '0', '-a_srs', projstr,
+                      os.path.join(dirmec, f'AutoMask_STD-MALT_Num_{level-1}.tif'),
+                      'tmp_mask.tif']).wait()
+
+    subprocess.Popen(['gdal_calc.py', '--quiet', '-A', 'tmp_mask.tif', '-B', 'tmp_geo.tif',
+                      '--outfile={}'.format(os.path.join('post_processed', f'{out_name}_Z.tif')),
+                      '--calc="B*(A>0)"', '--NoDataValue=-9999']).wait()
+
+    subprocess.Popen(['gdaldem', 'hillshade', os.path.join('post_processed', f'{out_name}_Z.tif'),
+                      os.path.join('post_processed', f'{out_name}_HS.tif')]).wait()
+
+    subprocess.Popen(['gdal_calc.py', '--quiet', '-A', 'tmp_corr.tif',
+                      '--outfile={}'.format(os.path.join('post_processed', f'{out_name}_CORR.tif')),
+                      '--calc="((A.astype(float)-127)/128)*100"', '--NoDataValue=-9999']).wait()
+
+    # clean up the temporary files
+    os.remove('tmp_geo.tif')
+    os.remove('tmp_corr.tif')
+
+    # now, mask the ortho image(s)
+    if do_ortho:
+        ortho = os.path.join('Ortho-' + dirmec, 'Orthophotomosaic.tif')
+
+        subprocess.Popen(['gdal_translate', '-a_nodata', '0', '-a_srs', projstr, ortho, 'tmp_ortho.tif']).wait()
+
+        # TODO: re-size the mask to fit the ortho image, if needed
+        subprocess.Popen(['gdal_calc.py', '--quiet', '-A', 'tmp_mask.tif', '-B', 'tmp_ortho.tif',
+                          '--outfile={}'.format(os.path.join('post_processed', f'{out_name}_Ortho.tif')),
+                          '--calc="B*(A>0)"', '--NoDataValue=0']).wait()
+        os.remove('tmp_ortho.tif')
+
+    os.remove('tmp_mask.tif')
+
+
+# converted from bash script
+def get_autogcp_locations(ori, meas_file, imlist):
+    """
+    Find location of automatically-detected control points in individual images using mm3d XYZ2Im.
+
+    :param str ori: The orientation directory name (e.g., Ori-Relative)
+    :param str meas_file: The Measures file to find image locations for
+    :param list imlist: a list of image names
+    """
+    nodist = '-'.join([ori, 'NoDist'])
+
+    # copy the orientation directory to a new, "nodist" directory
+    shutil.copytree(ori, nodist, dirs_exist_ok=True)
+
+    autocals = glob('AutoCal*.xml', root_dir=nodist)
+    for autocal in autocals:
+        _remove_distortion_coeffs(os.path.join(nodist, autocal))
+
+    for im in imlist:
+        _update_autocal(nodist, im)
+
+        p = subprocess.Popen(['mm3d', 'XYZ2Im', os.path.join(nodist, f'Orientation-{im}.xml'),
+                              meas_file, f'NoDist-{im}.txt'])
+        p.wait()
+
+        p = subprocess.Popen(['mm3d', 'XYZ2Im', os.path.join(ori, f'Orientation-{im}.xml'),
+                              meas_file, f'Auto-{im}.txt'])
+        p.wait()
+
+
+def _remove_distortion_coeffs(fn_xml):
+    root = ET.parse(fn_xml).getroot()
+
+    dist_coeffs = root.find('CalibrationInternConique').find('CalibDistortion').find('ModRad').findall('CoeffDist')
+    inv_coeffs = root.find('CalibrationInternConique').find('CalibDistortion').find('ModRad').findall('CoeffDistInv')
+
+    for coeff in dist_coeffs + inv_coeffs:
+        coeff.text = '0.0'
+
+    tree = ET.ElementTree(root)
+    tree.write(fn_xml, encoding="utf-8", xml_declaration=True)
+
+
+def _update_autocal(ori, im):
+    fn_xml = os.path.join(ori, f'Orientation-{im}.xml')
+    root = ET.parse(fn_xml).getroot()
+
+    old_autocal = root.find('OrientationConique').find('FileInterne').text
+    old_autocal = os.path.join(ori, os.path.basename(old_autocal))
+
+    root.find('OrientationConique').find('FileInterne').text = old_autocal
+
+    tree = ET.ElementTree(root)
+    tree.write(fn_xml, encoding="utf-8", xml_declaration=True)

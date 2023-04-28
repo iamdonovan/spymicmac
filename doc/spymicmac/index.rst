@@ -1,7 +1,7 @@
-sPyMicMac
+spymicmac API
 =================================
 
-sPyMicMac modules and shell scripts
+spymicmac modules and shell scripts
 
 .. toctree::
    :maxdepth: 2

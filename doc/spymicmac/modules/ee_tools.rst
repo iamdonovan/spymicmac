@@ -2,7 +2,7 @@ spymicmac.ee_tools
 =================================
 
 .. note::
-    Before using sPyMicMac.ee_tools, you will need to run ee.Authenticate(), in order to authorize the access needed
+    Before using spymicmac.ee_tools, you will need to run ee.Authenticate(), in order to authorize the access needed
     by EarthEngine. To do this from the python terminal, run the following:
     ::
 
@@ -12,7 +12,7 @@ spymicmac.ee_tools
     This will open a browser window and prompt you to select your Google account for authentication. It will generate
     an authorization code which you should then copy and paste into the prompt in the python terminal.
 
-    After you have successfully authenticated, you should be able to use sPyMicMac.ee_tools normally (note that you
+    After you have successfully authenticated, you should be able to use spymicmac.ee_tools normally (note that you
     will need to explicitly import ``ee_tools`` - it is not loaded by ``spymicmac.__init__.py``, in order to prevent
     authorization errors):
     ::

@@ -2,6 +2,6 @@ remove_measures
 =================================
 
 .. argparse::
-   :filename: ../spymicmac/tools/remove_measures.py
+   :module: spymicmac.tools.remove_measures
    :func: _argparser
    :prog: remove_measures

@@ -7,17 +7,18 @@ import netrc
 import geopandas as gpd
 import numpy as np
 from glob import glob
+import pyproj
 from osgeo import gdal
 from shapely.geometry.polygon import Polygon
 from usgs import api, USGSAuthExpiredError
+from pybob.GeoImg import GeoImg
 
 
 def get_login_creds():
     """
     Read a user's .netrc file and return the login credentials.
 
-    :return:
-        - **creds** -- the netrc.netrc credentials.
+    :return: **creds** -- the netrc.netrc credentials.
     """
 
     # first, check whether .netrc exists in the home directory
@@ -35,8 +36,7 @@ def authenticate():
     """
     Use the credentials stored in the user's .netrc file to authenticate the user on earthexplorer.usgs.gov
 
-    :return:
-        -- **login** (*dict*) -- the response from the login attempt
+    :return: **login** (*dict*) -- the response from the login attempt
     """
     creds = get_login_creds()
     user, _, pwd = creds.authenticators('earthexplorer.usgs.gov')
@@ -59,8 +59,7 @@ def read_coords(result):
     Parse a search result returned from USGS and create a list of coordinates for the image footprint.
 
     :param dict result: the USGS search result
-    :return:
-        -- **coords** (*list*) -- a list of coordinates
+    :return: **coords** (*list*) -- a list of coordinates
     """
     corner_names = ['NW', 'NE', 'SE', 'SW']
     corner_fields = [d for d in result['metadataFields'] if 'Corner' in d['fieldName'] and 'dec' in d['fieldName']]
@@ -85,8 +84,7 @@ def get_usgs_footprints(imlist, dataset='DECLASSII'):
     :param list imlist: a list of image names.
     :param str dataset: the USGS dataset name to search (default: DECLASSII).
 
-    :return:
-        -- **gdf** (*GeoDataFrame*) -- a GeoDataFrame of image footprints.
+    :return: **footprints** (*GeoDataFrame*) -- a GeoDataFrame of image footprints.
     """
     # air photos: 'AERIAL_COMBIN'
     gdf = gpd.GeoDataFrame()
@@ -114,8 +112,7 @@ def landsat_to_gdf(results):
     Convert USGS Landsat search results to a GeoDataFrame
 
     :param list results: a list of results (i.e., the 'data' value returned by api.scene_metadata)
-    :return:
-        - **meta_gdf** (*geopandas.GeoDataFrame*) - a GeoDataFrame of search results
+    :return: **meta_gdf** (*geopandas.GeoDataFrame*) - a GeoDataFrame of search results
     """
     meta_gdf = gpd.GeoDataFrame()
 
@@ -139,14 +136,13 @@ def landsat_to_gdf(results):
 def download_cop30_vrt(imlist=None, footprints=None, imgsource='DECLASSII', globstr='OIS*.tif'):
     """
     Create a VRT using Copernicus 30m DSM tiles that intersect image footprints. Creates Copernicus_DSM.vrt using files
-        downloaded to cop30_dem/ within the current directory.
+    downloaded to cop30_dem/ within the current directory.
 
     :param list imlist: a list of image filenames. If None, uses globstr to search for images in the current directory.
     :param GeoDataFrame footprints: a GeoDataFrame of image footprints. If None, uses spymicmac.usgs.get_usgs_footprints
         to download footprints based on imlist.
     :param str imgsource: the EE Dataset name for the images (default: DECLASSII)
     :param str globstr: the search string to use to find images in the current directory.
-    :return:
     """
 
     if imlist is None:
@@ -210,3 +206,23 @@ def lat_prefix(lat):
 
 def format_cop30(lat, lon):
     return f'Copernicus_DSM_COG_10_{lat}_00_{lon}_00_DEM'
+
+
+def to_wgs84_ellipsoid(fn_dem):
+    """
+    Convert a DEM to WGS84 ellipsoid heights, using the EGM08 Geoid.
+
+    :param str fn_dem: the filename of the DEM to convert.
+    """
+    proj_data = pyproj.datadir.get_data_dir()
+
+    if not os.path.exists(os.path.join(proj_data, 'egm08_25.gtx')):
+        print('Downloading egm08_25.gtx from osgeo.org')
+        this_url = 'https://download.osgeo.org/proj/vdatum/egm08_25/egm08_25.gtx'
+        urllib.request.urlretrieve(this_url, os.path.join(proj_data, 'egm08_25.gtx'))
+
+    dem = GeoImg(fn_dem)
+    geoid = GeoImg(os.path.join(proj_data, 'egm08_25.gtx')).reproject(dem)
+
+    ell = dem.copy(new_raster=(dem.img + geoid.img))
+    ell.write(os.path.splitext(fn_dem)[0] + '_ell.tif')

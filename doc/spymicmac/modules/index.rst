@@ -1,4 +1,4 @@
-spymicmac modules
+python modules
 =================================
 
 .. toctree::

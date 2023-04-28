@@ -64,13 +64,13 @@ installed by running the following:
 
 In a nutshell, the basic idea is: clone the MicMac git repository, then build the source code. Simple!
 
-Installing sPyMicMac
+Installing spymicmac
 #####################
-sPyMicMac is available in a number of ways - either installing from source or packaged via PyPI or conda-forge.
+spymicmac is available in a number of ways - either installing from source or packaged via PyPI or conda-forge.
 
 via PyPI
 ------------
-As of version 0.1, sPyMicMac is available via PyPI. To install the latest packaged version into your python environment,
+As of version 0.1, spymicmac is available via PyPI. To install the latest packaged version into your python environment,
 simply run:
 
 .. code-block:: sh
@@ -79,7 +79,7 @@ simply run:
 
 via conda-forge
 -----------------
-As of version 0.1.1, sPyMicMac is available via conda-forge. To install the latest version, run:
+As of version 0.1.1, spymicmac is available via conda-forge. To install the latest version, run:
 
 .. code-block:: sh
 
@@ -92,15 +92,15 @@ To get started, clone the repository, then navigate to the directory where the r
 
 .. code-block:: sh
 
-    git clone https://github.com/iamdonovan/sPyMicMac.git
+    git clone https://github.com/iamdonovan/spymicmac.git
 
 Optional: Preparing a python environment
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-If you like, you can set up a dedicated python environment for your sPyMicMac needs. This can be handy, in case any
-packages required by sPyMicMac clash with packages in your default environment. Our personal preference
+If you like, you can set up a dedicated python environment for your spymicmac needs. This can be handy, in case any
+packages required by spymicmac clash with packages in your default environment. Our personal preference
 is `conda <https://docs.conda.io/en/latest/>`_, but your preferences may differ.
 
-The git repository has a file, environment.yml, which provides a working environment for sPyMicMac and conda.
+The git repository has a file, environment.yml, which provides a working environment for spymicmac and conda.
 Once you have conda installed, simply run:
 
 .. code-block:: sh
@@ -108,18 +108,18 @@ Once you have conda installed, simply run:
     conda env create -f environment.yml
 
 This will create a new conda environment, called spymicmac, which will have all of the various python packages
-necessary to run sPyMicMac. To activate the new environment, type:
+necessary to run spymicmac. To activate the new environment, type:
 
 .. code-block:: sh
 
     conda activate spymicmac
 
 And you should be ready to go. Note that you will have to activate this environment any time you wish to run
-sPyMicMac scripts and tools, if it is not already activated in your terminal.
+spymicmac scripts and tools, if it is not already activated in your terminal.
 
 Installing via pip
 ^^^^^^^^^^^^^^^^^^^^
-Once you have the environment prepared (or not), run pip from inside the ``sPyMicMac`` directory:
+Once you have the environment prepared (or not), run pip from inside the ``spymicmac`` directory:
 
 .. code-block:: sh
 

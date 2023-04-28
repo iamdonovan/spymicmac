@@ -15,6 +15,7 @@
 import os
 import sys
 from unittest.mock import MagicMock
+from spymicmac import __version__
 
 
 class Mock(MagicMock):
@@ -34,7 +35,6 @@ autodoc_mock_imports = ['numpy',  'cv2', 'ee', 'usgs', 'rtree', 'osgeo', 'pyproj
                         'opencv-python', 'pandas', 'geopandas',
                         'skimage', 'skimage.io', 'skimage.feature', 'skimage.filters', 'skimage.measure',
                         'skimage.morphology', 'skimage.transform',
-                        'pymmaster.mmaster_tools',
                         'pybob.bob_tools', 'pybob.ddem_tools', 'pybob.GeoImg', 'pybob.image_tools', 'pybob.landsat_tools',
 ]
 
@@ -56,9 +56,9 @@ copyright = '2023, Robert McNabb'
 author = 'Robert McNabb'
 
 # The short X.Y version
-version = '0.1.2'
+version = __version__
 # The full version, including alpha/beta/rc tags
-version = '0.1.2-dev'
+release = version
 
 
 # -- General configuration ---------------------------------------------------

@@ -31,6 +31,6 @@ generate_micmac_measures
 
 
 .. argparse::
-   :filename: ../spymicmac/tools/generate_micmac_measures.py
+   :module: spymicmac.tools.generate_micmac_measures
    :func: _argparser
    :prog: generate_micmac_measures

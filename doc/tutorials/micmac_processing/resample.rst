@@ -37,10 +37,10 @@ The re-sampled images will have OIS-Reech\_ appended to the filename:
 These are the images that you will use for the remaining steps - you might want to create a new folder to place the
 original images.
 
-kh-9 hexagon
---------------
+kh-9 hexagon mapping camera
+-----------------------------
 
-To resample KH-9 Hexagon Mapping Camera images, use either :py:meth:`spymicmac.image.resample_hex` or
+To resample KH-9 Hexagon Mapping Camera images, use either :py:meth:`spymicmac.resample.resample_hex` or
 :doc:`../../spymicmac/scripts/resample_hexagon`.
 
 

@@ -3,7 +3,9 @@ import argparse
 import shutil
 import tarfile
 from glob import glob
-from spymicmac.image import join_hexagon, find_reseau_grid, resample_hex, remove_crosses
+from spymicmac.image import join_hexagon
+from spymicmac.matching import find_reseau_grid, remove_crosses
+from spymicmac.resample import resample_hex
 from spymicmac import micmac
 
 
@@ -109,13 +111,16 @@ def main():
         do_step = [step in args.steps for step in proc_steps]
     do = dict(zip(proc_steps, do_step))
 
-    # create the necessary xml files
-    micmac.init_autocal()
-    micmac.create_localchantier_xml(add_sfs=args.add_sfs)
-    micmac.generate_measures_files(joined=True)
+    # create the necessary xml files, but only if they don't exist
+    if not os.path.exists(os.path.join('Ori-Init', 'AutoCal_Foc-304800_KH9MC.xml')):
+        micmac.init_autocal()
 
-    os.makedirs('Ori-InterneScan', exist_ok=True)
+    if not os.path.exists('MicMac-LocalChantierDescripteur.xml'):
+        micmac.create_localchantier_xml(add_sfs=args.add_sfs)
+
     if not os.path.isfile(os.path.join('Ori-InterneScan', 'MeasuresCamera.xml')):
+        os.makedirs('Ori-InterneScan', exist_ok=True)
+        micmac.generate_measures_files(joined=True)
         shutil.move('MeasuresCamera.xml', 'Ori-InterneScan')
 
     # now, do all the steps we were asked to do, in order

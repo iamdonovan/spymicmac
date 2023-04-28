@@ -2,6 +2,6 @@ resample_hexagon
 =================================
 
 .. argparse::
-   :filename: ../spymicmac/tools/resample_hexagon.py
+   :module: spymicmac.tools.resample_hexagon
    :func: _argparser
    :prog: resample_hexagon

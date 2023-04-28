@@ -1,7 +1,7 @@
 Tutorials
 =======================
 
-Here, you will find information about the workflow for using sPyMicMac to process KH-9 and historic air photos.
+Here, you will find information about the workflow for using spymicmac to process KH-9 and historic air photos.
 
 .. image:: ../img/workflow.png
     :width: 600

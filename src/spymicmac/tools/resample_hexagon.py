@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 import argparse
 import multiprocessing as mp
-from spymicmac.image import resample_hex
+from spymicmac.resample import resample_hex
 
 
 def batch_wrapper(argsin):
