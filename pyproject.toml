@@ -1,0 +1,79 @@
+[build-system]
+requires = ["setuptools>=61.0", "setuptools_scm[toml]>=6.2"]
+build-backend = "setuptools.build_meta"
+
+
+[project]
+name = 'spymicmac'
+authors = [
+    {name='Bob McNabb', email='robertmcnabb@gmail.com'},
+]
+description = "a python package for processing KH-9 and historical aerial imagery using MicMac"
+readme = "README.md"
+license = {text = "GPL-3.0-or-later"}
+classifiers = [
+      'Intended Audience :: Science/Research',
+      'License :: OSI Approved :: GNU General Public License v3 (GPLv3)',
+      'Natural Language :: English',
+      'Programming Language :: Python :: 3',
+      'Programming Language :: Python :: 3.10',
+      'Programming Language :: Python :: 3.11',
+      'Programming Language :: Unix Shell',
+      'Topic :: Scientific/Engineering :: GIS',
+      'Topic :: Scientific/Engineering :: Image Processing'
+]
+requires-python = ">=3.10"
+dependencies = [
+      'geopandas',
+      'matplotlib',
+      'usgs',
+      'gdal',
+      'opencv-python',
+      'lxml',
+      'scikit-image>=0.19',
+      'pillow>9.1.0',
+      'pybob>=0.25.1',
+      'pyasn1',
+      'sphinx',
+      'sphinx-argparse',
+      'sphinx-rtd-theme',
+      'earthengine-api'
+]
+dynamic = ["version"]
+
+
+[project.urls]
+Homepage = "https://github.com/iamdonovan/spymicmac"
+"Bug Tracker" = "https://github.com/iamdonovan/spymicmac/issues"
+
+
+[project.scripts]
+balance_images = 'spymicmac.tools.balance_images:main'
+block_orientation = 'spymicmac.tools.block_orientation:main'
+combine_auto_measures = 'spymicmac.tools.combine_auto_measures:main'
+create_localchantier_xml = 'spymicmac.tools.create_localchantier_xml:main'
+download_cop30_vrt = 'spymicmac.tools.download_cop30_vrt:main'
+find_reseau_grid = 'spymicmac.tools.find_reseau_grid:main'
+generate_micmac_measures = 'spymicmac.tools.generate_micmac_measures:main'
+join_hexagon = 'spymicmac.tools.join_hexagon:main'
+mosaic_micmac_tiles = 'spymicmac.tools.mosaic_micmac_tiles:main'
+move_bad_tapas = 'spymicmac.tools.move_bad_tapas:main'
+preprocess_kh9 = 'spymicmac.tools.preprocess_kh9:main'
+post_process_micmac = 'spymicmac.tools.post_process_micmac:main'
+register_ortho = 'spymicmac.tools.register_ortho:main'
+remove_crosses = 'spymicmac.tools.remove_crosses:main'
+remove_measures = 'spymicmac.tools.remove_measures:main'
+resample_hexagon = 'spymicmac.tools.resample_hexagon:main'
+write_micmac_xml = 'spymicmac.tools.write_micmac_xml:main'
+
+
+[tool.setuptools]
+include-package-data = true
+zip-safe = false
+
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+
+[tool.setuptools_scm]
