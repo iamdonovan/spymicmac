@@ -1,8 +1,8 @@
 [![Documentation Status](https://readthedocs.org/projects/spymicmac/badge/?version=latest)](https://spymicmac.readthedocs.io/en/latest/?badge=latest)
 [![PyPI version](https://badge.fury.io/py/spymicmac.svg)](https://badge.fury.io/py/spymicmac)
-[![Anaconda-Server Badge](https://anaconda.org/conda-forge/spymicmac/badges/version.svg)](https://anaconda.org/conda-forge/spymicmac)
+[![Conda Version](https://img.shields.io/conda/vn/conda-forge/spymicmac.svg)](https://anaconda.org/conda-forge/spymicmac)
+[![Conda Platforms](https://img.shields.io/conda/pn/conda-forge/spymicmac.svg)](https://anaconda.org/conda-forge/spymicmac)
 [![Anaconda-Server Badge](https://anaconda.org/conda-forge/spymicmac/badges/license.svg)](https://anaconda.org/conda-forge/spymicmac)
-[![Anaconda-Server Badge](https://anaconda.org/conda-forge/spymicmac/badges/platforms.svg)](https://anaconda.org/conda-forge/spymicmac)
 
 
 # sPyMicMac
