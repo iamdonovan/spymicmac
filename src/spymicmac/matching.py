@@ -27,6 +27,118 @@ from spymicmac import image, micmac, resample
 ######################################################################################################################
 # tools for matching fiducial markers (or things like fiducial markers)
 ######################################################################################################################
+def find_fiducials(fn_img, templates, fn_cam=None):
+    """
+    Match the location of fiducial markers for a scanned aerial photo.
+
+    :param str fn_img: the filename of the image to find fiducial markers in.
+    :param dict templates: a dict of (name, template) pairs corresponding to each fiducial marker.
+    :param str fn_cam: the filename of the MeasuresCamera.xml file for the image. defaults to
+        Ori-InterneScan/MeasuresCamera.xml
+    """
+    img = io.imread(fn_img)
+
+    coords_all = []
+
+    for fid, templ in templates.items():
+        res = cv2.matchTemplate(img.astype(np.uint8), templ.astype(np.uint8), cv2.TM_CCORR_NORMED)
+
+        coords = peak_local_max(res, threshold_rel=0.9, min_distance=100, num_peaks=5).astype(float)
+        coords += templ.shape[0] / 2 - 0.5
+
+        these_coords = pd.DataFrame()
+        these_coords['im_col'] = coords[:, 1]
+        these_coords['im_row'] = coords[:, 0]
+        these_coords['gcp'] = fid
+
+        coords_all.append(these_coords)
+
+    coords_all = pd.concat(coords_all, ignore_index=True)
+
+    if fn_cam is None:
+        fn_cam = os.path.join('Ori-InterneScan', 'MeasuresCamera.xml')
+    measures_cam = micmac.parse_im_meas(fn_cam)
+
+    scale = np.mean((coords_all.im_col.max() - coords_all.im_col.min(),
+                     coords_all.im_row.max()) - coords_all.im_row.min()) / \
+        np.mean((measures_cam.j.max() - measures_cam.j.min(),
+                 measures_cam.i.max() - measures_cam.i.min()))
+
+    scaled = measures_cam.copy()
+    scaled['j'] -= scaled['j'].min()
+    scaled['i'] -= scaled['i'].min()
+
+    scaled['j'] *= scale
+    scaled['i'] *= scale
+
+    model = AffineTransform()
+    model.estimate(scaled[['j', 'i']].values,
+                   measures_cam[['j', 'i']].values)
+
+    for ind, row in coords_all.iterrows():
+        src = row[['im_col', 'im_row']].values.reshape(1, 2).astype(float)
+        dst = measures_cam.loc[measures_cam['name'] == row['gcp'], ['j', 'i']].values
+
+        resid = model.residuals(src, dst)
+        coords_all.loc[ind, 'resid'] = resid[0]
+
+    coords_all['resid'] = coords_all['resid'].astype(float)
+
+    inds = []
+    for fid in templates.keys():
+        inds.append(coords_all[coords_all['gcp'] == fid]['resid'].idxmin())
+
+    coords_all = coords_all.loc[inds]
+
+    model.estimate(coords_all[['im_col', 'im_row']].values,
+                   measures_cam[['j', 'i']].values)
+
+    residuals = model.residuals(coords_all[['im_col', 'im_row']].values,
+                                measures_cam[['j', 'i']].values)
+
+    print('Mean residual: {:.2f} pixels'.format(residuals.mean()))
+
+    # write the measures
+    E = builder.ElementMaker()
+    ImMes = E.MesureAppuiFlottant1Im(E.NameIm(fn_img))
+
+    pt_els = micmac.get_im_meas(coords_all, E)
+    for p in pt_els:
+        ImMes.append(p)
+    os.makedirs('Ori-InterneScan', exist_ok=True)
+
+    outxml = E.SetOfMesureAppuisFlottants(ImMes)
+
+    tree = etree.ElementTree(outxml)
+    tree.write(os.path.join('Ori-InterneScan', 'MeasuresIm-' + fn_img + '.xml'), pretty_print=True,
+               xml_declaration=True, encoding="utf-8")
+
+
+def _corner(size):
+    templ = np.zeros((size, size), dtype=np.uint8)
+    templ[:int(size/2)+1, int(size/2)+1:] = 255
+    return templ
+
+
+def match_fairchild(fn_img, size=101, fn_cam=None):
+    """
+    Match the "fiducial" locations for a Fairchild-style camera (4 "wing" style fiducial markers in the middle of
+    each side of the image).
+
+    :param str fn_img: the filename of the image to find fiducial markers in.
+    :param int size: the size of the template to use (default: 101 pixels)
+    :param str fn_cam: the filename of the MeasuresCamera.xml file for the image. defaults to
+        Ori-InterneScan/MeasuresCamera.xml
+    """
+    templ = _corner(size)
+    fids = [f'P{n}' for n in range(1, 5)]
+    templates = [templ, np.fliplr(templ), templ.T, np.fliplr(templ).T]
+
+    templ_dict = dict(zip(fids, templates))
+
+    find_fiducials(fn_img, templ_dict, fn_cam)
+
+
 def cross_template(shape, width=3):
     """
     Create a cross-shaped template for matching reseau or fiducial marks.
