@@ -120,9 +120,40 @@ def _corner(size):
     return templ
 
 
-def match_fairchild(fn_img, size=101, fn_cam=None):
+def _box(size):
+    templ = np.zeros((size, size), dtype=np.uint8)
+    templ[:int(size / 2) + 1, int(size / 2) + 1:] = 255
+    templ[int(size / 2) + 1:, :int(size / 2) + 1] = 255
+    return templ
+
+
+def templates_from_meas(fn_img, half_size=100):
     """
-    Match the "fiducial" locations for a Fairchild-style camera (4 "wing" style fiducial markers in the middle of
+    Create fiducial templates from points in a MeasuresIm file.
+
+    :param str fn_img: the filename of the image to use. Points for templates will be taken from
+        Ori-InterneScan-Measuresim{fn-img}.xml.
+    :param int half_size: the half-size of the template to create, in pixels (default: 100)
+    :return: **templates** (*dict*) -- a *dict* of (name, template) pairs for each fiducial marker.
+    """
+    fn_meas = os.path.join('Ori-InterneScan', f'MeasuresIm-{fn_img}.xml')
+    meas_im = micmac.parse_im_meas(fn_meas)
+
+    fn_img = fn_meas.split('MeasuresIm-')[1].split('.xml')[0]
+
+    img = io.imread(fn_img)
+
+    templates = []
+    for ind, row in meas_im.iterrows():
+        subimg, _, _ = make_template(img, (row.i, row.j), half_size=half_size)
+        templates.append(subimg)
+
+    return dict(zip(meas_im.name.values, templates))
+
+
+def match_fairchild_k17(fn_img, size=101, fn_cam=None):
+    """
+    Match the "fiducial" locations for a Fairchild K17B-style camera (4 "wing" style fiducial markers in the middle of
     each side of the image).
 
     :param str fn_img: the filename of the image to find fiducial markers in.
