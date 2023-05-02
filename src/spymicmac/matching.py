@@ -678,7 +678,7 @@ def find_kh4_notches(img, size=101):
     matches = []
 
     for jj, ii in zip(search_j, search_i):
-        subimg, _, _ = make_template(img, [ii, jj], 400)
+        subimg, _, _ = make_template(img, [ii, jj], 4 * size)
         # res, this_i, this_j = find_match(subimg, templ, how='max', eq=False)
         res = cv2.matchTemplate(subimg.astype(np.uint8), templ.astype(np.uint8), cv2.TM_CCORR_NORMED)
 
@@ -687,7 +687,10 @@ def find_kh4_notches(img, size=101):
         except IndexError:
             this_i = this_j = np.nan
 
-        matches.append((this_i - 400 + ii, this_j - 400 + jj))
+        this_i += (subimg.shape[0] - res.shape[0]) / 2
+        this_j += (subimg.shape[1] - res.shape[1]) / 2
+
+        matches.append((this_i - 4*size + ii, this_j - 4*size + jj))
 
     return np.array(matches)
 
