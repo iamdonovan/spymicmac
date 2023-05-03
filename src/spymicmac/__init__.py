@@ -9,6 +9,7 @@ from . import matching
 from . import orientation
 from . import register
 from . import resample
+from . import spot
 # from . import ee_tools
 
 
@@ -22,5 +23,6 @@ __all__ = [
     'orientation',
     'register',
     'resample',
+    'spot',
     '__version__'
 ]
