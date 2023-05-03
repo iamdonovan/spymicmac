@@ -21,6 +21,7 @@ from shapely.geometry import LineString, MultiPoint, Point
 import geopandas as gpd
 from pybob.image_tools import nanmedian_filter
 from pybob.ddem_tools import nmad
+from pybob.GeoImg import GeoImg
 from spymicmac import image, micmac, resample
 
 
@@ -677,15 +678,22 @@ def find_grid_matches(tfm_img, refgeo, mask, initM=None, spacing=200, srcwin=60,
     z_corrs = []
     peak_corrs = []
 
-    jj = np.arange(srcwin, spacing * np.ceil((refgeo.img.shape[1]-srcwin) / spacing) + 1, spacing).astype(int)
-    ii = np.arange(srcwin, spacing * np.ceil((refgeo.img.shape[0]-srcwin) / spacing) + 1, spacing).astype(int)
+    if isinstance(refgeo, GeoImg):
+        jj = np.arange(srcwin, spacing * np.ceil((refgeo.img.shape[1]-srcwin) / spacing) + 1, spacing).astype(int)
+        ii = np.arange(srcwin, spacing * np.ceil((refgeo.img.shape[0]-srcwin) / spacing) + 1, spacing).astype(int)
+    else:
+        jj = np.arange(srcwin, spacing * np.ceil((refgeo.shape[1]-srcwin) / spacing) + 1, spacing).astype(int)
+        ii = np.arange(srcwin, spacing * np.ceil((refgeo.shape[0]-srcwin) / spacing) + 1, spacing).astype(int)
 
     search_pts = []
 
     for _i in ii:
         for _j in jj:
             search_pts.append((_j, _i))
-            match, z_corr, peak_corr = do_match(tfm_img, refgeo.img, mask, (_i, _j), srcwin, dstwin)
+            if isinstance(refgeo, GeoImg):
+                match, z_corr, peak_corr = do_match(tfm_img, refgeo.img, mask, (_i, _j), srcwin, dstwin)
+            else:
+                match, z_corr, peak_corr = do_match(tfm_img, refgeo, mask, (_i, _j), srcwin, dstwin)
             match_pts.append(match)
             z_corrs.append(z_corr)
             peak_corrs.append(peak_corr)
