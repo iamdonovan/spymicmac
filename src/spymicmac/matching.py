@@ -919,7 +919,7 @@ def do_match(dest_img, ref_img, mask, pt, srcwin, dstwin):
     return (out_j, out_i), z_corr, peak_corr
 
 
-def get_matches(img1, img2, mask1=None, mask2=None, dense=False):
+def get_matches(img1, img2, mask1=None, mask2=None, dense=False, npix=100, nblocks=None):
     """
     Return keypoint matches found using openCV's ORB implementation.
 
@@ -938,8 +938,8 @@ def get_matches(img1, img2, mask1=None, mask2=None, dense=False):
             kp1, des1 = get_dense_keypoints(img1.astype(np.uint8), mask1, nblocks=1, return_des=True)
             kp2, des2 = get_dense_keypoints(img2.astype(np.uint8), mask2, nblocks=1, return_des=True)
         else:
-            kp1, des1 = get_dense_keypoints(img1.astype(np.uint8), mask1, return_des=True)
-            kp2, des2 = get_dense_keypoints(img2.astype(np.uint8), mask2, return_des=True)
+            kp1, des1 = get_dense_keypoints(img1.astype(np.uint8), mask1, npix=npix, nblocks=nblocks, return_des=True)
+            kp2, des2 = get_dense_keypoints(img2.astype(np.uint8), mask2, npix=npix, nblocks=nblocks, return_des=True)
     else:
         orb = cv2.ORB_create()
         kp1, des1 = orb.detectAndCompute(img1.astype(np.uint8), mask=mask1)
@@ -996,7 +996,10 @@ def get_dense_keypoints(img, mask, npix=100, nblocks=None, return_des=False):
     olap = int(max(0.25 * img.shape[1]/x_tiles, 0.25 * img.shape[0]/y_tiles))
 
     split_img, oy, ox = image.splitter(img, (y_tiles, x_tiles), overlap=olap)
-    split_msk, _, _ = image.splitter(mask, (y_tiles, x_tiles), overlap=olap)
+    if mask is not None:
+        split_msk, _, _ = image.splitter(mask, (y_tiles, x_tiles), overlap=olap)
+    else:
+        split_msk = [None] * len(split_img)
 
     # rel_x, rel_y = get_subimg_offsets(split_img, (y_tiles, x_tiles), overlap=olap)
 
