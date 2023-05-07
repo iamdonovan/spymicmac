@@ -2,7 +2,9 @@ import os
 import argparse
 import shutil
 import tarfile
+import numpy as np
 from glob import glob
+from skimage import io, filters
 from spymicmac.image import join_hexagon
 from spymicmac.matching import find_reseau_grid, remove_crosses
 from spymicmac.resample import resample_hex
@@ -53,6 +55,7 @@ def _argparser():
     - join: joins scanned image halves
     - reseau: finds reseau marker locations in the joined image
     - erase: erases reseau markers from image
+    - filter: use a 1-sigma gaussian filter to smooth the images before resampling
     - resample: resamples images to common size using the reseau marker locations
     - tapioca: calls mm3d Tapioca MulScale to find tie points
     - tapas: calls mm3d Tapas to calibrate camera model, find relative image orientation
@@ -102,7 +105,7 @@ def main():
     parser = _argparser()
     args = parser.parse_args()
 
-    proc_steps = ['extract', 'join', 'reseau', 'erase', 'resample', 'tapioca', 'tapas', 'aperi']
+    proc_steps = ['extract', 'join', 'reseau', 'erase', 'filter', 'resample', 'tapioca', 'tapas', 'aperi']
 
     # check what steps we're running
     if args.steps == 'all':
@@ -170,10 +173,18 @@ def main():
                 print(fn_img)
                 remove_crosses(fn_img + '.tif', nproc=args.nproc)
 
+    if do['filter']:
+        print('Filtering images with a 1-sigma Gaussian Filter')
+        for fn_img in imlist:
+            print(fn_img)
+            img = io.imread(fn_img + '.tif')
+            filt = filters.gaussian(img, sigma=1, preserve_range=True).astype(np.uint8)
+            io.imsave(fn_img + '.tif', filt)
+
     if do['resample']:
         os.makedirs('Orig', exist_ok=True)
         # now, resample the images
-        # TODO: parallelize this
+        # TODO: parallelize/distribute this
         for fn_img in imlist:
             print('Resampling {}'.format(fn_img))
             resample_hex(fn_img + '.tif', scale=args.scale)
