@@ -767,23 +767,29 @@ def block_malt(imlist, nimg=3, ori='Relative', zoomf=8):
     """
     Run mm3d Malt Ortho and mm3d Tawny on successive blocks of images.
 
-    :param iterable imlist: an iterable object of image filenames.
+    :param iterable imlist: an iterable object of image filenames, or an iterable object of lists of image filenames
     :param int nimg: the number of images to use in a block (default: 3)
     :param str ori: the name of the orientation directory (e.g., Ori-Relative). (default: Relative)
     :param int zoomf: the final Zoom level to use (default: 8)
     """
     dirmec = 'MEC-' + ori
 
-    inds = range(0, len(imlist) - (nimg - 1), nimg - 1)
-    if len(inds) == 1 and len(imlist) > nimg:
-        inds = [0, 1]
+    if type(imlist[0]) is str:
+        inds = range(0, len(imlist) - (nimg - 1), nimg - 1)
+        if len(inds) == 1 and len(imlist) > nimg:
+            inds = [0, 1]
+        blocklist = [imlist[ind:ind + nimg] for ind in inds]
+    else:
+        blocklist = imlist
 
-    for block, ind in enumerate(inds):
-        print(imlist[ind:ind + nimg])
+    for block, imgs in enumerate(blocklist):
+        print(imgs)
 
-        malt(imlist[ind:ind + nimg], ori, dirmec='{}_block{}'.format(dirmec, block), zoomf=zoomf)
+        malt(imgs, ori, dirmec='{}_block{}'.format(dirmec, block), zoomf=zoomf)
 
         tawny('{}_block{}'.format(dirmec, block))
+
+        mosaic_micmac_tiles('Orthophotomosaic', '{}_block{}'.format(dirmec, block))
 
 
 def bascule(in_gcps, outdir, img_pattern, sub, ori, outori='TerrainRelAuto',
