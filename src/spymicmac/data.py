@@ -2,16 +2,28 @@
 spymicmac.data is a collection of tools for handling external datasets
 """
 import os
+import sys
 import urllib
 import netrc
+import zipfile
 import geopandas as gpd
 import numpy as np
+from pathlib import Path
 from glob import glob
 import pyproj
 from osgeo import gdal
 from shapely.geometry.polygon import Polygon
 from usgs import api, USGSAuthExpiredError
 from pybob.GeoImg import GeoImg
+
+
+def _check_data_dir():
+    if not _data_dir().exists():
+        os.makedirs(_data_dir(), exist_ok=True)
+
+
+def _data_dir():
+    return Path(sys.prefix, 'share', 'spymicmac')
 
 
 def get_login_creds():
@@ -133,6 +145,14 @@ def landsat_to_gdf(results):
     return meta_gdf.set_crs(epsg=4326)
 
 
+def _clean_imlist(imlist, globstr):
+    if imlist is None:
+        imlist = glob(globstr)
+        imlist.sort()
+
+    return [im.split('OIS-Reech_')[-1].split('.tif')[0] for im in imlist]
+
+
 def download_cop30_vrt(imlist=None, footprints=None, imgsource='DECLASSII', globstr='OIS*.tif'):
     """
     Create a VRT using Copernicus 30m DSM tiles that intersect image footprints. Creates Copernicus_DSM.vrt using files
@@ -145,11 +165,7 @@ def download_cop30_vrt(imlist=None, footprints=None, imgsource='DECLASSII', glob
     :param str globstr: the search string to use to find images in the current directory.
     """
 
-    if imlist is None:
-        imlist = glob(globstr)
-        imlist.sort()
-
-    clean_imlist = [im.split('OIS-Reech_')[-1].split('.tif')[0] for im in imlist]
+    clean_imlist = _clean_imlist(imlist, globstr)
 
     if footprints is None:
         footprints = get_usgs_footprints(clean_imlist, dataset=imgsource)
@@ -216,13 +232,63 @@ def to_wgs84_ellipsoid(fn_dem):
     """
     proj_data = pyproj.datadir.get_data_dir()
 
-    if not os.path.exists(os.path.join(proj_data, 'egm08_25.gtx')):
+    if not Path(proj_data, 'egm08_25.gtx').exists():
         print('Downloading egm08_25.gtx from osgeo.org')
         this_url = 'https://download.osgeo.org/proj/vdatum/egm08_25/egm08_25.gtx'
-        urllib.request.urlretrieve(this_url, os.path.join(proj_data, 'egm08_25.gtx'))
+        urllib.request.urlretrieve(this_url, Path(proj_data, 'egm08_25.gtx'))
 
     dem = GeoImg(fn_dem)
-    geoid = GeoImg(os.path.join(proj_data, 'egm08_25.gtx')).reproject(dem)
+    geoid = GeoImg(Path(proj_data, 'egm08_25.gtx')).reproject(dem)
 
     ell = dem.copy(new_raster=(dem.img + geoid.img))
     ell.write(os.path.splitext(fn_dem)[0] + '_ell.tif')
+
+
+def download_arcticdem_mosaic(imlist=None, footprints=None, imgsource='DECLASSII', globstr='OIS*.tif', res='2m'):
+    """
+    Download the ArcticDEM v3.0 Mosaic tiles that intersect image footprints. Downloads .tar.gz files
+    arctic_dem/ within the current directory.
+
+    :param list imlist: a list of image filenames. If None, uses globstr to search for images in the current directory.
+    :param GeoDataFrame footprints: a GeoDataFrame of image footprints. If None, uses spymicmac.usgs.get_usgs_footprints
+        to download footprints based on imlist.
+    :param str imgsource: the EE Dataset name for the images (default: DECLASSII)
+    :param str globstr: the search string to use to find images in the current directory.
+    :param str res: the DEM resolution to download. Options are 2m, 10m, or 32m (default: 2m)
+    """
+    assert res in ['2m', '10m', '32m'], "res must be one of 2m, 10m, or 32m"
+
+    clean_imlist = _clean_imlist(imlist, globstr)
+
+    if footprints is None:
+        footprints = get_usgs_footprints(clean_imlist, dataset=imgsource)
+
+    os.makedirs('arctic_dem', exist_ok=True)
+
+    arcticdem_tiles = _arcticdem_shp(res=res)
+    intersects = arcticdem_tiles.intersects(footprints.to_crs(arcticdem_tiles.crs).unary_union)
+
+    selection = arcticdem_tiles.loc[intersects].reset_index(drop=True)
+    for ind, row in selection.iterrows():
+        this_path = Path('arctic_dem', row['dem_id'] + '.tar.gz')
+        print('Downloading', row['dem_id'], f'({ind+1}/{selection.shape[0]})')
+        urllib.request.urlretrieve(row['fileurl'], this_path)
+
+
+def _arcticdem_shp(res='2m'):
+    _check_data_dir()
+
+    fn_shp = Path(_data_dir(), 'ArcticDEM_Mosaic_Index_v3_shp', f'ArcticDEM_Mosaic_Index_v3_{res}.shp')
+
+    if not fn_shp.exists():
+        print('Downloading ArcticDEM Mosaic v3 Tile Index from data.pgc.umn.edu')
+        zip_url = 'https://data.pgc.umn.edu/elev/dem/setsm/ArcticDEM/indexes/ArcticDEM_Mosaic_Index_v3_shp.zip'
+        zip_path = Path(_data_dir(), 'ArcticDEM_Mosaic_Index_v3_shp.zip')
+        urllib.request.urlretrieve(zip_url, zip_path)
+
+        with zipfile.ZipFile(Path(_data_dir(), 'ArcticDEM_Mosaic_Index_v3_shp.zip'), 'r') as zip_ref:
+            zip_ref.extractall(Path(_data_dir()))
+
+        os.remove(zip_path)
+
+    return gpd.read_file(fn_shp)
