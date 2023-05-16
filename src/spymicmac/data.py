@@ -27,11 +27,9 @@ def _data_dir():
     return Path(sys.prefix, 'share', 'spymicmac')
 
 
-def get_login_creds():
+def _get_login_creds():
     """
     Read a user's .netrc file and return the login credentials.
-
-    :return: **creds** -- the netrc.netrc credentials.
     """
 
     # first, check whether .netrc exists in the home directory
@@ -45,13 +43,11 @@ def get_login_creds():
         raise FileExistsError("Please ensure that you have a .netrc file stored in your home directory.")
 
 
-def authenticate():
+def _authenticate():
     """
     Use the credentials stored in the user's .netrc file to authenticate the user on earthexplorer.usgs.gov
-
-    :return: **login** (*dict*) -- the response from the login attempt
     """
-    creds = get_login_creds()
+    creds = _get_login_creds()
     user, _, pwd = creds.authenticators('earthexplorer.usgs.gov')
 
     try:
@@ -67,12 +63,9 @@ def authenticate():
     return login
 
 
-def read_coords(result):
+def _read_coords(result):
     """
     Parse a search result returned from USGS and create a list of coordinates for the image footprint.
-
-    :param dict result: the USGS search result
-    :return: **coords** (*list*) -- a list of coordinates
     """
     corner_names = ['NW', 'NE', 'SE', 'SW']
     corner_fields = [d for d in result['metadataFields'] if 'Corner' in d['fieldName'] and 'dec' in d['fieldName']]
@@ -102,7 +95,7 @@ def get_usgs_footprints(imlist, dataset='DECLASSII'):
     # air photos: 'AERIAL_COMBIN'
     gdf = gpd.GeoDataFrame()
 
-    login = authenticate()
+    login = _authenticate()
 
     if login['errorCode'] is not None:
         print('Error logging in to USGS EROS.')
@@ -189,8 +182,8 @@ def download_cop30_vrt(imlist=None, footprints=None, imgsource='DECLASSII', glob
 
     tiles = []
     for pair in pairs:
-        tiles.append(format_cop30(lat_prefix(pair[1]) + '{:02d}'.format(abs(pair[1])),
-                                  lon_prefix(pair[0]) + '{:03d}'.format(abs(pair[0]))))
+        tiles.append(_format_cop30(_lat_prefix(pair[1]) + '{:02d}'.format(abs(pair[1])),
+                                   _lon_prefix(pair[0]) + '{:03d}'.format(abs(pair[0]))))
 
     # now, download the tiles using boto3
     os.makedirs('cop30_dem', exist_ok=True)
@@ -207,21 +200,21 @@ def download_cop30_vrt(imlist=None, footprints=None, imgsource='DECLASSII', glob
     out_vrt = None
 
 
-def lon_prefix(lon):
+def _lon_prefix(lon):
     if lon < 0:
         return 'W'
     else:
         return 'E'
 
 
-def lat_prefix(lat):
+def _lat_prefix(lat):
     if lat < 0:
         return 'S'
     else:
         return 'N'
 
 
-def format_cop30(lat, lon):
+def _format_cop30(lat, lon):
     return f'Copernicus_DSM_COG_10_{lat}_00_{lon}_00_DEM'
 
 
