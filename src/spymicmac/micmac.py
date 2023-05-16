@@ -247,6 +247,35 @@ def generate_measures_files(joined=False):
             print('GCP_{}_{}'.format(row, col), file=f)
 
 
+def create_measurescamera_xml(fn_csv, ori='InterneScan'):
+    """
+    Create a MeasuresCamera.xml file from a csv of fiducial marker locations.
+    Column headers should be:
+
+        gcp, im_row, im_col
+
+    corresponding to the marker name, y location, and x location within the image.
+
+    :param str fn_csv: the filename of the CSV file.
+    :param str ori: the Ori directory to write the MeasuresCamera.xml file to. Defaults to (Ori-)InterneScan.
+    """
+    fids = pd.read_csv(fn_csv)
+
+    E = builder.ElementMaker()
+    ImMes = E.MesureAppuiFlottant1Im(E.NameIm('Glob'))
+
+    pt_els = get_im_meas(fids, E)
+    for p in pt_els:
+        ImMes.append(p)
+
+    outxml = E.SetOfMesureAppuisFlottants(ImMes)
+    tree = etree.ElementTree(outxml)
+
+    os.makedirs(f'Ori-{ori}', exist_ok=True)
+    tree.write(os.path.join(f'Ori-{ori}', 'MeasuresCamera.xml'), pretty_print=True,
+               xml_declaration=True, encoding="utf-8")
+
+
 def create_localchantier_xml(name='KH9MC', short_name='KH-9 Hexagon Mapping Camera', film_size=(460, 220),
                              pattern='.*', focal=304.8, add_sfs=False):
     """
