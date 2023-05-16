@@ -6,6 +6,7 @@ import sys
 import urllib
 import netrc
 import zipfile
+import tarfile
 import geopandas as gpd
 import numpy as np
 from pathlib import Path
@@ -274,6 +275,14 @@ def download_arcticdem_mosaic(imlist=None, footprints=None, imgsource='DECLASSII
         print('Downloading', row['dem_id'], f'({ind+1}/{selection.shape[0]})')
         urllib.request.urlretrieve(row['fileurl'], this_path)
 
+    tarlist = []
+    for tarball in tarlist:
+        _unpack_adem(tarball)
+
+    filelist = glob(os.path.join('arctic_dem', '*reg_dem.tif'))
+    out_vrt = gdal.BuildVRT('ArcticDEM.vrt', filelist, srcNodata=0)
+    out_vrt = None
+
 
 def _arcticdem_shp(res='2m'):
     _check_data_dir()
@@ -292,3 +301,10 @@ def _arcticdem_shp(res='2m'):
         os.remove(zip_path)
 
     return gpd.read_file(fn_shp)
+
+
+def _unpack_adem(tarball):
+    with tarfile.open(Path('arctic_dem', tarball), 'r') as tfile:
+        dem = tfile.getmember(tarball.replace('.tar.gz', '_reg_dem.tif'))
+        dem.name = Path('arctic_dem', dem.name)  # will extract to the current folder
+        tfile.extract(dem)
