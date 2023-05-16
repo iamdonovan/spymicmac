@@ -247,8 +247,8 @@ def to_wgs84_ellipsoid(fn_dem):
 
 def download_arcticdem_mosaic(imlist=None, footprints=None, imgsource='DECLASSII', globstr='OIS*.tif', res='2m'):
     """
-    Download the ArcticDEM v3.0 Mosaic tiles that intersect image footprints. Downloads .tar.gz files
-    arctic_dem/ within the current directory.
+    Download the ArcticDEM v3.0 Mosaic tiles that intersect image footprints. Downloads .tar.gz files to
+    arctic_dem, extracts each DEM, and creates ArcticDEM.vrt in the current directory.
 
     :param list imlist: a list of image filenames. If None, uses globstr to search for images in the current directory.
     :param GeoDataFrame footprints: a GeoDataFrame of image footprints. If None, uses spymicmac.usgs.get_usgs_footprints
