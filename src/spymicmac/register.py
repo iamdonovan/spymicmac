@@ -269,16 +269,24 @@ def _search_size(imshape):
     return int(max(min_dst, dst))
 
 
-def register_ortho(fn_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, landmask=None, footprints=None,
-                   im_subset=None, block_num=None, ori='Relative', ortho_res=8.,
-                   imgsource='DECLASSII', density=200, out_dir=None, allfree=True):
-    """
-    Register a relative orthoimage and DEM to a reference orthorectified image and DEM.
+def _get_last_malt(dirmec):
+    dem_list = sorted(glob('Z_Num*STD-MALT.tif', root_dir=dirmec))
+    level = int(re.findall(r'\d+', dem_list[-1].split('_')[1])[0])
+    zoomf = int(re.findall(r'\d+', dem_list[-1].split('_')[2])[0])
 
-    :param str fn_ortho: path to relative orthoimage
-    :param str fn_ref: path to reference orthorectified image
-    :param str fn_reldem: path to relative DEM
+    return f'Z_Num{level}_DeZoom{zoomf}_STD-MALT.tif'
+
+
+def register_relative(dirmec, fn_dem, fn_ref=None, fn_ortho=None, glacmask=None, landmask=None, footprints=None,
+                      im_subset=None, block_num=None, ori='Relative', ortho_res=8.,
+                      imgsource='DECLASSII', density=200, out_dir=None, allfree=True, useortho=False):
+    """
+    Register a relative DEM or orthoimage to a reference DEM and/or orthorectified image.
+
+    :param str dirmec: the name of the MEC directory to read the relative DEM from (e.g., MEC-Relative)
     :param str fn_dem: path to reference DEM
+    :param str fn_ref: path to reference orthorectified image (optional)
+    :param str fn_ortho: path to relative orthoimage (optional)
     :param str glacmask: path to file of glacier outlines (i.e., an exclusion mask)
     :param str landmask: path to file of land outlines (i.e., an inclusion mask)
     :param str footprints: path to shapefile of image outlines. If not set, will download from USGS.
@@ -290,8 +298,13 @@ def register_ortho(fn_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, landmask=
     :param int density: pixel spacing to look for GCPs (default: 200)
     :param str out_dir: output directory to save auto GCP files to (default: auto_gcps)
     :param bool allfree: run Campari setting all parameters free (default: True)
+    :param bool useortho: use the orthomosaic in Ortho-{dirmec} rather than the DEM (default: False). If fn_ortho is
+        set, uses that file instead.
     """
     print('start.')
+
+    if fn_ortho is not None or useortho:
+        assert fn_ref is not None, "If using ortho image, fn_ref must be set."
 
     if out_dir is None:
         out_dir = 'auto_gcps'
@@ -303,22 +316,35 @@ def register_ortho(fn_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, landmask=
     else:
         subscript = ''
 
-    ort_dir = os.path.dirname(fn_ortho)
+    # use the supplied dirmec to get the ortho directory
+    ort_dir = 'Ortho-' + dirmec
 
     imlist, match_pattern = _get_imlist(im_subset)
 
-    ref_img = GeoImg(fn_ref)
-    # ref_lowres = ref_img.resample(init_res)
-    # resamp_fact = init_res / ref_img.dx
+    # if we're using the ortho image, load the reference ortho
+    if useortho:
+        ref_img = GeoImg(fn_ref)
+    # otherwise, load the reference dem
+    else:
+        ref_img = GeoImg(fn_dem)
 
     utm_str = _get_utm_str(ref_img.epsg)
 
-    ortho = imread(fn_ortho)
-    # ortho_ = Image.fromarray(ortho)
+    rel_dem = GeoImg(os.path.join(dirmec, _get_last_malt(dirmec)))
+    if useortho:
+        if fn_ortho is None:
+            fn_reg = os.path.join(ort_dir, 'Orthophotomosaic.tif')
+        else:
+            fn_reg = fn_ortho
+        reg_img = imread(fn_reg)
+        fn_tfw = fn_reg.replace('.tif', '.tfw')
+    else:
+        fn_reg = os.path.join(dirmec, _get_last_malt(dirmec))
+        fn_tfw = fn_reg.replace('.tif', '.tfw')
+        reg_img = imread(fn_reg)
 
-    fn_tfw = fn_ortho.replace('.tif', '.tfw')
     with open(fn_tfw, 'r') as f:
-        ortho_gt = [float(l.strip()) for l in f.readlines()]
+        reg_gt = [float(l.strip()) for l in f.readlines()]
 
     if footprints is None:
         clean_imlist = [im.split('OIS-Reech_')[-1].split('.tif')[0] for im in imlist]
@@ -329,10 +355,10 @@ def register_ortho(fn_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, landmask=
 
     mask_full, _, ref_img = _get_mask(footprints, ref_img, imlist, landmask, glacmask)
 
-    Minit, _, centers = orientation.transform_centers(ortho_gt, ref_img, imlist, footprints, 'Ori-{}'.format(ori))
-    rough_tfm = warp(ortho, Minit, output_shape=ref_img.shape, preserve_range=True)
+    Minit, _, centers = orientation.transform_centers(reg_gt, ref_img, imlist, footprints, 'Ori-{}'.format(ori))
+    rough_tfm = warp(reg_img, Minit, output_shape=ref_img.shape, preserve_range=True)
 
-    rough_spacing = np.round(max(ref_img.shape) / 20 / 1000) * 1000
+    rough_spacing = max(1000, np.round(max(ref_img.shape) / 20 / 1000) * 1000)
 
     rough_gcps = matching.find_grid_matches(rough_tfm, ref_img, mask_full, Minit,
                                             spacing=int(rough_spacing), dstwin=int(rough_spacing))
@@ -341,10 +367,10 @@ def register_ortho(fn_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, landmask=
                              rough_gcps[['orig_j', 'orig_i']].values), AffineTransform,
                             min_samples=6, residual_threshold=200, max_trials=5000)
 
-    rough_tfm = warp(ortho, model, output_shape=ref_img.shape, preserve_range=True)
+    rough_tfm = warp(reg_img, model, output_shape=ref_img.shape, preserve_range=True)
 
     rough_geo = ref_img.copy(new_raster=rough_tfm)
-    rough_geo.write('Orthophoto{}_geo.tif'.format(subscript), dtype=np.uint8)
+    rough_geo.write('Register{}_rough_geo.tif'.format(subscript))
 
     fig, ax = plt.subplots(1, 2, figsize=(7, 5))
     ax[0].imshow(rough_tfm[::10, ::10], extent=[0, rough_tfm.shape[1], rough_tfm.shape[0], 0], cmap='gray')
@@ -362,8 +388,8 @@ def register_ortho(fn_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, landmask=
 
     gcps = gcps.loc[mask_full[gcps.search_i, gcps.search_j] == 255]
 
-    gcps['rel_x'] = ortho_gt[4] + gcps['orig_j'].values * ortho_gt[0]  # need the original image coordinates
-    gcps['rel_y'] = ortho_gt[5] + gcps['orig_i'].values * ortho_gt[3]
+    gcps['rel_x'] = reg_gt[4] + gcps['orig_j'].values * reg_gt[0]  # need the original image coordinates
+    gcps['rel_y'] = reg_gt[5] + gcps['orig_i'].values * reg_gt[3]
 
     gcps['elevation'] = 0
     gcps.set_crs(crs=ref_img.proj4, inplace=True)
@@ -371,14 +397,16 @@ def register_ortho(fn_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, landmask=
     gcps.dropna(inplace=True)
     print('{} potential matches found'.format(gcps.shape[0]))
 
-    print('loading dems')
-    dem = GeoImg(fn_dem, dtype=np.float32)
-    rel_dem = GeoImg(fn_reldem)
+    if useortho:
+        print('loading dems')
+        dem = GeoImg(fn_dem, dtype=np.float32)
+    else:
+        dem = ref_img
 
     # gcps.crs = {'init': 'epsg:{}'.format(ref_img.epsg)}
     for i, row in gcps.to_crs(crs=dem.proj4).iterrows():
         gcps.loc[i, 'elevation'] = dem.raster_points([(row.geometry.x, row.geometry.y)], nsize=3, mode='linear')
-        if os.path.exists(fn_ortho.replace('.tif', '.tfw')):
+        if os.path.exists(fn_reg.replace('.tif', '.tfw')):
             gcps.loc[i, 'el_rel'] = rel_dem.raster_points([(row.rel_x, row.rel_y)], nsize=3, mode='linear')
 
     # drop any gcps where we don't have a DEM value or a valid match
@@ -449,7 +477,7 @@ def register_ortho(fn_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, landmask=
     gcps.to_file(os.path.join(out_dir, 'AutoGCPs{}.shp'.format(subscript)))
 
     fig1 = plt.figure(figsize=(7, 5))
-    plt.imshow(ortho[::5, ::5], cmap='gray', extent=[0, ortho.shape[1], ortho.shape[0], 0])
+    plt.imshow(reg_img[::5, ::5], cmap='gray', extent=[0, reg_img.shape[1], reg_img.shape[0], 0])
     plt.plot(gcps.orig_j, gcps.orig_i, 'r+')
     plt.quiver(gcps.orig_j, gcps.orig_i, gcps.camp_xres, gcps.camp_yres, color='r')
 
