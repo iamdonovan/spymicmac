@@ -13,7 +13,9 @@ sphinx:
 build:
   os: "ubuntu-20.04"
   tools:
-    python: "3.10"
+    python: "mambaforge-4.10"
+  commands:
+    - mamba install -c conda-forge gdal
 
 # Build the doc in offline formats
 # formats:
