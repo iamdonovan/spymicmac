@@ -2,6 +2,6 @@ register_ortho
 =================================
 
 .. argparse::
-   :module: spymicmac.tools.register_ortho
+   :module: spymicmac.tools.register_relative
    :func: _argparser
-   :prog: register_ortho
+   :prog: register_relative

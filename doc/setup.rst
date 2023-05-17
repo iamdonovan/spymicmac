@@ -138,31 +138,33 @@ Assuming that you haven't run into any errors, you should be set up. You can ver
 
 .. code-block:: sh
 
-    register_ortho -h
+    register_relative -h
 
 From the command line. You should see the following output (or something very similar):
 
 .. code-block:: text
 
-    usage: register_ortho [-h] [-glacmask GLACMASK] [-landmask LANDMASK] [-footprints FOOTPRINTS]
-                          [-im_subset IM_SUBSET [IM_SUBSET ...]] [-b BLOCK_NUM] [-ori ORI]
-                          [-ortho_res ORTHO_RES] [-imgsource IMGSOURCE] [-density DENSITY]
-                          fn_ortho fn_ref fn_dem fn_reldem
+    usage: register_relative [-h] [-ort FN_ORTHO] [-ref FN_REF] [-glacmask GLACMASK] [-landmask LANDMASK]
+                             [-footprints FOOTPRINTS] [-im_subset IM_SUBSET [IM_SUBSET ...]] [-b BLOCK_NUM] [-ori ORI]
+                             [-ortho_res ORTHO_RES] [-imgsource IMGSOURCE] [-density DENSITY] [-no_allfree] [-useortho]
+                             dirmec fn_dem
 
-    Register a relative orthoimage and DEM to a reference orthorectified image and DEM.
+    Register a relative DEM or orthoimage to a reference DEM and/or orthorectified image.
 
     positional arguments:
-      fn_ortho              non-referenced orthophoto mosaic
-      fn_ref                georeferenced satellite image
-      fn_dem                dem
-      fn_reldem             relative dem corresponding to ortho
+      dirmec                the name of the MEC directory to read the relative DEM from (e.g., MEC-Relative)
+      fn_dem                path to reference DEM
 
-    optional arguments:
+    options:
       -h, --help            show this help message and exit
+      -ort FN_ORTHO, --fn_ortho FN_ORTHO
+                            path to relative orthoimage (optional)
+      -ref FN_REF, --fn_ref FN_REF
+                            path to reference orthorectified image (optional)
       -glacmask GLACMASK    path to shapefile of glacier outlines (i.e., an exclusion mask)
       -landmask LANDMASK    path to shapefile of land outlines (i.e., an inclusion mask)
       -footprints FOOTPRINTS
-                            path to shapefile of image outlines. If not set, will download from USGS.
+                            path to shapefile of image outlines. If not set, will attempt to download from USGS.
       -im_subset IM_SUBSET [IM_SUBSET ...]
                             subset of raw images to work with (default all)
       -b BLOCK_NUM, --block_num BLOCK_NUM
@@ -172,5 +174,5 @@ From the command line. You should see the following output (or something very si
       -imgsource IMGSOURCE  USGS dataset name for images [DECLASSII]
       -density DENSITY      pixel spacing to look for GCPs [200]
       -no_allfree           run Campari with AllFree set to False
-
-
+      -useortho             use the orthomosaic in Ortho-{dirmec} rather than the DEM (default: False). If fn_ortho
+                            is set, uses that file instead.
