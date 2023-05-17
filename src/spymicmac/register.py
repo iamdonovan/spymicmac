@@ -118,12 +118,13 @@ def _get_utm_str(epsg):
     epsg_str = str(epsg)
     hemi_dict = {'6': 'N', '7': 'S'}
 
-    if epsg_str[:2] == '32':
-        utm_str = epsg_str[-2:] + hemi_dict[epsg_str[2]]
-    else:
-        utm_str = 'not utm'
+    if epsg is None:
+        return 'not utm'
 
-    return utm_str
+    if epsg_str[:2] == '32':
+        return epsg_str[-2:] + hemi_dict[epsg_str[2]]
+    else:
+        return 'not utm'
 
 
 def warp_image(model, ref, img):
