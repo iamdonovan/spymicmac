@@ -35,8 +35,6 @@ autodoc_mock_imports = ['numpy',  'cv2', 'ee', 'usgs', 'rtree', 'osgeo', 'pyproj
                         'skimage', 'skimage.io', 'skimage.feature', 'skimage.filters', 'skimage.measure',
                         'skimage.morphology', 'skimage.transform', 'usgs', 'ee',
                         'pybob.bob_tools', 'pybob.ddem_tools', 'pybob.GeoImg', 'pybob.image_tools', 'pybob.landsat_tools',
-                        'spymicmac.data', 'spymicmac.ee_tools', 'spymicmac.image', 'spymicmac.matching',
-                        'spymicmac.micmac', 'spymicmac.orientation', 'spymicmac.register', 'spymicmac.resample'
 ]
 
 sys.modules.update((mod_name, Mock()) for mod_name in autodoc_mock_imports)
