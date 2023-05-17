@@ -21,8 +21,8 @@ formats:
   - htmlzip
 
 # use environment.yml to set up python using conda
-conda:
-  environment: environment.yml
+# conda:
+#   environment: environment.yml
 
 # Optionally set the version of Python and requirements required to build your docs
 python:
