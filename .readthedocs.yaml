@@ -22,7 +22,7 @@ formats:
 
 # use environment.yml to set up python using conda
 conda:
-  environment: environment.yml
+  environment: rtd-environment.yml
 
 # Optionally set the version of Python and requirements required to build your docs
 python:
