@@ -33,7 +33,7 @@ autodoc_mock_imports = ['numpy',  'cv2', 'ee', 'usgs', 'rtree', 'osgeo', 'pyproj
                         'fiona', 'fiona.crs',
                         'opencv-python', 'pandas', 'geopandas',
                         'skimage', 'skimage.io', 'skimage.feature', 'skimage.filters', 'skimage.measure',
-                        'skimage.morphology', 'skimage.transform', 'usgs', 'ee',
+                        'skimage.morphology', 'skimage.transform',
                         'pybob.bob_tools', 'pybob.ddem_tools', 'pybob.GeoImg', 'pybob.image_tools', 'pybob.landsat_tools',
 ]
 
