@@ -22,7 +22,7 @@ class Mock(MagicMock):
     def __getattr__(cls, name):
         return MagicMock()
 
-autodoc_mock_imports = ['ee', 'skimage.feature']
+autodoc_mock_imports = ['ee']
 
 sys.modules.update((mod_name, Mock()) for mod_name in autodoc_mock_imports)
 sys.path.insert(0, os.path.abspath('../src'))
