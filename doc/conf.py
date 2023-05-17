@@ -23,19 +23,7 @@ class Mock(MagicMock):
         return MagicMock()
 
 
-autodoc_mock_imports = ['numpy',  'cv2', 'ee', 'usgs', 'rtree', 'osgeo', 'pyproj', 'h5py', 'llc', 'numba',
-                        'scipy', 'scipy.interpolate',
-                        'PIL', 'PIL.Image',
-                        'matplotlib', 'matplotlib.pyplot',
-                        'lxml', 'lxml.builder', 'lxml.etree', 'xml.etree.ElementTree',
-                        'shapely', 'shapely.geometry', 'shapely.ops', 'shapely.geometry.point',
-                        'shapely.geometry.polygon', 'shapely.strtree',
-                        'fiona', 'fiona.crs',
-                        'opencv-python', 'pandas', 'geopandas',
-                        'skimage', 'skimage.io', 'skimage.feature', 'skimage.filters', 'skimage.measure',
-                        'skimage.morphology', 'skimage.transform',
-                        'pybob.bob_tools', 'pybob.ddem_tools', 'pybob.GeoImg', 'pybob.image_tools', 'pybob.landsat_tools',
-]
+autodoc_mock_imports = ['ee']
 
 sys.modules.update((mod_name, Mock()) for mod_name in autodoc_mock_imports)
 sys.path.insert(0, os.path.abspath('../src'))
