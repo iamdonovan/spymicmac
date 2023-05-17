@@ -38,7 +38,7 @@ autodoc_mock_imports = ['numpy',  'cv2', 'ee', 'usgs', 'rtree', 'osgeo', 'pyproj
 ]
 
 sys.modules.update((mod_name, Mock()) for mod_name in autodoc_mock_imports)
-sys.path.insert(0, os.path.abspath('../../src'))
+sys.path.insert(0, os.path.abspath('../src'))
 
 
 def skip(app, what, name, obj, would_skip, options):
