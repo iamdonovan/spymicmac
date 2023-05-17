@@ -24,7 +24,7 @@ from pybob.GeoImg import GeoImg
 from spymicmac import data, image, matching, micmac, orientation
 
 
-def sliding_window_filter(img_shape, pts_df, winsize, stepsize=None, mindist=2000, how='residual', is_ascending=True):
+def _sliding_window_filter(img_shape, pts_df, winsize, stepsize=None, mindist=2000, how='residual', is_ascending=True):
     """
     Given a DataFrame of indices representing points, use a sliding window filter to keep only the 'best' points within
     a given window and separation distance.
@@ -77,7 +77,7 @@ def sliding_window_filter(img_shape, pts_df, winsize, stepsize=None, mindist=200
     return np.array(_out_inds)
 
 
-def get_imlist(im_subset, dirname='.', strip_text=None):
+def _get_imlist(im_subset, dirname='.', strip_text=None):
     """
     Given either a list of filenames or a regex match pattern, return a list of filenames and a pattern to provide
     to MicMac.
@@ -104,7 +104,7 @@ def get_imlist(im_subset, dirname='.', strip_text=None):
     return imlist, match_pattern
 
 
-def get_utm_str(epsg):
+def _get_utm_str(epsg):
     """
     Given a GeoImg, read the associated EPSG code and return a UTM zone.
 
@@ -162,7 +162,7 @@ def _to_tfw(gt):
     return [gt[1], gt[2], gt[4], gt[5], gt[0], gt[3]]
 
 
-def get_footprint_overlap(fprints):
+def _get_footprint_overlap(fprints):
     """
     Return the area where image footprints overlap.
 
@@ -189,7 +189,7 @@ def get_footprint_overlap(fprints):
     return intersection
 
 
-def get_footprint_mask(shpfile, geoimg, filelist, fprint_out=False):
+def _get_footprint_mask(shpfile, geoimg, filelist, fprint_out=False):
     """
     Return a footprint mask for an image.
 
@@ -208,7 +208,7 @@ def get_footprint_mask(shpfile, geoimg, filelist, fprint_out=False):
     else:
         fp = shpfile[shpfile.ID.isin(imlist)].copy()
 
-    fprint = get_footprint_overlap(fp.to_crs(geoimg.proj4))
+    fprint = _get_footprint_overlap(fp.to_crs(geoimg.proj4))
 
     tmp_gdf = gpd.GeoDataFrame(columns=['geometry'])
     tmp_gdf.loc[0, 'geometry'] = fprint
@@ -226,7 +226,7 @@ def get_footprint_mask(shpfile, geoimg, filelist, fprint_out=False):
 
 
 # copied from pymmaster.mmaster_tools
-def get_mask(footprints, img, imlist, landmask=None, glacmask=None):
+def _get_mask(footprints, img, imlist, landmask=None, glacmask=None):
     """
     Create a mask for an image from different sources.
 
@@ -241,7 +241,7 @@ def get_mask(footprints, img, imlist, landmask=None, glacmask=None):
         - **fmask** (*GeoImg*) -- the georeferenced footprint mask
         - **img** (*GeoImg*) -- the GeoImg, cropped to a 10 pixel buffer around the image footprints
     """
-    fmask, fprint = get_footprint_mask(footprints, img, imlist, fprint_out=True)
+    fmask, fprint = _get_footprint_mask(footprints, img, imlist, fprint_out=True)
     fmask_geo = img.copy(new_raster=fmask)
 
     xmin, ymin, xmax, ymax = fprint.buffer(img.dx * 10).bounds
@@ -305,13 +305,13 @@ def register_ortho(fn_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, landmask=
 
     ort_dir = os.path.dirname(fn_ortho)
 
-    imlist, match_pattern = get_imlist(im_subset)
+    imlist, match_pattern = _get_imlist(im_subset)
 
     ref_img = GeoImg(fn_ref)
     # ref_lowres = ref_img.resample(init_res)
     # resamp_fact = init_res / ref_img.dx
 
-    utm_str = get_utm_str(ref_img.epsg)
+    utm_str = _get_utm_str(ref_img.epsg)
 
     ortho = imread(fn_ortho)
     # ortho_ = Image.fromarray(ortho)
@@ -327,7 +327,7 @@ def register_ortho(fn_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, landmask=
     else:
         footprints = gpd.read_file(footprints)
 
-    mask_full, _, ref_img = get_mask(footprints, ref_img, imlist, landmask, glacmask)
+    mask_full, _, ref_img = _get_mask(footprints, ref_img, imlist, landmask, glacmask)
 
     Minit, _, centers = orientation.transform_centers(ortho_gt, ref_img, imlist, footprints, 'Ori-{}'.format(ori))
     rough_tfm = warp(ortho, Minit, output_shape=ref_img.shape, preserve_range=True)
@@ -517,7 +517,7 @@ def register_individual(dir_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, lan
     ref_img = GeoImg(fn_ref)
     ref_dem = GeoImg(fn_dem)
 
-    utm_str = get_utm_str(ref_img.epsg)
+    utm_str = _get_utm_str(ref_img.epsg)
 
     rel_dem = GeoImg(fn_reldem)
 
@@ -528,7 +528,7 @@ def register_individual(dir_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, lan
     else:
         footprints = gpd.read_file(footprints)
 
-    mask_full, _, ref_img = get_mask(footprints, ref_img, imlist, landmask, glacmask)
+    mask_full, _, ref_img = _get_mask(footprints, ref_img, imlist, landmask, glacmask)
     mask_geo = ref_img.copy(new_raster=mask_full)
 
     if not is_geo:
