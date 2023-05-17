@@ -25,7 +25,10 @@ conda:
   environment: environment.yml
 
 # Optionally set the version of Python and requirements required to build your docs
-# python:
-#   version: 3.8
-#   install:
-#     - requirements: doc/requirements.txt
+python:
+  # version: 3.8
+  install:
+    # - requirements: doc/requirements.txt
+    - method: pip
+      path: .
+    
