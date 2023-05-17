@@ -33,12 +33,14 @@ autodoc_mock_imports = ['numpy',  'cv2', 'ee', 'usgs', 'rtree', 'osgeo', 'pyproj
                         'fiona', 'fiona.crs',
                         'opencv-python', 'pandas', 'geopandas',
                         'skimage', 'skimage.io', 'skimage.feature', 'skimage.filters', 'skimage.measure',
-                        'skimage.morphology', 'skimage.transform',
+                        'skimage.morphology', 'skimage.transform', 'usgs', 'ee',
                         'pybob.bob_tools', 'pybob.ddem_tools', 'pybob.GeoImg', 'pybob.image_tools', 'pybob.landsat_tools',
+                        'spymicmac.data', 'spymicmac.ee_tools', 'spymicmac.image', 'spymicmac.matching',
+                        'spymicmac.micmac', 'spymicmac.orientation', 'spymicmac.register', 'spymicmac.resample'
 ]
 
 sys.modules.update((mod_name, Mock()) for mod_name in autodoc_mock_imports)
-sys.path.insert(0, os.path.abspath('../src/spymicmac'))
+sys.path.insert(0, os.path.abspath('../src'))
 
 
 def skip(app, what, name, obj, would_skip, options):
