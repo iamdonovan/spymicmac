@@ -232,7 +232,7 @@ def to_wgs84_ellipsoid(fn_dem):
         urllib.request.urlretrieve(this_url, Path(proj_data, 'egm08_25.gtx'))
 
     dem = GeoImg(fn_dem)
-    geoid = GeoImg(Path(proj_data, 'egm08_25.gtx')).reproject(dem)
+    geoid = GeoImg(str(Path(proj_data, 'egm08_25.gtx'))).reproject(dem)
 
     ell = dem.copy(new_raster=(dem.img + geoid.img))
     ell.write(os.path.splitext(fn_dem)[0] + '_ell.tif')
