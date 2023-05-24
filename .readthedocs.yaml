@@ -10,18 +10,22 @@ sphinx:
   configuration: doc/conf.py
   fail_on_warning: false
 
-# build:
-#   os: "ubuntu-20.04"
-#   tools:
-#     python: "mambaforge-4.10"
+build:
+  os: "ubuntu-20.04"
+  tools:
+    python: "mambaforge-4.10"
+
+# Build the doc in offline formats
+formats:
+  - pdf
+  - htmlzip
 
 # use environment.yml to set up python using conda
-# conda:
-#   environment: environment.yml
+conda:
+  environment: rtd-environment.yml
 
 # Optionally set the version of Python and requirements required to build your docs
 python:
-  version: 3.8
   install:
-    - requirements: doc/requirements.txt
-
+    - method: pip
+      path: .
