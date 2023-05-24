@@ -28,7 +28,7 @@ conda:
   environment: rtd-environment.yml
 
 # Optionally set the version of Python and requirements required to build your docs
-python:
-  install:
-    - method: pip
-      path: .
+# python:
+#   install:
+#     - method: pip
+#       path: .
