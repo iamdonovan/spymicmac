@@ -15,7 +15,6 @@
 import os
 import sys
 from unittest.mock import MagicMock
-from spymicmac import __version__
 
 
 class Mock(MagicMock):
@@ -43,9 +42,9 @@ copyright = '2023, Robert McNabb'
 author = 'Robert McNabb'
 
 # The short X.Y version
-version = __version__
+version = '0.2'
 # The full version, including alpha/beta/rc tags
-release = version
+release = '0.2'
 
 
 # -- General configuration ---------------------------------------------------
