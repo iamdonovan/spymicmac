@@ -36,8 +36,10 @@ def _argparser():
     _parser.add_argument('-no_allfree', action='store_false',
                          help='run Campari with AllFree set to False')
     _parser.add_argument('-useortho', action='store_true',
-                         help='use the orthomosaic in Ortho-{dirmec} rather than the DEM (default: False). '
+                         help='use the orthomosaic in Ortho-{dirmec} rather than the DEM [False]. '
                               'If fn_ortho is set, uses that file instead.')
+    _parser.add_argument('-max_iter', action='store', type=int, default=5,
+                         help='the maximum number of Campari iterations to run [5]')
     return _parser
 
 
@@ -58,7 +60,8 @@ def main():
                       imgsource=args.imgsource,
                       density=args.density,
                       allfree=args.no_allfree,
-                      useortho=args.useortho)
+                      useortho=args.useortho,
+                      max_iter=args.max_iter)
 
 
 if __name__ == "__main__":

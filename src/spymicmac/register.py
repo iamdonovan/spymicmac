@@ -280,7 +280,7 @@ def _get_last_malt(dirmec):
 
 def register_relative(dirmec, fn_dem, fn_ref=None, fn_ortho=None, glacmask=None, landmask=None, footprints=None,
                       im_subset=None, block_num=None, ori='Relative', ortho_res=8.,
-                      imgsource='DECLASSII', density=200, out_dir=None, allfree=True, useortho=False):
+                      imgsource='DECLASSII', density=200, out_dir=None, allfree=True, useortho=False, max_iter=5):
     """
     Register a relative DEM or orthoimage to a reference DEM and/or orthorectified image.
 
@@ -301,6 +301,7 @@ def register_relative(dirmec, fn_dem, fn_ref=None, fn_ortho=None, glacmask=None,
     :param bool allfree: run Campari setting all parameters free (default: True)
     :param bool useortho: use the orthomosaic in Ortho-{dirmec} rather than the DEM (default: False). If fn_ortho is
         set, uses that file instead.
+    :param int max_iter: the maximum number of Campari iterations to run. (default: 5)
     """
     print('start.')
 
@@ -475,7 +476,8 @@ def register_relative(dirmec, fn_dem, fn_ref=None, fn_ortho=None, glacmask=None,
     micmac.save_gcps(gcps, out_dir, utm_str, subscript)
 
     # now, iterate campari to refine the orientation
-    gcps = micmac.iterate_campari(gcps, out_dir, match_pattern, subscript, ref_img.dx, ortho_res, allfree=allfree)
+    gcps = micmac.iterate_campari(gcps, out_dir, match_pattern, subscript,
+                                  ref_img.dx, ortho_res, allfree=allfree, max_iter=max_iter)
 
     # final write of gcps to disk.
     gcps.to_file(os.path.join(out_dir, 'AutoGCPs{}.shp'.format(subscript)))
