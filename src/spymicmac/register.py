@@ -364,11 +364,14 @@ def register_relative(dirmec, fn_dem, fn_ref=None, fn_ortho=None, glacmask=None,
     rough_gcps = matching.find_grid_matches(rough_tfm, ref_img, mask_full, Minit,
                                             spacing=int(rough_spacing), dstwin=int(rough_spacing))
 
-    model, inliers = ransac((rough_gcps[['search_j', 'search_i']].values,
-                             rough_gcps[['orig_j', 'orig_i']].values), AffineTransform,
-                            min_samples=6, residual_threshold=200, max_trials=5000)
-
-    rough_tfm = warp(reg_img, model, output_shape=ref_img.shape, preserve_range=True)
+    try:
+        model, inliers = ransac((rough_gcps[['search_j', 'search_i']].values,
+                                 rough_gcps[['orig_j', 'orig_i']].values), AffineTransform,
+                                min_samples=6, residual_threshold=200, max_trials=5000)
+        rough_tfm = warp(reg_img, model, output_shape=ref_img.shape, preserve_range=True)
+    except ValueError as e:
+        print('Unable to refine transformation with rough GCPs. Using transform estimated from footprints.')
+        model = Minit
 
     rough_geo = ref_img.copy(new_raster=rough_tfm)
     rough_geo.write('Register{}_rough_geo.tif'.format(subscript))
