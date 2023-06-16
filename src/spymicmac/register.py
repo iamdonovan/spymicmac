@@ -57,18 +57,18 @@ def _sliding_window_filter(img_shape, pts_df, winsize, stepsize=None, mindist=20
             if samp_.shape[0] == 0:
                 continue
             # only take the above-average z_corr values
-            samp_ = samp_[samp_.z_corr >= samp_.z_corr.quantile(0.5)]
+            # samp_ = samp_[samp_.z_corr >= samp_.z_corr.quantile(0.5)]
             # make sure we get the best residual
             samp_.sort_values(how, ascending=is_ascending, inplace=True)
             if len(_out_inds) == 0:
                 best_ind = samp_.index[0]
-                best_pt = Point(samp_.loc[best_ind, ['orig_j', 'orig_i']].values)
+                best_pt = Point(samp_.loc[best_ind, ['orig_j', 'orig_i']].values.astype(float))
 
                 _out_inds.append(best_ind)
                 _out_pts.append(best_pt)
             else:
                 for _ind, _row in samp_.iterrows():
-                    this_pt = Point(_row[['orig_j', 'orig_i']].values)
+                    this_pt = Point(_row[['orig_j', 'orig_i']].values.astype(float))
                     this_min_dist = np.array([this_pt.distance(pt) for pt in _out_pts]).min()
                     if this_min_dist > mindist:
                         _out_inds.append(_ind)
@@ -352,6 +352,9 @@ def register_relative(dirmec, fn_dem, fn_ref=None, fn_ortho=None, glacmask=None,
         clean_imlist = [im.split('OIS-Reech_')[-1].split('.tif')[0] for im in imlist]
         print('Attempting to get image footprints from USGS EarthExplorer.')
         footprints = data.get_usgs_footprints(clean_imlist, dataset=imgsource)
+
+        print('Saving footprints to current directory.')
+        footprints.to_file('Footprints.gpkg')
     else:
         footprints = gpd.read_file(footprints)
 
@@ -368,7 +371,7 @@ def register_relative(dirmec, fn_dem, fn_ref=None, fn_ortho=None, glacmask=None,
     try:
         model, inliers = ransac((rough_gcps[['search_j', 'search_i']].values,
                                  rough_gcps[['orig_j', 'orig_i']].values), AffineTransform,
-                                min_samples=6, residual_threshold=200, max_trials=5000)
+                                min_samples=6, residual_threshold=20, max_trials=5000)
         rough_tfm = warp(reg_img, model, output_shape=ref_img.shape, preserve_range=True)
     except ValueError as e:
         print('Unable to refine transformation with rough GCPs. Using transform estimated from footprints.')
@@ -430,9 +433,9 @@ def register_relative(dirmec, fn_dem, fn_ref=None, fn_ortho=None, glacmask=None,
     # gcps = gcps.loc[valid]
     gcps = gcps.loc[inliers_ref]
 
-    # out = sliding_window_filter([ortho.shape[1], ortho.shape[0]], gcps,
-    #                             min(1000, ortho.shape[1] / 4, ortho.shape[0] / 4),
-    #                             mindist=500, how='aff_resid', is_ascending=False)
+    # out = _sliding_window_filter([reg_img.shape[1], reg_img.shape[0]], gcps,
+    #                              min(500, reg_img.shape[1] / 4, reg_img.shape[0] / 4),
+    #                              mindist=500, how='pk_corr', is_ascending=True)
     # gcps = gcps.loc[out]
 
     print('{} valid matches found after estimating transformation'.format(gcps.shape[0]))
