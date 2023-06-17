@@ -479,8 +479,8 @@ def register_relative(dirmec, fn_dem, fn_ref=None, fn_ortho=None, glacmask=None,
     micmac.save_gcps(gcps, out_dir, utm_str, subscript)
 
     # now, iterate campari to refine the orientation
-    gcps = micmac.iterate_campari(gcps, out_dir, match_pattern, subscript,
-                                  ref_img.dx, ortho_res, allfree=allfree, max_iter=max_iter)
+    gcps = micmac.iterate_campari(gcps, out_dir, match_pattern, subscript, ref_img.dx, ortho_res,
+                                  rel_ori=ori, allfree=allfree, max_iter=max_iter)
 
     # final write of gcps to disk.
     gcps.to_file(os.path.join(out_dir, 'AutoGCPs{}.shp'.format(subscript)))
