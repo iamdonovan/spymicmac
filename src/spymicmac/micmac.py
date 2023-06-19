@@ -687,9 +687,13 @@ def tapioca(img_pattern='OIS.*tif', res_low=400, res_high=1200):
     :param int res_low: the size of the largest image axis, in pixels, for low-resolution matching (default: 400)
     :param int res_high: the size of the largest image axis, in pixels, for high-resolution matching (default: 1200)
     """
-    echo = subprocess.Popen('echo', stdout=subprocess.PIPE)
+    if os.name == 'nt':
+        echo = subprocess.Popen('echo', stdout=subprocess.PIPE, shell=True)
+    else:
+        echo = subprocess.Popen('echo', stdout=subprocess.PIPE)
     p = subprocess.Popen(['mm3d', 'Tapioca', 'MulScale', img_pattern,
                           str(res_low), str(res_high)], stdin=echo.stdout)
+
     return p.wait()
 
 
@@ -714,7 +718,10 @@ def tapas(cam_model, ori_out, img_pattern='OIS.*tif', in_cal=None, lib_foc=True,
     :param bool lib_pp: allow the principal point to be calibrated (default: True)
     :param bool lib_cd: allow the center of distortion to be calibrated (default: True)
     """
-    echo = subprocess.Popen('echo', stdout=subprocess.PIPE)
+    if os.name == 'nt':
+        echo = subprocess.Popen('echo', stdout=subprocess.PIPE, shell=True)
+    else:
+        echo = subprocess.Popen('echo', stdout=subprocess.PIPE)
 
     if in_cal is not None:
         p = subprocess.Popen(['mm3d', 'Tapas', cam_model, img_pattern, 'InCal=' + in_cal,
@@ -724,6 +731,7 @@ def tapas(cam_model, ori_out, img_pattern='OIS.*tif', in_cal=None, lib_foc=True,
         p = subprocess.Popen(['mm3d', 'Tapas', cam_model, img_pattern,
                               'LibFoc={}'.format(int(lib_foc)), 'LibPP={}'.format(int(lib_pp)),
                               'LibCD={}'.format(int(lib_cd)), 'Out=' + ori_out], stdin=echo.stdout)
+
     return p.wait()
 
 
@@ -734,8 +742,13 @@ def apericloud(ori, img_pattern='OIS.*tif'):
     :param str ori: the input orientation to use
     :param str img_pattern: the image pattern to pass to AperiCloud (default: OIS.*tif)
     """
-    echo = subprocess.Popen('echo', stdout=subprocess.PIPE)
+    if os.name == 'nt':
+        echo = subprocess.Popen('echo', stdout=subprocess.PIPE, shell=True)
+    else:
+        echo = subprocess.Popen('echo', stdout=subprocess.PIPE)
+
     p = subprocess.Popen(['mm3d', 'AperiCloud', img_pattern, ori], stdin=echo.stdout)
+
     return p.wait()
 
 
@@ -752,7 +765,10 @@ def malt(imlist, ori, zoomf=1, zoomi=None, dirmec='MEC-Malt', seed_img=None, see
         must also be set. (default: not used)
     :param str seed_xml: an XML file corresponding to the seed_img (default: not used)
     """
-    echo = subprocess.Popen('echo', stdout=subprocess.PIPE)
+    if os.name == 'nt':
+        echo = subprocess.Popen('echo', stdout=subprocess.PIPE, shell=True)
+    else:
+        echo = subprocess.Popen('echo', stdout=subprocess.PIPE)
 
     if type(imlist) is str:
         matchstr = imlist
@@ -775,7 +791,7 @@ def malt(imlist, ori, zoomf=1, zoomi=None, dirmec='MEC-Malt', seed_img=None, see
 
     p = subprocess.Popen(args, stdin=echo.stdout)
 
-    p.wait()
+    return p.wait()
 
 
 def tawny(dirmec, radiomegal=False):
@@ -785,11 +801,14 @@ def tawny(dirmec, radiomegal=False):
     :param str dirmec: the MEC directory to use
     :param bool radiomegal: run Tawny with RadiomEgal=1 (default: False)
     """
-    echo = subprocess.Popen('echo', stdout=subprocess.PIPE)
+    if os.name == 'nt':
+        echo = subprocess.Popen('echo', stdout=subprocess.PIPE, shell=True)
+    else:
+        echo = subprocess.Popen('echo', stdout=subprocess.PIPE)
 
     p = subprocess.Popen(['mm3d', 'Tawny', 'Ortho-{}'.format(dirmec), 'Out=Orthophotomosaic.tif',
                           'RadiomEgal={}'.format(int(radiomegal))], stdin=echo.stdout)
-    p.wait()
+    return p.wait()
 
 
 def block_malt(imlist, nimg=3, ori='Relative', zoomf=8):
@@ -841,7 +860,11 @@ def bascule(in_gcps, outdir, img_pattern, sub, ori, outori='TerrainRelAuto',
     fn_gcp = fn_gcp + sub + '.xml'
     fn_meas = fn_meas + sub + '-S2D.xml'
 
-    echo = subprocess.Popen('echo', stdout=subprocess.PIPE)
+    if os.name == 'nt':
+        echo = subprocess.Popen('echo', stdout=subprocess.PIPE, shell=True)
+    else:
+        echo = subprocess.Popen('echo', stdout=subprocess.PIPE)
+
     p = subprocess.Popen(['mm3d', 'GCPBascule', img_pattern, ori,
                           outori + sub,
                           os.path.join(outdir, fn_gcp),
@@ -875,7 +898,10 @@ def campari(in_gcps, outdir, img_pattern, sub, dx, ortho_res, allfree=True,
     :param str homol: the Homologue directory to use (default: Homol)
     :return: **out_gcps** (*pandas.DataFrame*) -- the input gcps with the updated Campari residuals.
     """
-    echo = subprocess.Popen('echo', stdout=subprocess.PIPE)
+    if os.name == 'nt':
+        echo = subprocess.Popen('echo', stdout=subprocess.PIPE, shell=True)
+    else:
+        echo = subprocess.Popen('echo', stdout=subprocess.PIPE)
 
     fn_gcp = fn_gcp + sub + '.xml'
     fn_meas = fn_meas + sub + '-S2D.xml'
@@ -1037,7 +1063,11 @@ def mask_invalid_els(dir_mec, fn_dem, fn_mask, ori, match_pattern='OIS.*tif', zo
     automask.write(fn_auto)
     dem.write(zlist[ind])
 
-    echo = subprocess.Popen('echo', stdout=subprocess.PIPE)
+    if os.name == 'nt':
+        echo = subprocess.Popen('echo', stdout=subprocess.PIPE, shell=True)
+    else:
+        echo = subprocess.Popen('echo', stdout=subprocess.PIPE)
+
     p = subprocess.Popen(['mm3d', 'Malt', 'Ortho', match_pattern, ori, 'DirMEC={}'.format(dir_mec),
                           'NbVI=2', 'MasqImGlob=filtre.tif', 'ZoomF={}'.format(zoomf),
                           'DefCor=1', 'CostTrans=1', 'EZA=1', 'DoMEC=0', 'DoOrtho=1', 'Etape0={}'.format(etape0)],
@@ -1067,7 +1097,12 @@ def save_gcps(in_gcps, outdir, utmstr, sub, fn_gcp='AutoGCPs', fn_meas='AutoMeas
     """
     in_gcps.to_file(os.path.join(outdir, fn_gcp + sub + '.shp'))
     write_auto_gcps(in_gcps, sub, outdir, utmstr, outname=fn_gcp)
-    echo = subprocess.Popen('echo', stdout=subprocess.PIPE)
+
+    if os.name == 'nt':
+        echo = subprocess.Popen('echo', stdout=subprocess.PIPE, shell=True)
+    else:
+        echo = subprocess.Popen('echo', stdout=subprocess.PIPE)
+
     p = subprocess.Popen(['mm3d', 'GCPConvert', 'AppInFile',
                           os.path.join(outdir, fn_gcp + sub + '.txt')], stdin=echo.stdout)
     p.wait()
