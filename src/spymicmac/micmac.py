@@ -693,6 +693,7 @@ def tapioca(img_pattern='OIS.*tif', res_low=400, res_high=1200):
         echo = subprocess.Popen('echo', stdout=subprocess.PIPE)
     p = subprocess.Popen(['mm3d', 'Tapioca', 'MulScale', img_pattern,
                           str(res_low), str(res_high)], stdin=echo.stdout)
+
     return p.wait()
 
 
@@ -730,6 +731,7 @@ def tapas(cam_model, ori_out, img_pattern='OIS.*tif', in_cal=None, lib_foc=True,
         p = subprocess.Popen(['mm3d', 'Tapas', cam_model, img_pattern,
                               'LibFoc={}'.format(int(lib_foc)), 'LibPP={}'.format(int(lib_pp)),
                               'LibCD={}'.format(int(lib_cd)), 'Out=' + ori_out], stdin=echo.stdout)
+
     return p.wait()
 
 
@@ -744,7 +746,9 @@ def apericloud(ori, img_pattern='OIS.*tif'):
         echo = subprocess.Popen('echo', stdout=subprocess.PIPE, shell=True)
     else:
         echo = subprocess.Popen('echo', stdout=subprocess.PIPE)
+
     p = subprocess.Popen(['mm3d', 'AperiCloud', img_pattern, ori], stdin=echo.stdout)
+
     return p.wait()
 
 
@@ -787,7 +791,7 @@ def malt(imlist, ori, zoomf=1, zoomi=None, dirmec='MEC-Malt', seed_img=None, see
 
     p = subprocess.Popen(args, stdin=echo.stdout)
 
-    p.wait()
+    return p.wait()
 
 
 def tawny(dirmec, radiomegal=False):
@@ -804,7 +808,7 @@ def tawny(dirmec, radiomegal=False):
 
     p = subprocess.Popen(['mm3d', 'Tawny', 'Ortho-{}'.format(dirmec), 'Out=Orthophotomosaic.tif',
                           'RadiomEgal={}'.format(int(radiomegal))], stdin=echo.stdout)
-    p.wait()
+    return p.wait()
 
 
 def block_malt(imlist, nimg=3, ori='Relative', zoomf=8):
