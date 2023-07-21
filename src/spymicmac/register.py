@@ -349,12 +349,16 @@ def register_relative(dirmec, fn_dem, fn_ref=None, fn_ortho=None, glacmask=None,
         reg_gt = [float(l.strip()) for l in f.readlines()]
 
     if footprints is None:
-        clean_imlist = [im.split('OIS-Reech_')[-1].split('.tif')[0] for im in imlist]
-        print('Attempting to get image footprints from USGS EarthExplorer.')
-        footprints = data.get_usgs_footprints(clean_imlist, dataset=imgsource)
+        if os.path.isfile('Footprints.gpkg'):
+            print('Using existing Footprints.gpkg file in current directory.')
+            footprints = gpd.read_file('Footprints.gpkg')
+        else:
+            clean_imlist = [im.split('OIS-Reech_')[-1].split('.tif')[0] for im in imlist]
+            print('Attempting to get image footprints from USGS EarthExplorer.')
+            footprints = data.get_usgs_footprints(clean_imlist, dataset=imgsource)
 
-        print('Saving footprints to current directory.')
-        footprints.to_file('Footprints.gpkg')
+            print('Saving footprints to current directory.')
+            footprints.to_file('Footprints.gpkg')
     else:
         footprints = gpd.read_file(footprints)
 
