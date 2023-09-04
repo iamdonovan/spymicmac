@@ -25,6 +25,8 @@ def _argparser():
                          help='subset of raw images to work with (default all)')
     _parser.add_argument('-b', '--block_num', action='store', type=str, default=None,
                          help='Block number to use if multiple image blocks exist in directory.')
+    _parser.add_argument('--subscript', action='store', type=str, default=None,
+                         help='Optional subscript to add to filenames.')
     _parser.add_argument('-ori', action='store', type=str, default='Relative',
                          help='name of orientation directory (after Ori-) [Relative]')
     _parser.add_argument('-ortho_res', action='store', type=float, default=8,
@@ -55,6 +57,7 @@ def main():
                       footprints=args.footprints,
                       im_subset=args.im_subset,
                       block_num=args.block_num,
+                      subscript=args.subscript,
                       ori=args.ori,
                       ortho_res=args.ortho_res,
                       imgsource=args.imgsource,

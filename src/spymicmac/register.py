@@ -279,7 +279,7 @@ def _get_last_malt(dirmec):
 
 
 def register_relative(dirmec, fn_dem, fn_ref=None, fn_ortho=None, glacmask=None, landmask=None, footprints=None,
-                      im_subset=None, block_num=None, ori='Relative', ortho_res=8.,
+                      im_subset=None, block_num=None, subscript=None, ori='Relative', ortho_res=8.,
                       imgsource='DECLASSII', density=200, out_dir=None, allfree=True, useortho=False, max_iter=5):
     """
     Register a relative DEM or orthoimage to a reference DEM and/or orthorectified image.
@@ -293,6 +293,7 @@ def register_relative(dirmec, fn_dem, fn_ref=None, fn_ortho=None, glacmask=None,
     :param str footprints: path to shapefile of image outlines. If not set, will download from USGS.
     :param str im_subset: subset of raw images to work with
     :param str block_num: block number to use if processing multiple image blocks
+    :param str subscript: optional subscript to use for output filenames (default: None)
     :param str ori: name of orientation directory (after Ori-) (default: Relative)
     :param float ortho_res: approx. ground sampling distance (pixel resolution) of ortho image (default: 8 m)
     :param str imgsource: USGS dataset name for images (default: DECLASSII)
@@ -313,7 +314,9 @@ def register_relative(dirmec, fn_dem, fn_ref=None, fn_ortho=None, glacmask=None,
 
     os.makedirs(out_dir, exist_ok=True)
 
-    if block_num is not None:
+    if subscript is not None:
+        subscript = '_' + subscript
+    elif block_num is not None:
         subscript = '_block{}'.format(block_num)
     else:
         subscript = ''
