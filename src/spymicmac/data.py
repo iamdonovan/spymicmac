@@ -238,7 +238,8 @@ def to_wgs84_ellipsoid(fn_dem):
     ell.write(os.path.splitext(fn_dem)[0] + '_ell.tif')
 
 
-def download_arcticdem_mosaic(imlist=None, footprints=None, imgsource='DECLASSII', globstr='OIS*.tif', res='2m'):
+def download_arcticdem_mosaic(imlist=None, footprints=None, imgsource='DECLASSII', globstr='OIS*.tif', res='2m',
+                              write_urls=False):
     """
     Download the ArcticDEM v3.0 Mosaic tiles that intersect image footprints. Downloads .tar.gz files to
     arctic_dem, extracts each DEM, and creates ArcticDEM.vrt in the current directory.
@@ -249,6 +250,8 @@ def download_arcticdem_mosaic(imlist=None, footprints=None, imgsource='DECLASSII
     :param str imgsource: the EE Dataset name for the images (default: DECLASSII)
     :param str globstr: the search string to use to find images in the current directory.
     :param str res: the DEM resolution to download. Options are 2m, 10m, or 32m (default: 2m)
+    :param bool write_urls: write a text file with the urls for each tile, for downloading using curl,
+        wget, etc., instead of via python (default: False)
     """
     assert res in ['2m', '10m', '32m'], "res must be one of 2m, 10m, or 32m"
 
@@ -263,18 +266,24 @@ def download_arcticdem_mosaic(imlist=None, footprints=None, imgsource='DECLASSII
     intersects = arcticdem_tiles.intersects(footprints.to_crs(arcticdem_tiles.crs).unary_union)
 
     selection = arcticdem_tiles.loc[intersects].reset_index(drop=True)
-    for ind, row in selection.iterrows():
-        this_path = Path('arctic_dem', row['dem_id'] + '.tar.gz')
-        print('Downloading', row['dem_id'], f'({ind+1}/{selection.shape[0]})')
-        urllib.request.urlretrieve(row['fileurl'], this_path)
+    if not write_urls:
+        for ind, row in selection.iterrows():
+            this_path = Path('arctic_dem', row['dem_id'] + '.tar.gz')
+            print('Downloading', row['dem_id'], f'({ind+1}/{selection.shape[0]})')
+            urllib.request.urlretrieve(row['fileurl'], this_path)
 
-    tarlist = []
-    for tarball in tarlist:
-        _unpack_adem(tarball)
+        tarlist = []
+        for tarball in tarlist:
+            _unpack_adem(tarball)
 
-    filelist = glob(os.path.join('arctic_dem', '*reg_dem.tif'))
-    out_vrt = gdal.BuildVRT('ArcticDEM.vrt', filelist)
-    out_vrt = None
+        filelist = glob(os.path.join('arctic_dem', '*reg_dem.tif'))
+        out_vrt = gdal.BuildVRT('ArcticDEM.vrt', filelist)
+        out_vrt = None
+
+    else:
+        with open('arcticdem_tiles.txt', 'w') as f:
+            for ind, row in selection.iterrows():
+                print(row.fileurl, file=f)
 
 
 def _arcticdem_shp(res='2m'):
