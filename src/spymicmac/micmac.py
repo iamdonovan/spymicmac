@@ -912,7 +912,7 @@ def campari(in_gcps, outdir, img_pattern, sub, dx, ortho_res, allfree=True,
                           'GCP=[{},{},{},{}]'.format(os.path.join(outdir, fn_gcp),
                                                      np.abs(dx) / 2,  # should be correct within 1/2 pixel
                                                      os.path.join(outdir, fn_meas),
-                                                     np.abs(dx / 2) / ortho_res),
+                                                     0.25),  # should be correct within 1/4 pixel
                           'SH={}'.format(homol),
                           'AllFree={}'.format(int(allfree))], stdin=echo.stdout)
     p.wait()
