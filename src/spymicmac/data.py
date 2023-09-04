@@ -280,16 +280,17 @@ def download_arcticdem_mosaic(imlist=None, footprints=None, imgsource='DECLASSII
 def _arcticdem_shp(res='2m'):
     _check_data_dir()
 
-    fn_shp = Path(_data_dir(), 'ArcticDEM_Mosaic_Index_v3_shp', f'ArcticDEM_Mosaic_Index_v3_{res}.shp')
+    # latest version is 4.1 - may need to update with future releases
+    fn_shp = Path(_data_dir(), f'ArcticDEM_Mosaic_Index_v4_1_{res}.shp')
 
     if not fn_shp.exists():
-        print('Downloading ArcticDEM Mosaic v3 Tile Index from data.pgc.umn.edu')
-        zip_url = 'https://data.pgc.umn.edu/elev/dem/setsm/ArcticDEM/indexes/ArcticDEM_Mosaic_Index_v3_shp.zip'
-        zip_path = Path(_data_dir(), 'ArcticDEM_Mosaic_Index_v3_shp.zip')
+        print('Downloading latest ArcticDEM Mosaic Tile Index from data.pgc.umn.edu')
+        zip_url = 'https://data.pgc.umn.edu/elev/dem/setsm/ArcticDEM/indexes/ArcticDEM_Strip_Index_latest_shp.zip'
+        zip_path = Path(_data_dir(), 'ArcticDEM_Mosaic_Index_latest_shp.zip')
         urllib.request.urlretrieve(zip_url, zip_path)
 
-        with zipfile.ZipFile(Path(_data_dir(), 'ArcticDEM_Mosaic_Index_v3_shp.zip'), 'r') as zip_ref:
-            zip_ref.extractall(Path(_data_dir()))
+        with zipfile.ZipFile(Path(_data_dir(), 'ArcticDEM_Mosaic_Index_latest_shp.zip'), 'r') as zip_ref:
+            zip_ref.extractall(_data_dir())
 
         os.remove(zip_path)
 
