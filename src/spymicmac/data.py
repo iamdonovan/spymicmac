@@ -276,7 +276,7 @@ def download_arcticdem_mosaic(imlist=None, footprints=None, imgsource='DECLASSII
         for tarball in tarlist:
             _unpack_adem(tarball)
 
-        filelist = glob(os.path.join('arctic_dem', '*reg_dem.tif'))
+        filelist = glob(os.path.join('arctic_dem', '*_dem.tif'))
         out_vrt = gdal.BuildVRT('ArcticDEM.vrt', filelist)
         out_vrt = None
 
@@ -308,6 +308,6 @@ def _arcticdem_shp(res='2m'):
 
 def _unpack_adem(tarball):
     with tarfile.open(Path('arctic_dem', tarball), 'r') as tfile:
-        dem = tfile.getmember(tarball.replace('.tar.gz', '_reg_dem.tif'))
+        dem = tfile.getmember(tarball.replace('.tar.gz', '_dem.tif'))
         dem.name = Path('arctic_dem', dem.name)  # will extract to arctic_dem
         tfile.extract(dem)
