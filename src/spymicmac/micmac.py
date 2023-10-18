@@ -247,7 +247,7 @@ def generate_measures_files(joined=False):
             print('GCP_{}_{}'.format(row, col), file=f)
 
 
-def create_measurescamera_xml(fn_csv, ori='InterneScan'):
+def create_measurescamera_xml(fn_csv, ori='InterneScan', translate=False):
     """
     Create a MeasuresCamera.xml file from a csv of fiducial marker locations.
     Column headers should be:
@@ -258,8 +258,16 @@ def create_measurescamera_xml(fn_csv, ori='InterneScan'):
 
     :param str fn_csv: the filename of the CSV file.
     :param str ori: the Ori directory to write the MeasuresCamera.xml file to. Defaults to (Ori-)InterneScan.
+    :param bool translate: translate coordinates so that the origin is the upper left corner, rather than the principal
+        point
     """
     fids = pd.read_csv(fn_csv)
+
+    # if coordinates are relative to the principal point,
+    # convert them to be relative to the upper left corner
+    if translate:
+        fids['im_col'] = fids['im_col'] - fids['im_col'].min()
+        fids['im_row'] = -fids['im_row'] - min(-fids['im_row'])
 
     E = builder.ElementMaker()
     ImMes = E.MesureAppuiFlottant1Im(E.NameIm('Glob'))
