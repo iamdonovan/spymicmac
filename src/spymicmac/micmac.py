@@ -150,19 +150,22 @@ def get_gcp_meas(im_name, meas_name, in_dir, E, nodist=None, gcp_name='GCP'):
     return this_im_mes
 
 
-def get_im_meas(gcps, E):
+def get_im_meas(points_df, E, name='gcp', x='im_col', y='im_row'):
     """
     Populate an lxml.builder.ElementMaker object with GCP image locations, for writing to xml files.
 
-    :param pandas.DataFrame gcps: a DataFrame with the GCPs to find image locations for.
+    :param pandas.DataFrame points_df: a DataFrame with the points to find image locations for.
     :param lxml.builder.ElementMaker E: an ElementMaker object for writing to the xml file.
+    :param str name: the column name in points_df corresponding to the point name [gcp]
+    :param str x: the column name in points_df corresponding to the image x location [im_col]
+    :param str y: the column name in points_df corresponding to the image y location [im_row]
     :return: **pt_els** (*list*) -- a list of ElementMaker objects corresponding to each GCP image location.
     """
     pt_els = []
-    for ind, row in gcps.iterrows():
+    for ind, row in points_df.iterrows():
         this_mes = E.OneMesureAF1I(
-                        E.NamePt(row['gcp']),
-                        E.PtIm('{} {}'.format(row['im_col'], row['im_row']))
+                        E.NamePt(row[name]),
+                        E.PtIm('{} {}'.format(row[x], row[y]))
                         )
         pt_els.append(this_mes)
     return pt_els
@@ -247,32 +250,30 @@ def generate_measures_files(joined=False):
             print('GCP_{}_{}'.format(row, col), file=f)
 
 
-def create_measurescamera_xml(fn_csv, ori='InterneScan', translate=False):
+def create_measurescamera_xml(fn_csv, ori='InterneScan', translate=False, name='gcp', x='im_col', y='im_row'):
     """
     Create a MeasuresCamera.xml file from a csv of fiducial marker locations.
-    Column headers should be:
-
-        gcp, im_row, im_col
-
-    corresponding to the marker name, y location, and x location within the image.
 
     :param str fn_csv: the filename of the CSV file.
     :param str ori: the Ori directory to write the MeasuresCamera.xml file to. Defaults to (Ori-)InterneScan.
     :param bool translate: translate coordinates so that the origin is the upper left corner, rather than the principal
         point
+    :param str name: the column name in the csv file corresponding to the point name [gcp]
+    :param str x: the column name in the csv file corresponding to the image x location [im_col]
+    :param str y: the column name in the csv file corresponding to the image y location [im_row]
     """
     fids = pd.read_csv(fn_csv)
 
     # if coordinates are relative to the principal point,
     # convert them to be relative to the upper left corner
     if translate:
-        fids['im_col'] = fids['im_col'] - fids['im_col'].min()
-        fids['im_row'] = -fids['im_row'] - min(-fids['im_row'])
+        fids[x] = fids[x] - fids[x].min()
+        fids[y] = -fids[y] - min(-fids[y])
 
     E = builder.ElementMaker()
     ImMes = E.MesureAppuiFlottant1Im(E.NameIm('Glob'))
 
-    pt_els = get_im_meas(fids, E)
+    pt_els = get_im_meas(fids, E, name=name, x=x, y=y)
     for p in pt_els:
         ImMes.append(p)
 
