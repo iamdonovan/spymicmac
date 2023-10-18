@@ -1315,3 +1315,43 @@ def _update_autocal(ori, im):
 
     tree = ET.ElementTree(root)
     tree.write(fn_xml, encoding="utf-8", xml_declaration=True)
+
+
+def init_git():
+    """
+    Initialize a git repository in the current working directory.
+    """
+
+    if shutil.which('git') is not None:
+        # initialize an empty git repository with a main branch
+        p = subprocess.Popen(['git', 'init'])
+        p.wait()
+
+        # copy the .gitignore file to the current directory
+        _gitignore()
+
+    else:
+        # not sure if EnvironmentError is the best choice here
+        raise EnvironmentError("unable to find git using shutil.which - please ensure that git is installed.")
+
+
+def _gitignore():
+    # section headers for the .gitignore file
+    sect_headers = ['tar files', 'image files', 'point clouds', 'directories', 'xml files', 'log/txt files']
+
+    # patterns to ignore for each section
+    ignore = [['*.tar.gz', '*.tgz'],
+              ['*.tif'],
+              ['*.ply'],
+              ['Homol*/', 'MEC-*/', 'Ortho-MEC-*/', 'Pastis/', 'Tmp-MM-Dir/'],
+              ['SauvApero.xml', 'Tmp-SL-Glob.xml'],
+              ['mm3d-LogFile.txt', 'WarnApero.txt']]
+
+    ignore_dict = dict(zip(sect_headers, ignore))
+
+    with open('.gitignore', 'w') as f:
+        for sect in sect_headers:
+            print(f'# {sect}', file=f)
+            for ig in ignore_dict[sect]:
+                print(ig, file=f)
+            print('\n', file=f)
