@@ -7,7 +7,7 @@ from osgeo import gdal
 from skimage import io
 from scipy import ndimage
 import numpy as np
-from spymicmac import image, micmac
+from spymicmac import image, micmac, matching
 
 
 def downsample(img, fact=4):
@@ -66,7 +66,7 @@ def rotate_kh4(img):
     :param array-like img: the image to rotate.
     :return: **rotated** (*array-like*) -- the rotated image
     """
-    rails = image.find_rail_marks(img)
+    rails = matching.find_rail_marks(img)
     slope, intercept = np.polyfit(rails[:, 1], rails[:, 0], 1)
     angle = np.rad2deg(np.arctan(slope))
     print('Calculated angle of rotation: {:.4f}'.format(angle))
@@ -83,5 +83,5 @@ def resample_kh4(img):
     """
     rotated = rotate_kh4(img)
     left, right, top, bot = image.get_rough_frame(rotated)
-    rails = image.find_rail_marks(rotated)
+    rails = matching.find_rail_marks(rotated)
 

@@ -24,7 +24,7 @@ from pybob.GeoImg import GeoImg
 from spymicmac import data, image, matching, micmac, orientation
 
 
-def sliding_window_filter(img_shape, pts_df, winsize, stepsize=None, mindist=2000, how='residual', is_ascending=True):
+def _sliding_window_filter(img_shape, pts_df, winsize, stepsize=None, mindist=2000, how='residual', is_ascending=True):
     """
     Given a DataFrame of indices representing points, use a sliding window filter to keep only the 'best' points within
     a given window and separation distance.
@@ -57,18 +57,18 @@ def sliding_window_filter(img_shape, pts_df, winsize, stepsize=None, mindist=200
             if samp_.shape[0] == 0:
                 continue
             # only take the above-average z_corr values
-            samp_ = samp_[samp_.z_corr >= samp_.z_corr.quantile(0.5)]
+            # samp_ = samp_[samp_.z_corr >= samp_.z_corr.quantile(0.5)]
             # make sure we get the best residual
             samp_.sort_values(how, ascending=is_ascending, inplace=True)
             if len(_out_inds) == 0:
                 best_ind = samp_.index[0]
-                best_pt = Point(samp_.loc[best_ind, ['orig_j', 'orig_i']].values)
+                best_pt = Point(samp_.loc[best_ind, ['orig_j', 'orig_i']].values.astype(float))
 
                 _out_inds.append(best_ind)
                 _out_pts.append(best_pt)
             else:
                 for _ind, _row in samp_.iterrows():
-                    this_pt = Point(_row[['orig_j', 'orig_i']].values)
+                    this_pt = Point(_row[['orig_j', 'orig_i']].values.astype(float))
                     this_min_dist = np.array([this_pt.distance(pt) for pt in _out_pts]).min()
                     if this_min_dist > mindist:
                         _out_inds.append(_ind)
@@ -77,7 +77,7 @@ def sliding_window_filter(img_shape, pts_df, winsize, stepsize=None, mindist=200
     return np.array(_out_inds)
 
 
-def get_imlist(im_subset, dirname='.', strip_text=None):
+def _get_imlist(im_subset, dirname='.', strip_text=None):
     """
     Given either a list of filenames or a regex match pattern, return a list of filenames and a pattern to provide
     to MicMac.
@@ -104,7 +104,7 @@ def get_imlist(im_subset, dirname='.', strip_text=None):
     return imlist, match_pattern
 
 
-def get_utm_str(epsg):
+def _get_utm_str(epsg):
     """
     Given a GeoImg, read the associated EPSG code and return a UTM zone.
 
@@ -118,12 +118,13 @@ def get_utm_str(epsg):
     epsg_str = str(epsg)
     hemi_dict = {'6': 'N', '7': 'S'}
 
-    if epsg_str[:2] == '32':
-        utm_str = epsg_str[-2:] + hemi_dict[epsg_str[2]]
-    else:
-        utm_str = 'not utm'
+    if epsg is None:
+        return 'not utm'
 
-    return utm_str
+    if epsg_str[:2] == '32':
+        return epsg_str[-2:] + hemi_dict[epsg_str[2]]
+    else:
+        return 'not utm'
 
 
 def warp_image(model, ref, img):
@@ -162,7 +163,7 @@ def _to_tfw(gt):
     return [gt[1], gt[2], gt[4], gt[5], gt[0], gt[3]]
 
 
-def get_footprint_overlap(fprints):
+def _get_footprint_overlap(fprints):
     """
     Return the area where image footprints overlap.
 
@@ -189,7 +190,7 @@ def get_footprint_overlap(fprints):
     return intersection
 
 
-def get_footprint_mask(shpfile, geoimg, filelist, fprint_out=False):
+def _get_footprint_mask(shpfile, geoimg, filelist, fprint_out=False):
     """
     Return a footprint mask for an image.
 
@@ -208,7 +209,7 @@ def get_footprint_mask(shpfile, geoimg, filelist, fprint_out=False):
     else:
         fp = shpfile[shpfile.ID.isin(imlist)].copy()
 
-    fprint = get_footprint_overlap(fp.to_crs(geoimg.proj4))
+    fprint = _get_footprint_overlap(fp.to_crs(geoimg.proj4))
 
     tmp_gdf = gpd.GeoDataFrame(columns=['geometry'])
     tmp_gdf.loc[0, 'geometry'] = fprint
@@ -226,7 +227,7 @@ def get_footprint_mask(shpfile, geoimg, filelist, fprint_out=False):
 
 
 # copied from pymmaster.mmaster_tools
-def get_mask(footprints, img, imlist, landmask=None, glacmask=None):
+def _get_mask(footprints, img, imlist, landmask=None, glacmask=None):
     """
     Create a mask for an image from different sources.
 
@@ -241,7 +242,7 @@ def get_mask(footprints, img, imlist, landmask=None, glacmask=None):
         - **fmask** (*GeoImg*) -- the georeferenced footprint mask
         - **img** (*GeoImg*) -- the GeoImg, cropped to a 10 pixel buffer around the image footprints
     """
-    fmask, fprint = get_footprint_mask(footprints, img, imlist, fprint_out=True)
+    fmask, fprint = _get_footprint_mask(footprints, img, imlist, fprint_out=True)
     fmask_geo = img.copy(new_raster=fmask)
 
     xmin, ymin, xmax, ymax = fprint.buffer(img.dx * 10).bounds
@@ -269,82 +270,122 @@ def _search_size(imshape):
     return int(max(min_dst, dst))
 
 
-def register_ortho(fn_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, landmask=None, footprints=None,
-                   im_subset=None, block_num=None, ori='Relative', ortho_res=8.,
-                   imgsource='DECLASSII', density=200, out_dir=None, allfree=True):
-    """
-    Register a relative orthoimage and DEM to a reference orthorectified image and DEM.
+def _get_last_malt(dirmec):
+    dem_list = sorted(glob('Z_Num*STD-MALT.tif', root_dir=dirmec))
+    level = int(re.findall(r'\d+', dem_list[-1].split('_')[1])[0])
+    zoomf = int(re.findall(r'\d+', dem_list[-1].split('_')[2])[0])
 
-    :param str fn_ortho: path to relative orthoimage
-    :param str fn_ref: path to reference orthorectified image
-    :param str fn_reldem: path to relative DEM
+    return f'Z_Num{level}_DeZoom{zoomf}_STD-MALT.tif'
+
+
+def register_relative(dirmec, fn_dem, fn_ref=None, fn_ortho=None, glacmask=None, landmask=None, footprints=None,
+                      im_subset=None, block_num=None, subscript=None, ori='Relative', ortho_res=8.,
+                      imgsource='DECLASSII', density=200, out_dir=None, allfree=True, useortho=False, max_iter=5):
+    """
+    Register a relative DEM or orthoimage to a reference DEM and/or orthorectified image.
+
+    :param str dirmec: the name of the MEC directory to read the relative DEM from (e.g., MEC-Relative)
     :param str fn_dem: path to reference DEM
+    :param str fn_ref: path to reference orthorectified image (optional)
+    :param str fn_ortho: path to relative orthoimage (optional)
     :param str glacmask: path to file of glacier outlines (i.e., an exclusion mask)
     :param str landmask: path to file of land outlines (i.e., an inclusion mask)
     :param str footprints: path to shapefile of image outlines. If not set, will download from USGS.
     :param str im_subset: subset of raw images to work with
     :param str block_num: block number to use if processing multiple image blocks
+    :param str subscript: optional subscript to use for output filenames (default: None)
     :param str ori: name of orientation directory (after Ori-) (default: Relative)
     :param float ortho_res: approx. ground sampling distance (pixel resolution) of ortho image (default: 8 m)
     :param str imgsource: USGS dataset name for images (default: DECLASSII)
     :param int density: pixel spacing to look for GCPs (default: 200)
     :param str out_dir: output directory to save auto GCP files to (default: auto_gcps)
     :param bool allfree: run Campari setting all parameters free (default: True)
+    :param bool useortho: use the orthomosaic in Ortho-{dirmec} rather than the DEM (default: False). If fn_ortho is
+        set, uses that file instead.
+    :param int max_iter: the maximum number of Campari iterations to run. (default: 5)
     """
     print('start.')
+
+    if fn_ortho is not None or useortho:
+        assert fn_ref is not None, "If using ortho image, fn_ref must be set."
 
     if out_dir is None:
         out_dir = 'auto_gcps'
 
     os.makedirs(out_dir, exist_ok=True)
 
-    if block_num is not None:
+    if subscript is not None:
+        subscript = '_' + subscript
+    elif block_num is not None:
         subscript = '_block{}'.format(block_num)
     else:
         subscript = ''
 
-    ort_dir = os.path.dirname(fn_ortho)
+    # use the supplied dirmec to get the ortho directory
+    ort_dir = 'Ortho-' + dirmec
 
-    imlist, match_pattern = get_imlist(im_subset)
+    imlist, match_pattern = _get_imlist(im_subset)
 
-    ref_img = GeoImg(fn_ref)
-    # ref_lowres = ref_img.resample(init_res)
-    # resamp_fact = init_res / ref_img.dx
+    # if we're using the ortho image, load the reference ortho
+    if useortho:
+        ref_img = GeoImg(fn_ref)
+    # otherwise, load the reference dem
+    else:
+        ref_img = GeoImg(fn_dem)
 
-    utm_str = get_utm_str(ref_img.epsg)
+    utm_str = _get_utm_str(ref_img.epsg)
 
-    ortho = imread(fn_ortho)
-    # ortho_ = Image.fromarray(ortho)
+    rel_dem = GeoImg(os.path.join(dirmec, _get_last_malt(dirmec)))
+    if useortho:
+        if fn_ortho is None:
+            fn_reg = os.path.join(ort_dir, 'Orthophotomosaic.tif')
+        else:
+            fn_reg = fn_ortho
+        reg_img = imread(fn_reg)
+        fn_tfw = fn_reg.replace('.tif', '.tfw')
+    else:
+        fn_reg = os.path.join(dirmec, _get_last_malt(dirmec))
+        fn_tfw = fn_reg.replace('.tif', '.tfw')
+        reg_img = imread(fn_reg)
 
-    fn_tfw = fn_ortho.replace('.tif', '.tfw')
     with open(fn_tfw, 'r') as f:
-        ortho_gt = [float(l.strip()) for l in f.readlines()]
+        reg_gt = [float(l.strip()) for l in f.readlines()]
 
     if footprints is None:
-        clean_imlist = [im.split('OIS-Reech_')[-1].split('.tif')[0] for im in imlist]
-        print('Attempting to get image footprints from USGS EarthExplorer.')
-        footprints = data.get_usgs_footprints(clean_imlist, dataset=imgsource)
+        if os.path.isfile('Footprints.gpkg'):
+            print('Using existing Footprints.gpkg file in current directory.')
+            footprints = gpd.read_file('Footprints.gpkg')
+        else:
+            clean_imlist = [im.split('OIS-Reech_')[-1].split('.tif')[0] for im in imlist]
+            print('Attempting to get image footprints from USGS EarthExplorer.')
+            footprints = data.get_usgs_footprints(clean_imlist, dataset=imgsource)
+
+            print('Saving footprints to current directory.')
+            footprints.to_file('Footprints.gpkg')
     else:
         footprints = gpd.read_file(footprints)
 
-    mask_full, _, ref_img = get_mask(footprints, ref_img, imlist, landmask, glacmask)
+    mask_full, _, ref_img = _get_mask(footprints, ref_img, imlist, landmask, glacmask)
 
-    Minit, _, centers = orientation.transform_centers(ortho_gt, ref_img, imlist, footprints, 'Ori-{}'.format(ori))
-    rough_tfm = warp(ortho, Minit, output_shape=ref_img.shape, preserve_range=True)
+    Minit, _, centers = orientation.transform_centers(reg_gt, ref_img, imlist, footprints, 'Ori-{}'.format(ori))
+    rough_tfm = warp(reg_img, Minit, output_shape=ref_img.shape, preserve_range=True)
 
-    rough_spacing = np.round(max(ref_img.shape) / 20 / 1000) * 1000
+    rough_spacing = max(1000, np.round(max(ref_img.shape) / 20 / 1000) * 1000)
 
     rough_gcps = matching.find_grid_matches(rough_tfm, ref_img, mask_full, Minit,
                                             spacing=int(rough_spacing), dstwin=int(rough_spacing))
 
-    model, inliers = ransac((rough_gcps[['search_j', 'search_i']].values,
-                             rough_gcps[['orig_j', 'orig_i']].values), AffineTransform,
-                            min_samples=6, residual_threshold=200, max_trials=5000)
-
-    rough_tfm = warp(ortho, model, output_shape=ref_img.shape, preserve_range=True)
+    try:
+        model, inliers = ransac((rough_gcps[['search_j', 'search_i']].values,
+                                 rough_gcps[['orig_j', 'orig_i']].values), AffineTransform,
+                                min_samples=6, residual_threshold=20, max_trials=5000)
+        rough_tfm = warp(reg_img, model, output_shape=ref_img.shape, preserve_range=True)
+    except ValueError as e:
+        print('Unable to refine transformation with rough GCPs. Using transform estimated from footprints.')
+        model = Minit
 
     rough_geo = ref_img.copy(new_raster=rough_tfm)
-    rough_geo.write('Orthophoto{}_geo.tif'.format(subscript), dtype=np.uint8)
+    rough_geo.write('Register{}_rough_geo.tif'.format(subscript))
 
     fig, ax = plt.subplots(1, 2, figsize=(7, 5))
     ax[0].imshow(rough_tfm[::10, ::10], extent=[0, rough_tfm.shape[1], rough_tfm.shape[0], 0], cmap='gray')
@@ -362,8 +403,8 @@ def register_ortho(fn_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, landmask=
 
     gcps = gcps.loc[mask_full[gcps.search_i, gcps.search_j] == 255]
 
-    gcps['rel_x'] = ortho_gt[4] + gcps['orig_j'].values * ortho_gt[0]  # need the original image coordinates
-    gcps['rel_y'] = ortho_gt[5] + gcps['orig_i'].values * ortho_gt[3]
+    gcps['rel_x'] = reg_gt[4] + gcps['orig_j'].values * reg_gt[0]  # need the original image coordinates
+    gcps['rel_y'] = reg_gt[5] + gcps['orig_i'].values * reg_gt[3]
 
     gcps['elevation'] = 0
     gcps.set_crs(crs=ref_img.proj4, inplace=True)
@@ -371,14 +412,16 @@ def register_ortho(fn_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, landmask=
     gcps.dropna(inplace=True)
     print('{} potential matches found'.format(gcps.shape[0]))
 
-    print('loading dems')
-    dem = GeoImg(fn_dem, dtype=np.float32)
-    rel_dem = GeoImg(fn_reldem)
+    if useortho:
+        print('loading dems')
+        dem = GeoImg(fn_dem, dtype=np.float32)
+    else:
+        dem = ref_img
 
     # gcps.crs = {'init': 'epsg:{}'.format(ref_img.epsg)}
     for i, row in gcps.to_crs(crs=dem.proj4).iterrows():
         gcps.loc[i, 'elevation'] = dem.raster_points([(row.geometry.x, row.geometry.y)], nsize=3, mode='linear')
-        if os.path.exists(fn_ortho.replace('.tif', '.tfw')):
+        if os.path.exists(fn_reg.replace('.tif', '.tfw')):
             gcps.loc[i, 'el_rel'] = rel_dem.raster_points([(row.rel_x, row.rel_y)], nsize=3, mode='linear')
 
     # drop any gcps where we don't have a DEM value or a valid match
@@ -397,9 +440,9 @@ def register_ortho(fn_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, landmask=
     # gcps = gcps.loc[valid]
     gcps = gcps.loc[inliers_ref]
 
-    # out = sliding_window_filter([ortho.shape[1], ortho.shape[0]], gcps,
-    #                             min(1000, ortho.shape[1] / 4, ortho.shape[0] / 4),
-    #                             mindist=500, how='aff_resid', is_ascending=False)
+    # out = _sliding_window_filter([reg_img.shape[1], reg_img.shape[0]], gcps,
+    #                              min(500, reg_img.shape[1] / 4, reg_img.shape[0] / 4),
+    #                              mindist=500, how='pk_corr', is_ascending=True)
     # gcps = gcps.loc[out]
 
     print('{} valid matches found after estimating transformation'.format(gcps.shape[0]))
@@ -429,27 +472,28 @@ def register_ortho(fn_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, landmask=
     gcps = micmac.bascule(gcps, out_dir, match_pattern, subscript, ori)
     gcps['res_dist'] = np.sqrt(gcps.xres ** 2 + gcps.yres ** 2)
 
-    gcps = gcps.loc[np.abs(gcps.res_dist - gcps.res_dist.median()) < 2 * nmad(gcps.res_dist)]
+    gcps = gcps.loc[np.abs(gcps.res_dist - gcps.res_dist.median()) < 3 * nmad(gcps.res_dist)]
     # gcps = gcps[np.logical_and(np.abs(gcps.xres - gcps.xres.median()) < 2 * nmad(gcps.xres),
     #                            np.abs(gcps.yres - gcps.yres.median()) < 2 * nmad(gcps.yres))]
 
     micmac.save_gcps(gcps, out_dir, utm_str, subscript)
     gcps = micmac.bascule(gcps, out_dir, match_pattern, subscript, ori)
     gcps['res_dist'] = np.sqrt(gcps.xres ** 2 + gcps.yres ** 2)
-    gcps = gcps.loc[np.abs(gcps.res_dist - gcps.res_dist.median()) < 2 * nmad(gcps.res_dist)]
+    gcps = gcps.loc[np.abs(gcps.res_dist - gcps.res_dist.median()) < 3 * nmad(gcps.res_dist)]
     # gcps = gcps[np.logical_and(np.abs(gcps.xres - gcps.xres.median()) < 2 * nmad(gcps.xres),
     #                            np.abs(gcps.yres - gcps.yres.median()) < 2 * nmad(gcps.yres))]
 
     micmac.save_gcps(gcps, out_dir, utm_str, subscript)
 
     # now, iterate campari to refine the orientation
-    gcps = micmac.iterate_campari(gcps, out_dir, match_pattern, subscript, ref_img.dx, ortho_res, allfree=allfree)
+    gcps = micmac.iterate_campari(gcps, out_dir, match_pattern, subscript, ref_img.dx, ortho_res,
+                                  rel_ori=ori, allfree=allfree, max_iter=max_iter)
 
     # final write of gcps to disk.
     gcps.to_file(os.path.join(out_dir, 'AutoGCPs{}.shp'.format(subscript)))
 
     fig1 = plt.figure(figsize=(7, 5))
-    plt.imshow(ortho[::5, ::5], cmap='gray', extent=[0, ortho.shape[1], ortho.shape[0], 0])
+    plt.imshow(reg_img[::5, ::5], cmap='gray', extent=[0, reg_img.shape[1], reg_img.shape[0], 0])
     plt.plot(gcps.orig_j, gcps.orig_i, 'r+')
     plt.quiver(gcps.orig_j, gcps.orig_i, gcps.camp_xres, gcps.camp_yres, color='r')
 
@@ -517,7 +561,7 @@ def register_individual(dir_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, lan
     ref_img = GeoImg(fn_ref)
     ref_dem = GeoImg(fn_dem)
 
-    utm_str = get_utm_str(ref_img.epsg)
+    utm_str = _get_utm_str(ref_img.epsg)
 
     rel_dem = GeoImg(fn_reldem)
 
@@ -528,7 +572,7 @@ def register_individual(dir_ortho, fn_ref, fn_reldem, fn_dem, glacmask=None, lan
     else:
         footprints = gpd.read_file(footprints)
 
-    mask_full, _, ref_img = get_mask(footprints, ref_img, imlist, landmask, glacmask)
+    mask_full, _, ref_img = _get_mask(footprints, ref_img, imlist, landmask, glacmask)
     mask_geo = ref_img.copy(new_raster=mask_full)
 
     if not is_geo:

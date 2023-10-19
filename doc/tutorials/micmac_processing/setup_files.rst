@@ -64,6 +64,13 @@ of the different fiducial markers in the image geometry. Note that using ``ReSam
         xp = x - min(x)
         yp = (-y) - min(-y)
 
+If you do not have a calibration report for your particular camera, you can have a look at some
+:doc:`../preprocessing/air_photos/cameras` for approximate locations of fiducial markers.
+
+Rather than editing the ``MeasuresCamera.xml`` file with the fiducial marker locations, you can also put the fiducial
+marker locations into a CSV file, then use :py:meth:`spymicmac.micmac.create_measurescamera_xml` to convert
+this create ``Ori-InterneScan/MeasuresCamera.xml``.
+
 id_fiducial.txt
 ----------------
 This is just a plain text file, with the "names" of the different fiducial marks:

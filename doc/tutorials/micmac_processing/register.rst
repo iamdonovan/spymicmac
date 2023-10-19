@@ -2,11 +2,11 @@ automatically finding control points
 ====================================
 At this point, you should have successfully run ``mm3d Malt`` and ``mm3d Tawny`` to generate a relative orthophoto
 and DEM. You should also have run :py:meth:`spymicmac.micmac.mosaic_micmac_tiles` (or
-:doc:`../../spymicmac/scripts/mosaic_micmac_tiles`) if needed - otherwise, :py:meth:`spymicmac.register.register_ortho`
-(or :doc:`../../spymicmac/scripts/register_ortho`) will most likely fail.
+:doc:`../../spymicmac/scripts/mosaic_micmac_tiles`) if needed - otherwise, :py:meth:`spymicmac.register.register_relative`
+(or :doc:`../../spymicmac/scripts/register_relative`) will most likely fail.
 
-In order to run :py:meth:`spymicmac.register.register_ortho`, you will need a number of files, detailed in the section
-below. After that, this document will describe the process that :py:meth:`spymicmac.register.register_ortho`
+In order to run :py:meth:`spymicmac.register.register_relative`, you will need a number of files, detailed in the section
+below. After that, this document will describe the process that :py:meth:`spymicmac.register.register_relative`
 uses to find GCPs and iteratively refine the orientation.
 
 necessary files
@@ -16,7 +16,7 @@ reference orthoimage and DEM
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 At the risk of stating the obvious, the reference orthoimage and DEM should cover your study area. The reference
 orthoimage can be a high-resolution orthomosaic, or it can be a comparatively low-resolution satellite image.
-:py:meth:`spymicmac.register.register_ortho` has been tested on both Landsat-8 and Sentinel-2 images, with
+:py:meth:`spymicmac.register.register_relative` has been tested on both Landsat-8 and Sentinel-2 images, with
 satisfactory results for both.
 
 In general, the results will depend in part on the accuracy of the control points - so if your reference orthoimage
@@ -31,7 +31,7 @@ This should be a vector dataset (e.g., shapefile, geopackage - anything that can
 to be highly accurate - most of the routines in :py:meth:`spymicmac.register` have been developed using USGS
 datasets/metadata, which are only approximate footprints.
 
-The main use for the footprints in :py:meth:`spymicmac.register.register_ortho` is in the call to
+The main use for the footprints in :py:meth:`spymicmac.register.register_relative` is in the call to
 :py:meth:`spymicmac.orientation.transform_centers`, which uses
 `RANSAC <https://scikit-image.org/docs/dev/api/skimage.measure.html#skimage.measure.ransac>`_
 to estimate an affine transformation between the footprint centroids and the relative camera centers estimated
@@ -49,7 +49,7 @@ should work according to plan.
 exclusion and inclusion masks (optional)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 Finally, in areas with lots of water or terrain that has changed substantially (e.g., glaciers),
-:py:meth:`spymicmac.register.register_ortho` can use both exclusion and inclusion masks to avoid searching for
+:py:meth:`spymicmac.register.register_relative` can use both exclusion and inclusion masks to avoid searching for
 matches on unstable terrain. Just like with the footprints, these files should be any data format that can be
 read by `geopandas.read_file <https://geopandas.org/docs/reference/api/geopandas.read_file.html>`_.
 
@@ -61,7 +61,7 @@ are not covered by this mask will be excluded from the search.
 
 relative to absolute transformation
 ------------------------------------
-The first step in :py:meth:`spymicmac.register.register_ortho` to use :py:meth:`spymicmac.orientation.transform_centers`
+The first step in :py:meth:`spymicmac.register.register_relative` to use :py:meth:`spymicmac.orientation.transform_centers`
 to transform between the relative and absolute spaces, using the centroids of the footprint polygons and the camera
 positions estimated by ``mm3d Tapas``.
 
@@ -78,7 +78,7 @@ the gridded template matching step.
 gridded template matching
 --------------------------
 Once the relative orthophoto has been roughly transformed to absolute space,
-:py:meth:`spymicmac.register.register_ortho` find matches between the orthophoto and the reference image using
+:py:meth:`spymicmac.register.register_relative` find matches between the orthophoto and the reference image using
 :py:meth:`spymicmac.matching.find_grid_matches`. The size of each search window is set by ``dstwin``, and the templates
 (of size 121x121 pixels) are taken from a grid with spacing determined by the ``density`` parameter.
 

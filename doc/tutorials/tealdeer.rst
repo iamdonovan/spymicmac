@@ -162,11 +162,11 @@ registering the image
     images. In the examples below, I assume that these are named ``DEM.tif`` and ``Landsat.tif``, respectively.
 
 
-The main command to run here is :doc:`../../spymicmac/scripts/register_ortho`:
+The main command to run here is :doc:`../../spymicmac/scripts/register_relative`:
 
 .. code-block:: sh
 
-    register_ortho Ortho-MEC-Malt/Orthophotomosaic.tif Landsat.tif MEC-Malt/Z_Num6_DeZoom8_STD-MALT.tif DEM.tif
+    register_relative MEC-Malt DEM.tif
 
 .. note::
 
@@ -175,7 +175,7 @@ The main command to run here is :doc:`../../spymicmac/scripts/register_ortho`:
 
     .. code-block:: sh
 
-        register_ortho Ortho-MEC-Malt/Orthophotomosaic.tif Landsat.tif MEC-Malt/Z_Num6_DeZoom8_STD-MALT.tif DEM.tif -footprints Footprints.shp
+        register_relative MEC-Malt DEM.tif -footprints Footprints.shp
 
     The shapefile should have a polygon for each image, with the name of the original image (minus the file extension)
     included in an ``ID`` column.

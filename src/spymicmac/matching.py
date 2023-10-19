@@ -27,6 +27,149 @@ from spymicmac import image, micmac, resample
 ######################################################################################################################
 # tools for matching fiducial markers (or things like fiducial markers)
 ######################################################################################################################
+def find_fiducials(fn_img, templates, fn_cam=None):
+    """
+    Match the location of fiducial markers for a scanned aerial photo.
+
+    :param str fn_img: the filename of the image to find fiducial markers in.
+    :param dict templates: a dict of (name, template) pairs corresponding to each fiducial marker.
+    :param str fn_cam: the filename of the MeasuresCamera.xml file for the image. defaults to
+        Ori-InterneScan/MeasuresCamera.xml
+    """
+    img = io.imread(fn_img)
+
+    coords_all = []
+
+    for fid, templ in templates.items():
+        res = cv2.matchTemplate(img.astype(np.uint8), templ.astype(np.uint8), cv2.TM_CCORR_NORMED)
+
+        coords = peak_local_max(res, threshold_rel=0.9, min_distance=100, num_peaks=5).astype(float)
+        coords += templ.shape[0] / 2 - 0.5
+
+        these_coords = pd.DataFrame()
+        these_coords['im_col'] = coords[:, 1]
+        these_coords['im_row'] = coords[:, 0]
+        these_coords['gcp'] = fid
+
+        coords_all.append(these_coords)
+
+    coords_all = pd.concat(coords_all, ignore_index=True)
+
+    if fn_cam is None:
+        fn_cam = os.path.join('Ori-InterneScan', 'MeasuresCamera.xml')
+    measures_cam = micmac.parse_im_meas(fn_cam)
+
+    scale = np.mean((coords_all.im_col.max() - coords_all.im_col.min(),
+                     coords_all.im_row.max()) - coords_all.im_row.min()) / \
+        np.mean((measures_cam.j.max() - measures_cam.j.min(),
+                 measures_cam.i.max() - measures_cam.i.min()))
+
+    scaled = measures_cam.copy()
+    scaled['j'] -= scaled['j'].min()
+    scaled['i'] -= scaled['i'].min()
+
+    scaled['j'] *= scale
+    scaled['i'] *= scale
+
+    model = AffineTransform()
+    model.estimate(scaled[['j', 'i']].values,
+                   measures_cam[['j', 'i']].values)
+
+    for ind, row in coords_all.iterrows():
+        src = row[['im_col', 'im_row']].values.reshape(1, 2).astype(float)
+        dst = measures_cam.loc[measures_cam['name'] == row['gcp'], ['j', 'i']].values
+
+        resid = model.residuals(src, dst)
+        coords_all.loc[ind, 'resid'] = resid[0]
+
+    coords_all['resid'] = coords_all['resid'].astype(float)
+
+    inds = []
+    for fid in templates.keys():
+        inds.append(coords_all[coords_all['gcp'] == fid]['resid'].idxmin())
+
+    coords_all = coords_all.loc[inds]
+
+    model.estimate(coords_all[['im_col', 'im_row']].values,
+                   measures_cam[['j', 'i']].values)
+
+    residuals = model.residuals(coords_all[['im_col', 'im_row']].values,
+                                measures_cam[['j', 'i']].values)
+
+    print('Mean residual: {:.2f} pixels'.format(residuals.mean()))
+
+    # write the measures
+    E = builder.ElementMaker()
+    ImMes = E.MesureAppuiFlottant1Im(E.NameIm(fn_img))
+
+    pt_els = micmac.get_im_meas(coords_all, E)
+    for p in pt_els:
+        ImMes.append(p)
+    os.makedirs('Ori-InterneScan', exist_ok=True)
+
+    outxml = E.SetOfMesureAppuisFlottants(ImMes)
+
+    tree = etree.ElementTree(outxml)
+    tree.write(os.path.join('Ori-InterneScan', 'MeasuresIm-' + fn_img + '.xml'), pretty_print=True,
+               xml_declaration=True, encoding="utf-8")
+
+
+def _corner(size):
+    templ = np.zeros((size, size), dtype=np.uint8)
+    templ[:int(size/2)+1, int(size/2)+1:] = 255
+    return templ
+
+
+def _box(size):
+    templ = np.zeros((size, size), dtype=np.uint8)
+    templ[:int(size / 2) + 1, int(size / 2) + 1:] = 255
+    templ[int(size / 2) + 1:, :int(size / 2) + 1] = 255
+    return templ
+
+
+def templates_from_meas(fn_img, half_size=100):
+    """
+    Create fiducial templates from points in a MeasuresIm file.
+
+    :param str fn_img: the filename of the image to use. Points for templates will be taken from
+        Ori-InterneScan-Measuresim{fn-img}.xml.
+    :param int half_size: the half-size of the template to create, in pixels (default: 100)
+    :return: **templates** (*dict*) -- a *dict* of (name, template) pairs for each fiducial marker.
+    """
+    fn_meas = os.path.join('Ori-InterneScan', f'MeasuresIm-{fn_img}.xml')
+    meas_im = micmac.parse_im_meas(fn_meas)
+
+    fn_img = fn_meas.split('MeasuresIm-')[1].split('.xml')[0]
+
+    img = io.imread(fn_img)
+
+    templates = []
+    for ind, row in meas_im.iterrows():
+        subimg, _, _ = make_template(img, (row.i, row.j), half_size=half_size)
+        templates.append(subimg)
+
+    return dict(zip(meas_im.name.values, templates))
+
+
+def match_fairchild_k17(fn_img, size=101, fn_cam=None):
+    """
+    Match the "fiducial" locations for a Fairchild K17B-style camera (4 "wing" style fiducial markers in the middle of
+    each side of the image).
+
+    :param str fn_img: the filename of the image to find fiducial markers in.
+    :param int size: the size of the template to use (default: 101 pixels)
+    :param str fn_cam: the filename of the MeasuresCamera.xml file for the image. defaults to
+        Ori-InterneScan/MeasuresCamera.xml
+    """
+    templ = _corner(size)
+    fids = [f'P{n}' for n in range(1, 5)]
+    templates = [templ, np.fliplr(templ), templ.T, np.fliplr(templ).T]
+
+    templ_dict = dict(zip(fids, templates))
+
+    find_fiducials(fn_img, templ_dict, fn_cam)
+
+
 def cross_template(shape, width=3):
     """
     Create a cross-shaped template for matching reseau or fiducial marks.
@@ -535,7 +678,7 @@ def find_kh4_notches(img, size=101):
     matches = []
 
     for jj, ii in zip(search_j, search_i):
-        subimg, _, _ = make_template(img, [ii, jj], 400)
+        subimg, _, _ = make_template(img, [ii, jj], 4 * size)
         # res, this_i, this_j = find_match(subimg, templ, how='max', eq=False)
         res = cv2.matchTemplate(subimg.astype(np.uint8), templ.astype(np.uint8), cv2.TM_CCORR_NORMED)
 
@@ -544,7 +687,10 @@ def find_kh4_notches(img, size=101):
         except IndexError:
             this_i = this_j = np.nan
 
-        matches.append((this_i - 400 + ii, this_j - 400 + jj))
+        this_i += (subimg.shape[0] - res.shape[0]) / 2
+        this_j += (subimg.shape[1] - res.shape[1]) / 2
+
+        matches.append((this_i - 4*size + ii, this_j - 4*size + jj))
 
     return np.array(matches)
 
@@ -773,7 +919,7 @@ def do_match(dest_img, ref_img, mask, pt, srcwin, dstwin):
     return (out_j, out_i), z_corr, peak_corr
 
 
-def get_matches(img1, img2, mask1=None, mask2=None, dense=False):
+def get_matches(img1, img2, mask1=None, mask2=None, dense=False, npix=100, nblocks=None):
     """
     Return keypoint matches found using openCV's ORB implementation.
 
@@ -792,8 +938,8 @@ def get_matches(img1, img2, mask1=None, mask2=None, dense=False):
             kp1, des1 = get_dense_keypoints(img1.astype(np.uint8), mask1, nblocks=1, return_des=True)
             kp2, des2 = get_dense_keypoints(img2.astype(np.uint8), mask2, nblocks=1, return_des=True)
         else:
-            kp1, des1 = get_dense_keypoints(img1.astype(np.uint8), mask1, return_des=True)
-            kp2, des2 = get_dense_keypoints(img2.astype(np.uint8), mask2, return_des=True)
+            kp1, des1 = get_dense_keypoints(img1.astype(np.uint8), mask1, npix=npix, nblocks=nblocks, return_des=True)
+            kp2, des2 = get_dense_keypoints(img2.astype(np.uint8), mask2, npix=npix, nblocks=nblocks, return_des=True)
     else:
         orb = cv2.ORB_create()
         kp1, des1 = orb.detectAndCompute(img1.astype(np.uint8), mask=mask1)
@@ -850,7 +996,10 @@ def get_dense_keypoints(img, mask, npix=100, nblocks=None, return_des=False):
     olap = int(max(0.25 * img.shape[1]/x_tiles, 0.25 * img.shape[0]/y_tiles))
 
     split_img, oy, ox = image.splitter(img, (y_tiles, x_tiles), overlap=olap)
-    split_msk, _, _ = image.splitter(mask, (y_tiles, x_tiles), overlap=olap)
+    if mask is not None:
+        split_msk, _, _ = image.splitter(mask, (y_tiles, x_tiles), overlap=olap)
+    else:
+        split_msk = [None] * len(split_img)
 
     # rel_x, rel_y = get_subimg_offsets(split_img, (y_tiles, x_tiles), overlap=olap)
 

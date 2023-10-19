@@ -4,7 +4,7 @@ channels:
   - defaults
 dependencies:
   - python>=3.10
-  - scikit-image>=0.19
+  - scikit-image>=0.19,<0.20.0
   - geopandas
   - matplotlib
   - sphinx

@@ -150,19 +150,22 @@ def get_gcp_meas(im_name, meas_name, in_dir, E, nodist=None, gcp_name='GCP'):
     return this_im_mes
 
 
-def get_im_meas(gcps, E):
+def get_im_meas(points_df, E, name='gcp', x='im_col', y='im_row'):
     """
     Populate an lxml.builder.ElementMaker object with GCP image locations, for writing to xml files.
 
-    :param pandas.DataFrame gcps: a DataFrame with the GCPs to find image locations for.
+    :param pandas.DataFrame points_df: a DataFrame with the points to find image locations for.
     :param lxml.builder.ElementMaker E: an ElementMaker object for writing to the xml file.
+    :param str name: the column name in points_df corresponding to the point name [gcp]
+    :param str x: the column name in points_df corresponding to the image x location [im_col]
+    :param str y: the column name in points_df corresponding to the image y location [im_row]
     :return: **pt_els** (*list*) -- a list of ElementMaker objects corresponding to each GCP image location.
     """
     pt_els = []
-    for ind, row in gcps.iterrows():
+    for ind, row in points_df.iterrows():
         this_mes = E.OneMesureAF1I(
-                        E.NamePt(row['gcp']),
-                        E.PtIm('{} {}'.format(row['im_col'], row['im_row']))
+                        E.NamePt(row[name]),
+                        E.PtIm('{} {}'.format(row[x], row[y]))
                         )
         pt_els.append(this_mes)
     return pt_els
@@ -245,6 +248,41 @@ def generate_measures_files(joined=False):
         for gcp in gcp_names:
             row, col = gcp
             print('GCP_{}_{}'.format(row, col), file=f)
+
+
+def create_measurescamera_xml(fn_csv, ori='InterneScan', translate=False, name='gcp', x='im_col', y='im_row'):
+    """
+    Create a MeasuresCamera.xml file from a csv of fiducial marker locations.
+
+    :param str fn_csv: the filename of the CSV file.
+    :param str ori: the Ori directory to write the MeasuresCamera.xml file to. Defaults to (Ori-)InterneScan.
+    :param bool translate: translate coordinates so that the origin is the upper left corner, rather than the principal
+        point
+    :param str name: the column name in the csv file corresponding to the point name [gcp]
+    :param str x: the column name in the csv file corresponding to the image x location [im_col]
+    :param str y: the column name in the csv file corresponding to the image y location [im_row]
+    """
+    fids = pd.read_csv(fn_csv)
+
+    # if coordinates are relative to the principal point,
+    # convert them to be relative to the upper left corner
+    if translate:
+        fids[x] = fids[x] - fids[x].min()
+        fids[y] = -fids[y] - min(-fids[y])
+
+    E = builder.ElementMaker()
+    ImMes = E.MesureAppuiFlottant1Im(E.NameIm('Glob'))
+
+    pt_els = get_im_meas(fids, E, name=name, x=x, y=y)
+    for p in pt_els:
+        ImMes.append(p)
+
+    outxml = E.SetOfMesureAppuisFlottants(ImMes)
+    tree = etree.ElementTree(outxml)
+
+    os.makedirs(f'Ori-{ori}', exist_ok=True)
+    tree.write(os.path.join(f'Ori-{ori}', 'MeasuresCamera.xml'), pretty_print=True,
+               xml_declaration=True, encoding="utf-8")
 
 
 def create_localchantier_xml(name='KH9MC', short_name='KH-9 Hexagon Mapping Camera', film_size=(460, 220),
@@ -658,9 +696,13 @@ def tapioca(img_pattern='OIS.*tif', res_low=400, res_high=1200):
     :param int res_low: the size of the largest image axis, in pixels, for low-resolution matching (default: 400)
     :param int res_high: the size of the largest image axis, in pixels, for high-resolution matching (default: 1200)
     """
-    echo = subprocess.Popen('echo', stdout=subprocess.PIPE)
+    if os.name == 'nt':
+        echo = subprocess.Popen('echo', stdout=subprocess.PIPE, shell=True)
+    else:
+        echo = subprocess.Popen('echo', stdout=subprocess.PIPE)
     p = subprocess.Popen(['mm3d', 'Tapioca', 'MulScale', img_pattern,
                           str(res_low), str(res_high)], stdin=echo.stdout)
+
     return p.wait()
 
 
@@ -685,7 +727,10 @@ def tapas(cam_model, ori_out, img_pattern='OIS.*tif', in_cal=None, lib_foc=True,
     :param bool lib_pp: allow the principal point to be calibrated (default: True)
     :param bool lib_cd: allow the center of distortion to be calibrated (default: True)
     """
-    echo = subprocess.Popen('echo', stdout=subprocess.PIPE)
+    if os.name == 'nt':
+        echo = subprocess.Popen('echo', stdout=subprocess.PIPE, shell=True)
+    else:
+        echo = subprocess.Popen('echo', stdout=subprocess.PIPE)
 
     if in_cal is not None:
         p = subprocess.Popen(['mm3d', 'Tapas', cam_model, img_pattern, 'InCal=' + in_cal,
@@ -695,6 +740,7 @@ def tapas(cam_model, ori_out, img_pattern='OIS.*tif', in_cal=None, lib_foc=True,
         p = subprocess.Popen(['mm3d', 'Tapas', cam_model, img_pattern,
                               'LibFoc={}'.format(int(lib_foc)), 'LibPP={}'.format(int(lib_pp)),
                               'LibCD={}'.format(int(lib_cd)), 'Out=' + ori_out], stdin=echo.stdout)
+
     return p.wait()
 
 
@@ -705,8 +751,13 @@ def apericloud(ori, img_pattern='OIS.*tif'):
     :param str ori: the input orientation to use
     :param str img_pattern: the image pattern to pass to AperiCloud (default: OIS.*tif)
     """
-    echo = subprocess.Popen('echo', stdout=subprocess.PIPE)
+    if os.name == 'nt':
+        echo = subprocess.Popen('echo', stdout=subprocess.PIPE, shell=True)
+    else:
+        echo = subprocess.Popen('echo', stdout=subprocess.PIPE)
+
     p = subprocess.Popen(['mm3d', 'AperiCloud', img_pattern, ori], stdin=echo.stdout)
+
     return p.wait()
 
 
@@ -723,7 +774,10 @@ def malt(imlist, ori, zoomf=1, zoomi=None, dirmec='MEC-Malt', seed_img=None, see
         must also be set. (default: not used)
     :param str seed_xml: an XML file corresponding to the seed_img (default: not used)
     """
-    echo = subprocess.Popen('echo', stdout=subprocess.PIPE)
+    if os.name == 'nt':
+        echo = subprocess.Popen('echo', stdout=subprocess.PIPE, shell=True)
+    else:
+        echo = subprocess.Popen('echo', stdout=subprocess.PIPE)
 
     if type(imlist) is str:
         matchstr = imlist
@@ -746,7 +800,7 @@ def malt(imlist, ori, zoomf=1, zoomi=None, dirmec='MEC-Malt', seed_img=None, see
 
     p = subprocess.Popen(args, stdin=echo.stdout)
 
-    p.wait()
+    return p.wait()
 
 
 def tawny(dirmec, radiomegal=False):
@@ -756,34 +810,43 @@ def tawny(dirmec, radiomegal=False):
     :param str dirmec: the MEC directory to use
     :param bool radiomegal: run Tawny with RadiomEgal=1 (default: False)
     """
-    echo = subprocess.Popen('echo', stdout=subprocess.PIPE)
+    if os.name == 'nt':
+        echo = subprocess.Popen('echo', stdout=subprocess.PIPE, shell=True)
+    else:
+        echo = subprocess.Popen('echo', stdout=subprocess.PIPE)
 
     p = subprocess.Popen(['mm3d', 'Tawny', 'Ortho-{}'.format(dirmec), 'Out=Orthophotomosaic.tif',
                           'RadiomEgal={}'.format(int(radiomegal))], stdin=echo.stdout)
-    p.wait()
+    return p.wait()
 
 
 def block_malt(imlist, nimg=3, ori='Relative', zoomf=8):
     """
     Run mm3d Malt Ortho and mm3d Tawny on successive blocks of images.
 
-    :param iterable imlist: an iterable object of image filenames.
+    :param iterable imlist: an iterable object of image filenames, or an iterable object of lists of image filenames
     :param int nimg: the number of images to use in a block (default: 3)
     :param str ori: the name of the orientation directory (e.g., Ori-Relative). (default: Relative)
     :param int zoomf: the final Zoom level to use (default: 8)
     """
     dirmec = 'MEC-' + ori
 
-    inds = range(0, len(imlist) - (nimg - 1), nimg - 1)
-    if len(inds) == 1 and len(imlist) > nimg:
-        inds = [0, 1]
+    if type(imlist[0]) is str:
+        inds = range(0, len(imlist) - (nimg - 1), nimg - 1)
+        if len(inds) == 1 and len(imlist) > nimg:
+            inds = [0, 1]
+        blocklist = [imlist[ind:ind + nimg] for ind in inds]
+    else:
+        blocklist = imlist
 
-    for block, ind in enumerate(inds):
-        print(imlist[ind:ind + nimg])
+    for block, imgs in enumerate(blocklist):
+        print(imgs)
 
-        malt(imlist[ind:ind + nimg], ori, dirmec='{}_block{}'.format(dirmec, block), zoomf=zoomf)
+        malt(imgs, ori, dirmec='{}_block{}'.format(dirmec, block), zoomf=zoomf)
 
         tawny('{}_block{}'.format(dirmec, block))
+
+        mosaic_micmac_tiles('Orthophotomosaic', '{}_block{}'.format(dirmec, block))
 
 
 def bascule(in_gcps, outdir, img_pattern, sub, ori, outori='TerrainRelAuto',
@@ -806,7 +869,11 @@ def bascule(in_gcps, outdir, img_pattern, sub, ori, outori='TerrainRelAuto',
     fn_gcp = fn_gcp + sub + '.xml'
     fn_meas = fn_meas + sub + '-S2D.xml'
 
-    echo = subprocess.Popen('echo', stdout=subprocess.PIPE)
+    if os.name == 'nt':
+        echo = subprocess.Popen('echo', stdout=subprocess.PIPE, shell=True)
+    else:
+        echo = subprocess.Popen('echo', stdout=subprocess.PIPE)
+
     p = subprocess.Popen(['mm3d', 'GCPBascule', img_pattern, ori,
                           outori + sub,
                           os.path.join(outdir, fn_gcp),
@@ -840,7 +907,10 @@ def campari(in_gcps, outdir, img_pattern, sub, dx, ortho_res, allfree=True,
     :param str homol: the Homologue directory to use (default: Homol)
     :return: **out_gcps** (*pandas.DataFrame*) -- the input gcps with the updated Campari residuals.
     """
-    echo = subprocess.Popen('echo', stdout=subprocess.PIPE)
+    if os.name == 'nt':
+        echo = subprocess.Popen('echo', stdout=subprocess.PIPE, shell=True)
+    else:
+        echo = subprocess.Popen('echo', stdout=subprocess.PIPE)
 
     fn_gcp = fn_gcp + sub + '.xml'
     fn_meas = fn_meas + sub + '-S2D.xml'
@@ -849,9 +919,9 @@ def campari(in_gcps, outdir, img_pattern, sub, dx, ortho_res, allfree=True,
                           inori + sub,
                           outori + sub,
                           'GCP=[{},{},{},{}]'.format(os.path.join(outdir, fn_gcp),
-                                                     np.abs(dx),
+                                                     np.abs(dx) / 2,  # should be correct within 1/2 pixel
                                                      os.path.join(outdir, fn_meas),
-                                                     np.abs(dx / ortho_res)),
+                                                     0.25),  # should be correct within 1/4 pixel
                           'SH={}'.format(homol),
                           'AllFree={}'.format(int(allfree))], stdin=echo.stdout)
     p.wait()
@@ -935,16 +1005,16 @@ def iterate_campari(gcps, out_dir, match_pattern, subscript, dx, ortho_res, fn_g
 
     gcps['camp_dist'] = np.sqrt(gcps.camp_xres ** 2 + gcps.camp_yres ** 2)
 
-    while any([np.any(np.abs(gcps.camp_res - gcps.camp_res.median()) > 2 * nmad(gcps.camp_res)),
-               np.any(np.abs(gcps.camp_dist - gcps.camp_dist.median()) > 2 * nmad(gcps.camp_dist)),
+    while any([np.any(np.abs(gcps.camp_res - gcps.camp_res.median()) > 4 * nmad(gcps.camp_res)),
+               np.any(np.abs(gcps.camp_dist - gcps.camp_dist.median()) > 4 * nmad(gcps.camp_dist)),
                gcps.camp_res.max() > 2]) and niter <= max_iter:
-        valid_inds = np.logical_and.reduce((np.abs(gcps.camp_res - gcps.camp_res.median()) < 2 * nmad(gcps.camp_res),
+        valid_inds = np.logical_and.reduce((np.abs(gcps.camp_res - gcps.camp_res.median()) < 4 * nmad(gcps.camp_res),
                                             gcps.camp_res < gcps.camp_res.max()))
         if np.count_nonzero(valid_inds) < 10:
             break
 
         gcps = gcps.loc[valid_inds]
-        save_gcps(gcps, out_dir, register.get_utm_str(gcps.crs.to_epsg), subscript, fn_gcp=fn_gcp, fn_meas=fn_meas)
+        save_gcps(gcps, out_dir, register._get_utm_str(gcps.crs.to_epsg), subscript, fn_gcp=fn_gcp, fn_meas=fn_meas)
 
         gcps = bascule(gcps, out_dir, match_pattern, subscript, rel_ori, fn_gcp=fn_gcp,
                        fn_meas=fn_meas, outori=inori)
@@ -1002,7 +1072,11 @@ def mask_invalid_els(dir_mec, fn_dem, fn_mask, ori, match_pattern='OIS.*tif', zo
     automask.write(fn_auto)
     dem.write(zlist[ind])
 
-    echo = subprocess.Popen('echo', stdout=subprocess.PIPE)
+    if os.name == 'nt':
+        echo = subprocess.Popen('echo', stdout=subprocess.PIPE, shell=True)
+    else:
+        echo = subprocess.Popen('echo', stdout=subprocess.PIPE)
+
     p = subprocess.Popen(['mm3d', 'Malt', 'Ortho', match_pattern, ori, 'DirMEC={}'.format(dir_mec),
                           'NbVI=2', 'MasqImGlob=filtre.tif', 'ZoomF={}'.format(zoomf),
                           'DefCor=1', 'CostTrans=1', 'EZA=1', 'DoMEC=0', 'DoOrtho=1', 'Etape0={}'.format(etape0)],
@@ -1032,7 +1106,12 @@ def save_gcps(in_gcps, outdir, utmstr, sub, fn_gcp='AutoGCPs', fn_meas='AutoMeas
     """
     in_gcps.to_file(os.path.join(outdir, fn_gcp + sub + '.shp'))
     write_auto_gcps(in_gcps, sub, outdir, utmstr, outname=fn_gcp)
-    echo = subprocess.Popen('echo', stdout=subprocess.PIPE)
+
+    if os.name == 'nt':
+        echo = subprocess.Popen('echo', stdout=subprocess.PIPE, shell=True)
+    else:
+        echo = subprocess.Popen('echo', stdout=subprocess.PIPE)
+
     p = subprocess.Popen(['mm3d', 'GCPConvert', 'AppInFile',
                           os.path.join(outdir, fn_gcp + sub + '.txt')], stdin=echo.stdout)
     p.wait()
@@ -1236,3 +1315,43 @@ def _update_autocal(ori, im):
 
     tree = ET.ElementTree(root)
     tree.write(fn_xml, encoding="utf-8", xml_declaration=True)
+
+
+def init_git():
+    """
+    Initialize a git repository in the current working directory.
+    """
+
+    if shutil.which('git') is not None:
+        # initialize an empty git repository with a main branch
+        p = subprocess.Popen(['git', 'init'])
+        p.wait()
+
+        # copy the .gitignore file to the current directory
+        _gitignore()
+
+    else:
+        # not sure if EnvironmentError is the best choice here
+        raise EnvironmentError("unable to find git using shutil.which - please ensure that git is installed.")
+
+
+def _gitignore():
+    # section headers for the .gitignore file
+    sect_headers = ['tar files', 'image files', 'point clouds', 'directories', 'xml files', 'log/txt files']
+
+    # patterns to ignore for each section
+    ignore = [['*.tar.gz', '*.tgz'],
+              ['*.tif'],
+              ['*.ply'],
+              ['Homol*/', 'MEC-*/', 'Ortho-MEC-*/', 'Pastis/', 'Tmp-MM-Dir/'],
+              ['SauvApero.xml', 'Tmp-SL-Glob.xml'],
+              ['mm3d-LogFile.txt', 'WarnApero.txt']]
+
+    ignore_dict = dict(zip(sect_headers, ignore))
+
+    with open('.gitignore', 'w') as f:
+        for sect in sect_headers:
+            print(f'# {sect}', file=f)
+            for ig in ignore_dict[sect]:
+                print(ig, file=f)
+            print('\n', file=f)

@@ -61,7 +61,7 @@ def combine_block_measures(blocks, meas_out='AutoMeasures', gcp_out='AutoGCPs',
     out_gcp.set_crs(gcp_shps[0].crs, inplace=True)
     out_gcp.to_file(os.path.join(dirname, gcp_out + '.shp'))
 
-    micmac.write_auto_gcps(out_gcp, '', dirname, register.get_utm_str(out_gcp.crs.to_epsg), outname=gcp_out)
+    micmac.write_auto_gcps(out_gcp, '', dirname, register._get_utm_str(out_gcp.crs.to_epsg), outname=gcp_out)
 
     echo = subprocess.Popen('echo', stdout=subprocess.PIPE)
     p = subprocess.Popen(['mm3d', 'GCPConvert', 'AppInFile',
