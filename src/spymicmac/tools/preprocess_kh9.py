@@ -4,7 +4,7 @@ import shutil
 import tarfile
 import numpy as np
 from glob import glob
-from skimage import io, filters
+from skimage import io, filters, exposure
 from spymicmac.image import join_hexagon
 from spymicmac.matching import find_reseau_grid, remove_crosses
 from spymicmac.resample import resample_hex
@@ -57,6 +57,7 @@ def _argparser():
     - erase: erases reseau markers from image
     - filter: use a 1-sigma gaussian filter to smooth the images before resampling
     - resample: resamples images to common size using the reseau marker locations
+    - balance: use contrast-limited adaptive histogram equalization (clahe) to improve contrast in the image
     - tapioca: calls mm3d Tapioca MulScale to find tie points
     - tapas: calls mm3d Tapas to calibrate camera model, find relative image orientation
     - aperi: calls mm3d AperiCloud to create point cloud using calibrated camera model
@@ -75,6 +76,8 @@ def _argparser():
                         help='Extension for tar files (default: .tgz)')
     parser.add_argument('-s', '--scale', action='store', type=int, default=70,
                         help='The scale of the resampled images, in pixels per mm. (default: 70)')
+    parser.add_argument('--clip_limit', action='store', type=float, default=0.005,
+                        help='Clipping limit, for contrast-limited adaptive histogram equalization. (default: 0.005)')
     parser.add_argument('-b', '--blend', action='store_true',
                         help='Blend across image halves to prevent a sharp line at edge.')
     parser.add_argument('--add_sfs', action='store_true',
@@ -105,7 +108,8 @@ def main():
     parser = _argparser()
     args = parser.parse_args()
 
-    proc_steps = ['extract', 'join', 'reseau', 'erase', 'filter', 'resample', 'tapioca', 'tapas', 'aperi']
+    proc_steps = ['extract', 'join', 'reseau', 'erase', 'filter', 'resample',
+                  'balance', 'tapioca', 'tapas', 'aperi']
 
     # check what steps we're running
     if args.steps == 'all':
@@ -130,9 +134,14 @@ def main():
     if do['extract']:
         imlist = extract(args.tar_ext)
         imlist = [tfile.split(args.tar_ext)[0] for tfile in imlist]
-    else:
+    elif any([do['join'], do['reseau'], do['erase'], do['resample']]):
         imlist = list(set([os.path.splitext(fn)[0].split('_')[0] for fn in glob('DZB*.tif')]))
         imlist.sort()
+    else:
+        imlist = [os.path.splitext(fn.split('OIS-Reech_')[1])[0] for fn in glob('OIS*.tif')]
+        imlist.sort()
+
+    print(imlist)
 
     if do['join']:
         print('Joining scanned image halves.')
@@ -189,6 +198,14 @@ def main():
             print('Resampling {}'.format(fn_img))
             resample_hex(fn_img + '.tif', scale=args.scale)
             shutil.move(fn_img + '.tif', 'Orig')
+
+    if do['balance']:
+        print('Using CLAHE to balance image contrast')
+        for fn_img in imlist:
+            print('OIS-Reech_' + fn_img)
+            img = io.imread('OIS-Reech_' + fn_img + '.tif')
+            img_adj = 255 * exposure.equalize_adapthist(img, clip_limit=args.clip_limit)
+            io.imsave('OIS-Reech_' + fn_img + '.tif', img_adj.astype(np.uint8))
 
     # run tapioca
     if do['tapioca']:
