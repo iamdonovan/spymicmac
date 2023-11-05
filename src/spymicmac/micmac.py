@@ -636,16 +636,19 @@ def get_campari_residuals(fn_resids, gcp_df):
     camp_x = []
     camp_y = []
     camp_z = []
+    camp_dist = []
 
     for a in last_iter:
         try:
             camp_x.append(float(a.find('EcartFaiscTerrain').text.split()[0]))
             camp_y.append(float(a.find('EcartFaiscTerrain').text.split()[1]))
             camp_z.append(float(a.find('EcartFaiscTerrain').text.split()[2]))
+            camp_dist.append(float(a.find('DistFaiscTerrain').text))
         except AttributeError:
             camp_x.append(np.nan)
             camp_y.append(np.nan)
             camp_z.append(np.nan)
+            camp_dist.append(np.nan)
 
     for data_ in zip(camp_gcp_names, err_max):
         gcp_df.loc[gcp_df.id == data_[0], 'camp_res'] = data_[1]
@@ -658,6 +661,9 @@ def get_campari_residuals(fn_resids, gcp_df):
 
     for data_ in zip(camp_gcp_names, camp_z):
         gcp_df.loc[gcp_df.id == data_[0], 'camp_zres'] = data_[1]
+
+    for data_ in zip(camp_gcp_names, camp_dist):
+        gcp_df.loc[gcp_df.id == data_[0], 'camp_dist'] = data_[1]
 
     return gcp_df
 
@@ -1003,12 +1009,12 @@ def iterate_campari(gcps, out_dir, match_pattern, subscript, dx, ortho_res, fn_g
                    inori=inori, outori=outori, fn_gcp=fn_gcp, fn_meas=fn_meas,
                    allfree=allfree)
 
-    gcps['camp_dist'] = np.sqrt(gcps.camp_xres ** 2 + gcps.camp_yres ** 2)
+    gcps['camp_xy'] = np.sqrt(gcps.camp_xres ** 2 + gcps.camp_yres ** 2)
 
-    while any([np.any(np.abs(gcps.camp_res - gcps.camp_res.median()) > 4 * nmad(gcps.camp_res)),
-               np.any(np.abs(gcps.camp_dist - gcps.camp_dist.median()) > 4 * nmad(gcps.camp_dist)),
+    while any([np.any(np.abs(gcps.camp_res - gcps.camp_res.median()) > 3 * nmad(gcps.camp_res)),
+               np.any(np.abs(gcps.camp_dist - gcps.camp_dist.median()) > 3 * nmad(gcps.camp_dist)),
                gcps.camp_res.max() > 2]) and niter <= max_iter:
-        valid_inds = np.logical_and.reduce((np.abs(gcps.camp_res - gcps.camp_res.median()) < 4 * nmad(gcps.camp_res),
+        valid_inds = np.logical_and.reduce((np.abs(gcps.camp_dist - gcps.camp_dist.median()) < 3 * nmad(gcps.camp_dist),
                                             gcps.camp_res < gcps.camp_res.max()))
         if np.count_nonzero(valid_inds) < 10:
             break
@@ -1024,7 +1030,7 @@ def iterate_campari(gcps, out_dir, match_pattern, subscript, dx, ortho_res, fn_g
                        inori=inori, outori=outori, fn_gcp=fn_gcp, fn_meas=fn_meas,
                        allfree=allfree, homol=homol)
 
-        gcps['camp_dist'] = np.sqrt(gcps.camp_xres ** 2 + gcps.camp_yres ** 2)
+        gcps['camp_xy'] = np.sqrt(gcps.camp_xres ** 2 + gcps.camp_yres ** 2)
         niter += 1
 
     return gcps
