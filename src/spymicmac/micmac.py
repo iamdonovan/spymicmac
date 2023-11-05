@@ -925,9 +925,9 @@ def campari(in_gcps, outdir, img_pattern, sub, dx, ortho_res, allfree=True,
                           inori + sub,
                           outori + sub,
                           'GCP=[{},{},{},{}]'.format(os.path.join(outdir, fn_gcp),
-                                                     np.abs(dx) / 2,  # should be correct within 1/2 pixel
+                                                     np.abs(dx) / 4,  # should be correct within 1/4 pixel
                                                      os.path.join(outdir, fn_meas),
-                                                     0.25),  # should be correct within 1/4 pixel
+                                                     1),  # best balance for distortion
                           'SH={}'.format(homol),
                           'AllFree={}'.format(int(allfree))], stdin=echo.stdout)
     p.wait()
