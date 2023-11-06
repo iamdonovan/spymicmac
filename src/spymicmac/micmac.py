@@ -937,6 +937,39 @@ def campari(in_gcps, outdir, img_pattern, sub, dx, ortho_res, allfree=True,
     return out_gcps
 
 
+def banana(fn_dem, fn_ref, deg=2, dZthresh=200., fn_mask=None, spacing=100):
+    """
+    Interface for running mm3d Postproc Banana, for computing a polynomial correction to a "banana" or dome.
+
+    :param str fn_dem: the filename of the input DEM to correct
+    :param str fn_ref: the filename of the reference DEM to use for the correction
+    :param int deg: the degree of the polynomial correction (0 - 3, default: 2)
+    :param float dZthresh: the threshold elevation difference between the reference and input DEMs (default: 200)
+    :param str fn_mask: an (optional) exclusion mask to use for the reference DEM
+    :param int spacing: the pixel spacing of the DEM to write (default: every 100 pixels)
+    """
+    assert deg in range(0, 4), "Polynomial degree limited to 0, 1, 2, or 3"
+
+    dem_ext = os.path.splitext(fn_ref)[-1]
+    fn_txt = fn_ref.replace(dem_ext, '.txt')
+    dem_to_text(fn_ref, fn_out=fn_txt, spacing=spacing, fn_mask=fn_mask)
+
+    # first, run gdal_translate to make a TFW file for the input dem
+    p = subprocess.Popen(['gdal_translate', fn_dem, 'tmp.tif', '-co', 'TFW=YES'])
+    p.wait()
+
+    shutil.move('tmp.tfw', fn_dem.replace(os.path.splitext(fn_dem)[-1], '.tfw'))
+    os.remove('tmp.tif')
+
+    p = subprocess.Popen(['mm3d', 'Postproc', 'Banana',
+                          fn_dem,
+                          f'ListGCPs={fn_txt}',
+                          f'DegPoly={deg}',
+                          f'dZthresh={dZthresh}'])
+
+    p.wait()
+
+
 def remove_worst_mesures(fn_meas, ori):
     """
     Remove outlier measures from an xml file, given the output from Campari.
@@ -1134,7 +1167,7 @@ def save_gcps(in_gcps, outdir, utmstr, sub, fn_gcp='AutoGCPs', fn_meas='AutoMeas
                   encoding="utf-8", xml_declaration=True)
 
 
-def dem_to_text(fn_dem, fn_out='dem_pts.txt', spacing=100):
+def dem_to_text(fn_dem, fn_out='dem_pts.txt', spacing=100, fn_mask=None):
     """
     Write elevations from a DEM raster to a text file for use in mm3d PostProc Banana.
 
@@ -1146,6 +1179,11 @@ def dem_to_text(fn_dem, fn_out='dem_pts.txt', spacing=100):
         dem = fn_dem
     else:
         dem = GeoImg(fn_dem)
+
+    if fn_mask is not None:
+        mask = create_mask_from_shapefile(dem, fn_mask)
+        dem.img[mask] = np.nan
+
     x, y = dem.xy()
 
     z = dem.img[::spacing, ::spacing].flatten()
