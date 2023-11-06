@@ -72,6 +72,8 @@ def _argparser():
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--steps', action='store', type=str, nargs='+', default='all',
                         help='The pre-processing steps to run.')
+    parser.add_argument('--skip', action='store', type=str, nargs='+', default='none',
+                        help='The pre-processing steps to skip.')
     parser.add_argument('--tar_ext', action='store', type=str, default='.tgz',
                         help='Extension for tar files (default: .tgz)')
     parser.add_argument('-s', '--scale', action='store', type=int, default=70,
@@ -117,6 +119,11 @@ def main():
     else:
         do_step = [step in args.steps for step in proc_steps]
     do = dict(zip(proc_steps, do_step))
+
+    if args.skip != 'none':
+        for step in args.skip:
+            if step in do.keys():
+                do.update({step: False})
 
     # create the necessary xml files, but only if they don't exist
     if not os.path.exists(os.path.join('Ori-Init', 'AutoCal_Foc-304800_KH9MC.xml')):
