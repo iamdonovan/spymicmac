@@ -5,7 +5,7 @@ import tarfile
 import numpy as np
 from glob import glob
 from skimage import io, exposure, filters
-from spymicmac.image import join_hexagon
+from spymicmac.image import join_hexagon, get_parts_list
 from spymicmac.preprocessing import extract
 from spymicmac.resample import crop_panoramic
 
@@ -29,7 +29,7 @@ def _argparser():
     """
     parser = argparse.ArgumentParser(description=helpstr,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument('flavor', action='store', stype=str,
+    parser.add_argument('flavor', action='store', type=str,
                         help='The camera type (KH4 or KH9)')
     parser.add_argument('--steps', action='store', type=str, nargs='+', default='all',
                         help='The pre-processing steps to run.')
@@ -90,7 +90,7 @@ def main():
 
         for fn_img in imlist:
             print(fn_img)
-            parts_list = image.get_parts_list(fn_img)
+            parts_list = get_parts_list(fn_img)
             if len(parts_list) < 2:
                 continue
 
