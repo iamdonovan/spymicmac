@@ -94,9 +94,9 @@ def main():
             if len(parts_list) < 2:
                 continue
 
-            join_hexagon(fn_img, blend=args.blend)
+            join_hexagon(fn_img, overlap=8000, blend=args.blend)
             for fn in parts_list:
-                shutil.move(fn, 'parts')
+                shutil.move(f'{fn_img}_{fn}.tif', 'parts')
 
     if do['filter']:
         print('Filtering images with a 1-sigma Gaussian Filter')
