@@ -59,11 +59,12 @@ def resample_hex(fn_img, scale, ori='InterneScan'):
     os.remove('{}.aux.xml'.format(fn_img))
 
 
-def rotate_kh4(img):
+def rotate_from_rails(img, rails):
     """
-    Use the rail marks in a KH-4 image to rotate the image.
+    Use the rail marks or other horizontal points in an image to rotate the image.
 
     :param array-like img: the image to rotate.
+    :param array-like rails: an Nx2 array of (row, col) points
     :return: **rotated** (*array-like*) -- the rotated image
     """
     rails = matching.find_rail_marks(img)
@@ -74,14 +75,48 @@ def rotate_kh4(img):
     return ndimage.rotate(img, angle)
 
 
-def resample_kh4(img):
+def crop_panoramic(fn_img, flavor, marker_size=None, fact=None):
     """
-    **INCOMPLETE**
+    Crop a declassified panoramic (KH4 or KH9) image, after rotating based on horizontal rail markers or "wagon wheel"
+    fiducial markers.
 
-    :param array-like img: the image to resample
-    :return:
+    :param str fn_img: the filename of the image to rotate and crop
+    :param str flavor: the camera type (KH4 or KH9)
+    :param int marker_size: The approximate size of the wagon wheels to identify in the image (default: 28 pixels)
+    :param int fact: the number by which to divide the image width and height to scale the image (default: do not scale)
     """
-    rotated = rotate_kh4(img)
+    assert flavor in ['KH4', 'KH9'], "flavor must be one of [KH4, KH9]"
+
+    img = io.imread(fn_img)
+    if flavor == 'KH4':
+        rails = matching.find_rail_marks(img)
+        rotated = rotate_from_rails(img, rails)
+    else:
+        rails = matching.ocm_show_wagon_wheels(img, size=marker_size)
+        # TODO: rotate the KH9 image using the wagon wheel markers
+
+    # get a rough idea of where the image frame should be
     left, right, top, bot = image.get_rough_frame(rotated)
-    rails = matching.find_rail_marks(rotated)
 
+    # buffer by 0.05% (left/right) or 0.5% (top/bottom) to ensure we have a clean image
+    left += (right - left) * 0.0005
+    right -= (right - left) * 0.0005
+
+    top += (bot - top) * 0.005
+    bot -= (bot - top) * 0.005
+
+    # crop the image to the buffered window
+    cropped = rotated[int(top):int(bot), int(left):int(right)]
+
+    if fact is not None:
+        cropped = downsample(cropped, fact=fact)
+
+    # if the image is from the aft camera, flip it before saving
+    # USGS naming convention is *[A|F]00N, so to figure out if it's an aft image,
+    # remove the extension, check the character 4 places from the end
+    is_aft = os.path.splitext(fn_img)[0][-4] == 'A'
+    if is_aft:
+        cropped = np.flipud(cropped)
+
+    # save the resampled image
+    io.imsave('OIS-Reech_' + fn_img, cropped.astype(np.uint8))
