@@ -91,6 +91,9 @@ def crop_panoramic(fn_img, flavor, marker_size=None, fact=None):
     if flavor == 'KH4':
         rails = matching.find_rail_marks(img)
         rotated = rotate_from_rails(img, rails)
+
+        # crop the lower part of the image to avoid introducing a bright line at the bottom
+        rotated = rotated[:-int(0.1 * rails[:, 0].mean()), :]
     else:
         rails = matching.ocm_show_wagon_wheels(img, size=marker_size)
         # TODO: rotate the KH9 image using the wagon wheel markers
@@ -106,6 +109,7 @@ def crop_panoramic(fn_img, flavor, marker_size=None, fact=None):
     bot -= (bot - top) * 0.005
 
     # crop the image to the buffered window
+    print(f'Cropping to window (left, right, top, bot): {int(left)}, {int(right)}, {int(top)}, {int(bot)}')
     cropped = rotated[int(top):int(bot), int(left):int(right)]
 
     if fact is not None:
@@ -116,7 +120,7 @@ def crop_panoramic(fn_img, flavor, marker_size=None, fact=None):
     # remove the extension, check the character 4 places from the end
     is_aft = os.path.splitext(fn_img)[0][-4] == 'A'
     if is_aft:
-        cropped = np.flipud(cropped)
+        cropped = np.fliplr(np.flipud(cropped))
 
     # save the resampled image
     io.imsave('OIS-Reech_' + fn_img, cropped.astype(np.uint8))
