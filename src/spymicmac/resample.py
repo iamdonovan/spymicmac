@@ -107,6 +107,8 @@ def crop_panoramic(fn_img, flavor, marker_size=31, fact=None, return_vals=False)
         # refine the choice to ensure the points are on the same line
         valid = matching._refine_rail(rails)
 
+        rotated, angle = rotate_from_rails(img, rails[valid])
+
     # get a rough idea of where the image frame should be
     left, right, top, bot = image.get_rough_frame(rotated)
 
