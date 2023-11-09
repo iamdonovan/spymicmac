@@ -3,6 +3,7 @@ import argparse
 import shutil
 import tarfile
 import numpy as np
+import pandas as pd
 from glob import glob
 from skimage import io, exposure, filters
 from spymicmac.image import join_hexagon, get_parts_list
@@ -109,10 +110,26 @@ def main():
     if do['crop']:
         print('Rotating and cropping images')
         os.makedirs('Orig', exist_ok=True)
+
+        img_params = pd.DataFrame(columns=['fn_img', 'left', 'right', 'top', 'bot', 'angle'])
+
         for fn_img in imlist:
             print(fn_img)
-            crop_panoramic(fn_img + '.tif', args.flavor, marker_size=args.marker_size, fact=args.factor)
+            border, angle = crop_panoramic(fn_img + '.tif', args.flavor, marker_size=args.marker_size, fact=args.factor)
+            left, right, top, bot = border
+
             shutil.move(fn_img + '.tif', 'Orig')
+
+            row = pd.Series()
+            row['fn_img'] = fn_img
+            row['left'] = int(left)
+            row['right'] = int(right)
+            row['top'] = int(top)
+            row['bot'] = int(bot)
+            row['angle'] = angle
+
+            img_params.loc[len(img_params)] = row
+            img_params.to_csv('crop_parameters.csv', index=False)
 
     if do['balance']:
         print('Using CLAHE to balance image contrast')
