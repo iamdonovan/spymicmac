@@ -37,8 +37,8 @@ def _argparser():
                         help='The pre-processing steps to skip.')
     parser.add_argument('--tar_ext', action='store', type=str, default='.tgz',
                         help='Extension for tar files (default: .tgz)')
-    parser.add_argument('-m', '--marker_size', action='store', type=int, default=28,
-                        help='The size of the wagon wheel markers to identify in the image (default: 28 px)')
+    parser.add_argument('-m', '--marker_size', action='store', type=int, default=31,
+                        help='The size of the wagon wheel markers to identify in the image (default: 31 px)')
     parser.add_argument('-s', '--factor', action='store', type=int, default=None,
                         help='The number by which to divide the image width and height to scale the image '
                              '(default: do not scale)')
