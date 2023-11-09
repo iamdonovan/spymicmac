@@ -67,7 +67,6 @@ def rotate_from_rails(img, rails):
     :param array-like rails: an Nx2 array of (row, col) points
     :return: **rotated** (*array-like*) -- the rotated image
     """
-    rails = matching.find_rail_marks(img)
     slope, intercept = np.polyfit(rails[:, 1], rails[:, 0], 1)
     angle = np.rad2deg(np.arctan(slope))
     print('Calculated angle of rotation: {:.4f}'.format(angle))
@@ -75,14 +74,14 @@ def rotate_from_rails(img, rails):
     return ndimage.rotate(img, angle)
 
 
-def crop_panoramic(fn_img, flavor, marker_size=None, fact=None):
+def crop_panoramic(fn_img, flavor, marker_size=31, fact=None):
     """
     Crop a declassified panoramic (KH4 or KH9) image, after rotating based on horizontal rail markers or "wagon wheel"
     fiducial markers.
 
     :param str fn_img: the filename of the image to rotate and crop
     :param str flavor: the camera type (KH4 or KH9)
-    :param int marker_size: The approximate size of the wagon wheels to identify in the image (default: 28 pixels)
+    :param int marker_size: The approximate size of the wagon wheels to identify in the image (default: 31 pixels)
     :param int fact: the number by which to divide the image width and height to scale the image (default: do not scale)
     """
     assert flavor in ['KH4', 'KH9'], "flavor must be one of [KH4, KH9]"
@@ -96,7 +95,14 @@ def crop_panoramic(fn_img, flavor, marker_size=None, fact=None):
         rotated = rotated[:-int(0.1 * rails[:, 0].mean()), :]
     else:
         rails = matching.ocm_show_wagon_wheels(img, size=marker_size)
-        # TODO: rotate the KH9 image using the wagon wheel markers
+
+        # restrict ourselves to the top rail
+        rails = rails[rails[:, 0] < 0.1 * img.shape[0]]
+
+        # refine the choice to ensure the points are on the same line
+        valid = matching._refine_rail(rails)
+
+        rotated = rotate_from_rails(img, rails[valid])
 
     # get a rough idea of where the image frame should be
     left, right, top, bot = image.get_rough_frame(rotated)
