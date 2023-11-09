@@ -65,16 +65,18 @@ def rotate_from_rails(img, rails):
 
     :param array-like img: the image to rotate.
     :param array-like rails: an Nx2 array of (row, col) points
-    :return: **rotated** (*array-like*) -- the rotated image
+    :return:
+        - **rotated** (*array-like*) -- the rotated image
+        - **angle** (*float*) -- the calculated angle of rotation, in degrees
     """
     slope, intercept = np.polyfit(rails[:, 1], rails[:, 0], 1)
     angle = np.rad2deg(np.arctan(slope))
     print('Calculated angle of rotation: {:.4f}'.format(angle))
 
-    return ndimage.rotate(img, angle)
+    return ndimage.rotate(img, angle), angle
 
 
-def crop_panoramic(fn_img, flavor, marker_size=31, fact=None):
+def crop_panoramic(fn_img, flavor, marker_size=31, fact=None, return_vals=False):
     """
     Crop a declassified panoramic (KH4 or KH9) image, after rotating based on horizontal rail markers or "wagon wheel"
     fiducial markers.
@@ -83,13 +85,16 @@ def crop_panoramic(fn_img, flavor, marker_size=31, fact=None):
     :param str flavor: the camera type (KH4 or KH9)
     :param int marker_size: The approximate size of the wagon wheels to identify in the image (default: 31 pixels)
     :param int fact: the number by which to divide the image width and height to scale the image (default: do not scale)
+    :param bool return_vals: Return estimated image border and rotation angle (default: False)
+    :returns: **border**, **angle** -- the estimated image border (left, right, top, bot) and rotation angle. Only
+        returned if **return_vals** is True.
     """
     assert flavor in ['KH4', 'KH9'], "flavor must be one of [KH4, KH9]"
 
     img = io.imread(fn_img)
     if flavor == 'KH4':
         rails = matching.find_rail_marks(img)
-        rotated = rotate_from_rails(img, rails)
+        rotated, angle = rotate_from_rails(img, rails)
 
         # crop the lower part of the image to avoid introducing a bright line at the bottom
         rotated = rotated[:-int(0.1 * rails[:, 0].mean()), :]
@@ -101,8 +106,6 @@ def crop_panoramic(fn_img, flavor, marker_size=31, fact=None):
 
         # refine the choice to ensure the points are on the same line
         valid = matching._refine_rail(rails)
-
-        rotated = rotate_from_rails(img, rails[valid])
 
     # get a rough idea of where the image frame should be
     left, right, top, bot = image.get_rough_frame(rotated)
@@ -129,4 +132,39 @@ def crop_panoramic(fn_img, flavor, marker_size=31, fact=None):
         cropped = np.fliplr(np.flipud(cropped))
 
     # save the resampled image
+    io.imsave('OIS-Reech_' + fn_img, cropped.astype(np.uint8))
+
+    if return_vals:
+        return (left, right, top, bot), angle
+
+
+def crop_from_extent(fn_img, border, angle=None, fact=None):
+    """
+    Crop an image given the coordinates of the image border.
+
+    :param str fn_img: the filename of the image to rotate and crop
+    :param array-like border: the estimated image border coordinates (left, right, top, bot)
+    :param float angle: the angle by which to rotate the image (default: None)
+    :param int fact: the number by which to divide the image width and height to scale the image (default: do not scale)
+    """
+    img = io.imread(fn_img)
+
+    if angle is not None:
+        img = ndimage.rotate(img, angle)
+
+    left, right, top, bot = border
+
+    print(f'Cropping to window (left, right, top, bot): {int(left)}, {int(right)}, {int(top)}, {int(bot)}')
+    cropped = rotated[int(top):int(bot), int(left):int(right)]
+
+    if fact is not None:
+        cropped = downsample(cropped, fact=fact)
+
+    # if the image is from the aft camera, flip it before saving
+    # USGS naming convention is *[A|F]00N, so to figure out if it's an aft image,
+    # remove the extension, check the character 4 places from the end
+    is_aft = os.path.splitext(fn_img)[0][-4] == 'A'
+    if is_aft:
+        cropped = np.fliplr(np.flipud(cropped))
+
     io.imsave('OIS-Reech_' + fn_img, cropped.astype(np.uint8))
