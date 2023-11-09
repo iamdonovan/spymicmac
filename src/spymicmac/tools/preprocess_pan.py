@@ -94,7 +94,7 @@ def main():
             if len(parts_list) < 2:
                 continue
 
-            join_hexagon(fn_img, overlap=8000, blend=args.blend)
+            join_hexagon(fn_img, overlap=8000, block_size=2000, blend=args.blend)
             for fn in parts_list:
                 shutil.move(f'{fn_img}_{fn}.tif', 'parts')
 
@@ -108,9 +108,11 @@ def main():
 
     if do['crop']:
         print('Rotating and cropping images')
+        os.makedirs('Orig', exist_ok=True)
         for fn_img in imlist:
             print(fn_img)
-            crop_panoramic(fn_img, args.flavor, marker_size=args.marker_size, fact=args.fact)
+            crop_panoramic(fn_img + '.tif', args.flavor, marker_size=args.marker_size, fact=args.factor)
+            shutil.move(fn_img + '.tif', 'Orig')
 
     if do['balance']:
         print('Using CLAHE to balance image contrast')
