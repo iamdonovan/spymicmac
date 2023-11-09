@@ -86,8 +86,10 @@ def crop_panoramic(fn_img, flavor, marker_size=31, fact=None, return_vals=False)
     :param int marker_size: The approximate size of the wagon wheels to identify in the image (default: 31 pixels)
     :param int fact: the number by which to divide the image width and height to scale the image (default: do not scale)
     :param bool return_vals: Return estimated image border and rotation angle (default: False)
-    :returns: **border**, **angle** -- the estimated image border (left, right, top, bot) and rotation angle. Only
-        returned if **return_vals** is True.
+    :returns:
+        - **border** (*tuple*) -- the estimated image border (left, right, top, bot)
+        - **angle**  (*float*) -- the estimated rotation angle.
+        Only returned if **return_vals** is True.
     """
     assert flavor in ['KH4', 'KH9'], "flavor must be one of [KH4, KH9]"
 

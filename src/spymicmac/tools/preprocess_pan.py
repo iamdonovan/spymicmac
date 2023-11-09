@@ -115,7 +115,8 @@ def main():
 
         for fn_img in imlist:
             print(fn_img)
-            border, angle = crop_panoramic(fn_img + '.tif', args.flavor, marker_size=args.marker_size, fact=args.factor)
+            border, angle = crop_panoramic(fn_img + '.tif', args.flavor, marker_size=args.marker_size,
+                                           fact=args.factor, return_vals=True)
             left, right, top, bot = border
 
             shutil.move(fn_img + '.tif', 'Orig')
