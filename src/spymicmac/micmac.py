@@ -301,7 +301,7 @@ def estimate_measures_camera(ori='InterneScan', scan_res=2.5e-5, how='mean'):
     all_meas = pd.DataFrame()
 
     for fn_meas in meas_list:
-        # TODO: use an affine transformation to rotate each image to the first one
+        # TODO: use an affine transformation to align each image to the first one
         this_meas = parse_im_meas(os.path.join(f'Ori-{ori}', fn_meas))
         this_meas['j'] -= this_meas['j'].min()
         this_meas['i'] -= this_meas['i'].min()
