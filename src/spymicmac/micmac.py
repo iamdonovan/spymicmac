@@ -285,6 +285,45 @@ def create_measurescamera_xml(fn_csv, ori='InterneScan', translate=False, name='
                xml_declaration=True, encoding="utf-8")
 
 
+def estimate_measures_camera(ori='InterneScan', scan_res=2.5e-5, how='mean'):
+    """
+    Use a set of located fiducial markers to create a MeasuresCamera file using the average location of each fiducial
+    marker.
+
+    :param str ori: The Ori- directory containing the MeasuresIm files (default: InterneScan)
+    :param float scan_res: the scanning resolution of the images in microns
+    :param str how: what average to use for the output locations. Must be one of [mean, median].
+    """
+    assert how in ['mean', 'median'], "how must be one of [mean, median]"
+
+    meas_list = sorted(glob('MeasuresIm*.xml', root_dir=f'Ori-{ori}'))
+
+    all_meas = pd.DataFrame()
+
+    for fn_meas in meas_list:
+        # TODO: use an affine transformation to rotate each image to the first one
+        this_meas = parse_im_meas(os.path.join(f'Ori-{ori}', fn_meas))
+        this_meas['j'] -= this_meas['j'].min()
+        this_meas['i'] -= this_meas['i'].min()
+        all_meas = pd.concat([all_meas, this_meas], ignore_index=True)
+
+    avg_meas = pd.DataFrame(index=all_meas.name.unique(), columns=['j', 'i'])
+
+    for fid in all_meas.name.unique():
+        if how == 'median':
+            avg_meas.loc[fid, 'j'] = all_meas.loc[all_meas.name == fid, 'j'].median()
+            avg_meas.loc[fid, 'i'] = all_meas.loc[all_meas.name == fid, 'i'].median()
+        else:
+            avg_meas.loc[fid, 'j'] = all_meas.loc[all_meas.name == fid, 'j'].mean()
+            avg_meas.loc[fid, 'i'] = all_meas.loc[all_meas.name == fid, 'i'].mean()
+
+    avg_meas['j'] *= scan_res * 1000 # convert from microns to mm
+    avg_meas['i'] *= scan_res * 1000 # convert from microns to mm
+
+    avg_meas.reset_index(names='name').to_file('AverageMeasures.csv')
+    create_measurescamera_xml('AverageMeasures.csv', ori=ori, translate=False, name='name', x='j', y='i')
+
+
 def create_localchantier_xml(name='KH9MC', short_name='KH-9 Hexagon Mapping Camera', film_size=(460, 220),
                              pattern='.*', focal=304.8, add_sfs=False):
     """
