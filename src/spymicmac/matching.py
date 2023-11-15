@@ -15,6 +15,7 @@ from skimage.measure import ransac
 from skimage.feature import peak_local_max
 from skimage.transform import AffineTransform, EuclideanTransform
 from scipy.interpolate import RectBivariateSpline as RBS
+from scipy import ndimage
 import numpy as np
 from shapely.ops import nearest_points
 from shapely.geometry import LineString, MultiPoint, Point
@@ -170,12 +171,13 @@ def match_fairchild_k17(fn_img, size=101, fn_cam=None):
     find_fiducials(fn_img, templ_dict, fn_cam)
 
 
-def cross_template(shape, width=3):
+def cross_template(shape, width=3, angle=None):
     """
     Create a cross-shaped template for matching reseau or fiducial marks.
 
     :param int shape: the output shape of the template
     :param int width: the width of the cross at the center of the template (default: 3 pixels).
+    :param float angle: the angle to rotate the template by (default: None).
     :return: **cross** (*array-like*) -- the cross template
     """
     if isinstance(shape, int):
@@ -193,7 +195,11 @@ def cross_template(shape, width=3):
 
     cross[half_r - half_w:half_r + half_w + 1, :] = 1
     cross[:, half_c - half_w:half_c + half_w + 1] = 1
-    return cross
+
+    if angle is None:
+        return cross
+    else:
+        return np.round(ndimage.rotate(cross, angle, reshape=False))
 
 
 def find_crosses(img, cross):
@@ -928,6 +934,8 @@ def get_matches(img1, img2, mask1=None, mask2=None, dense=False, npix=100, nbloc
     :param array-like mask1: a mask to use for the first image. (default: no mask)
     :param array-like mask2: a mask to use for the second image. (default: no mask)
     :param bool dense: compute matches over sub-blocks (True) or the entire image (False). (default: False)
+    :param int npix: the block size (in pixels) to divide the image into, if doing dense matching (default: 100).
+    :param int nblocks: the number of blocks to divide the image into. If set, overrides value given by npix.
     :return:
         - **keypoints** (*tuple*) -- the keypoint locations for the first and second image.
         - **descriptors** (*tuple*) -- the descriptors for the first and second image.
