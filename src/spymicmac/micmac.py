@@ -180,7 +180,11 @@ def parse_im_meas(fn_meas):
     """
     gcp_df = pd.DataFrame()
     root = ET.parse(fn_meas).getroot()
-    measures = root.findall('MesureAppuiFlottant1Im')[0]
+    if root.tag == 'MesureAppuiFlottant1Im':
+        measures = root
+    else:
+        measures = root.findall('MesureAppuiFlottant1Im')[0]
+
     for i, mes in enumerate(measures.findall('OneMesureAF1I')):
         gcp_df.loc[i, 'name'] = mes.find('NamePt').text
         pt = mes.find('PtIm').text.split()
