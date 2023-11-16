@@ -167,6 +167,27 @@ def _box(size):
     templ[int(size / 2) + 1:, :int(size / 2) + 1] = 255
     return templ
 
+def inscribed_cross(size, cross_size, width=3, angle=45):
+    """
+    Create a cross-shaped template inscribed inside of a circle for matching fiducial marks.
+
+    :param int size: the half-size of the template. Final size will be (2 * size + 1, 2 * size + 1).
+    :param int cross_size: the size of the cross template to create
+    :param int width: the width of the cross at the center of the template (default: 3 pixels).
+    :param float angle: the angle to rotate the template by (default: None).
+    :return: **template** (*array-like*) -- the output template
+    """
+
+    circle = 255 * disk(size)
+    cross = cross_template((cross_size, cross_size), width=width, angle=angle)
+    cross[cross > 0.8] = 255
+
+    pad = int((circle.shape[0] - cross.shape[0]) / 2)
+    padded = np.zeros(circle.shape)
+    padded[pad:-pad, pad:-pad] = cross
+
+    return circle - padded
+
 
 def templates_from_meas(fn_img, half_size=100):
     """
