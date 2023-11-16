@@ -28,7 +28,7 @@ from spymicmac import image, micmac, resample
 ######################################################################################################################
 # tools for matching fiducial markers (or things like fiducial markers)
 ######################################################################################################################
-def find_fiducials(fn_img, templates, fn_cam=None, thresh_tol=0.9):
+def find_fiducials(fn_img, templates, fn_cam=None, thresh_tol=0.9, scale=None, units='microns'):
     """
     Match the location of fiducial markers for a scanned aerial photo.
 
@@ -36,7 +36,13 @@ def find_fiducials(fn_img, templates, fn_cam=None, thresh_tol=0.9):
     :param dict templates: a dict of (name, template) pairs corresponding to each fiducial marker.
     :param str fn_cam: the filename of the MeasuresCamera.xml file for the image. defaults to
         Ori-InterneScan/MeasuresCamera.xml
+    :param float thresh_tol: the minimum relative peak intensity to use for detecting matches (default: 0.9)
+    :param float scale: the image scale in either dpi or microns. If not set, will attempt to calculate based on the
+        located fiducial markers.
+    :param str units: the units corresponding to the image scale. Must be one of [microns, dpi].
     """
+    assert units in ['microns', 'dpi'], "scale must be one of [microns, dpi]"
+
     img = io.imread(fn_img)
 
     coords_all = []
@@ -60,10 +66,19 @@ def find_fiducials(fn_img, templates, fn_cam=None, thresh_tol=0.9):
         fn_cam = os.path.join('Ori-InterneScan', 'MeasuresCamera.xml')
     measures_cam = micmac.parse_im_meas(fn_cam)
 
-    scale = np.mean((coords_all.im_col.max() - coords_all.im_col.min(),
-                     coords_all.im_row.max()) - coords_all.im_row.min()) / \
-        np.mean((measures_cam.j.max() - measures_cam.j.min(),
-                 measures_cam.i.max() - measures_cam.i.min()))
+    if scale is None:
+        # if scale isn't given, estimate it based on the found fidicual markers
+        scale = np.mean((coords_all.im_col.max() - coords_all.im_col.min(),
+                         coords_all.im_row.max()) - coords_all.im_row.min()) / \
+            np.mean((measures_cam.j.max() - measures_cam.j.min(),
+                     measures_cam.i.max() - measures_cam.i.min()))
+    else:
+        if units == 'dpi':
+            # convert from dpi to mm/pix
+            scale = 1 / ((1 / scale) * 25.4)
+        else:
+            # convert from microns to mm/pix
+            scale = 1 / scale * 1000
 
     scaled = measures_cam.copy()
     scaled['j'] -= scaled['j'].min()
@@ -78,7 +93,8 @@ def find_fiducials(fn_img, templates, fn_cam=None, thresh_tol=0.9):
 
     for ind, row in coords_all.iterrows():
         this_fid = scaled.loc[scaled['name'] == row['gcp']]
-        dist = np.sqrt((row.im_col - this_fid.j)**2 + (row.im_row - this_fid.i)**2)
+        dist = np.sqrt(((row.im_col - coords_all.im_col.min()) - this_fid.j)**2 +
+                       ((row.im_row - coords_all.im_row.min())- this_fid.i)**2)
         coords_all.loc[ind, 'resid'] = dist.values[0]
 
     coords_all['resid'] = coords_all['resid'].astype(float)
