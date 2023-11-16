@@ -28,7 +28,7 @@ from spymicmac import image, micmac, resample
 ######################################################################################################################
 # tools for matching fiducial markers (or things like fiducial markers)
 ######################################################################################################################
-def find_fiducials(fn_img, templates, fn_cam=None):
+def find_fiducials(fn_img, templates, fn_cam=None, thresh_tol=0.9):
     """
     Match the location of fiducial markers for a scanned aerial photo.
 
@@ -44,7 +44,7 @@ def find_fiducials(fn_img, templates, fn_cam=None):
     for fid, templ in templates.items():
         res = cv2.matchTemplate(img.astype(np.uint8), templ.astype(np.uint8), cv2.TM_CCORR_NORMED)
 
-        coords = peak_local_max(res, threshold_rel=0.9, min_distance=100, num_peaks=5).astype(float)
+        coords = peak_local_max(res, threshold_rel=thresh_tol, min_distance=50, num_peaks=5).astype(float)
         coords += templ.shape[0] / 2 - 0.5
 
         these_coords = pd.DataFrame()
@@ -77,11 +77,9 @@ def find_fiducials(fn_img, templates, fn_cam=None):
                    measures_cam[['j', 'i']].values)
 
     for ind, row in coords_all.iterrows():
-        src = row[['im_col', 'im_row']].values.reshape(1, 2).astype(float)
-        dst = measures_cam.loc[measures_cam['name'] == row['gcp'], ['j', 'i']].values
-
-        resid = model.residuals(src, dst)
-        coords_all.loc[ind, 'resid'] = resid[0]
+        this_fid = scaled.loc[scaled['name'] == row['gcp']]
+        dist = np.sqrt((row.im_col - this_fid.j)**2 + (row.im_row - this_fid.i)**2)
+        coords_all.loc[ind, 'resid'] = dist.values[0]
 
     coords_all['resid'] = coords_all['resid'].astype(float)
 
@@ -91,6 +89,13 @@ def find_fiducials(fn_img, templates, fn_cam=None):
 
     coords_all = coords_all.loc[inds]
 
+    # now, drop any duplicated values - if we have these, we need to replace/estimate
+    coords_all = coords_all.sort_values('resid').drop_duplicates(subset=['im_col', 'im_row']).sort_values('gcp')
+    if len(coords_all) < len(measures_cam):
+        print('One or more markers could not be found. \nAttempting to predict location(s) using affine transformation')
+        coords_all = _fix_fiducials(coords_all, measures_cam)
+
+    model = AffineTransform()
     model.estimate(coords_all[['im_col', 'im_row']].values,
                    measures_cam[['j', 'i']].values)
 
@@ -113,6 +118,25 @@ def find_fiducials(fn_img, templates, fn_cam=None):
     tree = etree.ElementTree(outxml)
     tree.write(os.path.join('Ori-InterneScan', 'MeasuresIm-' + fn_img + '.xml'), pretty_print=True,
                xml_declaration=True, encoding="utf-8")
+
+
+def _fix_fiducials(coords, measures_cam):
+    joined = coords.merge(measures_cam, left_on='gcp', right_on='name')
+
+    model = AffineTransform()
+    model.estimate(joined[['im_col', 'im_row']].values,
+                   joined[['j', 'i']].values)
+
+    missing = ~measures_cam['name'].isin(coords['gcp'])
+    coords.set_index('gcp', inplace=True)
+
+    for _, row in measures_cam.loc[missing].iterrows():
+        print('Predicting location of {}'.format(row['name']))
+        x, y = model.inverse(row[['j', 'i']].values).flatten()
+        coords.loc[row['name'], 'im_col'] = x
+        coords.loc[row['name'], 'im_row'] = y
+
+    return coords.reset_index()
 
 
 def _corner(size):
