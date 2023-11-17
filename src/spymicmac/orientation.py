@@ -7,6 +7,7 @@ from collections import defaultdict
 import numpy as np
 import pandas as pd
 import geopandas as gpd
+import matplotlib.pyplot as plt
 import lxml.etree as etree
 import lxml.builder as builder
 import xml.etree.ElementTree as ET
@@ -18,6 +19,19 @@ from skimage.transform import AffineTransform
 from skimage.measure import ransac
 from pybob.ddem_tools import nmad
 from . import register, micmac
+
+
+def plot_camera_centers(ori, ax=None):
+    if ax is None:
+        fig = plt.figure()
+        ax = fig.add_subplot(projection='3d')
+
+    ori_df = load_all_orientation(ori)
+
+    ax.plot(ori_df.x, ori_df.y, ori_df.z, 's')
+
+    return ax
+
 
 
 def combine_block_measures(blocks, meas_out='AutoMeasures', gcp_out='AutoGCPs',
@@ -187,7 +201,7 @@ def load_all_orientation(ori, imlist=None):
 
     if imlist is None:
         imlist = [os.path.basename(g).split('Orientation-')[1].split('.xml')[0] for g in
-                  glob(os.path.join(ori, '*.tif.xml'))]
+                  glob(os.path.join(ori, 'Orientation*.xml'))]
         imlist.sort()
 
     for i, fn_img in enumerate(imlist):
