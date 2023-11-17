@@ -167,6 +167,26 @@ def _box(size):
     templ[int(size / 2) + 1:, :int(size / 2) + 1] = 255
     return templ
 
+
+def _inscribe(outer, inner):
+    padded = np.zeros(outer.shape)
+    pad = int((outer.shape[0] - inner.shape[0]) / 2)
+    padded[pad:-pad, pad:-pad] = inner
+    return outer - padded
+
+
+def zeiss_marker(size, dot_size):
+    template = ndimage.rotate(np.ones((size, size)), angle=45)
+    template[template > 0.8] = 255
+    template[:int(template.shape[0] / 2)] = 255
+
+    dot = 255 * disk(dot_size)
+
+    template = _inscribe(template, dot)
+
+    return 255 - template
+
+
 def inscribed_cross(size, cross_size, width=3, angle=45):
     """
     Create a cross-shaped template inscribed inside of a circle for matching fiducial marks.
@@ -230,6 +250,17 @@ def match_fairchild_k17(fn_img, size=101, fn_cam=None):
     templ_dict = dict(zip(fids, templates))
 
     find_fiducials(fn_img, templ_dict, fn_cam)
+
+
+def match_zeiss_rmk(fn_img, size, dot_size, fn_cam=None):
+    templ = zeiss_marker(size, dot_size)
+
+    fids = [f'P{n}' for n in range(1, 5)]
+    # assumes top, bottom, right, left order of fid markers
+    templates = [templ, np.flipud(templ), np.fliplr(templ.T), templ.T]
+
+    tdict = dict(zip(fids, templates))
+    find_fiducials(fn_img, tdict, fn_cam=fn_cam)
 
 
 def cross_template(shape, width=3, angle=None):
