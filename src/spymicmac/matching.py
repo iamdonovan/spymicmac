@@ -46,23 +46,6 @@ def find_fiducials(fn_img, templates, fn_cam=None, thresh_tol=0.9, npeaks=5, min
 
     img = io.imread(fn_img)
 
-    if fn_cam is None:
-        fn_cam = os.path.join('Ori-InterneScan', 'MeasuresCamera.xml')
-    measures_cam = micmac.parse_im_meas(fn_cam)
-
-    if scale is None:
-        # if scale isn't given, estimate it based on the found fidicual markers
-        scale = np.mean((coords_all.im_col.max() - coords_all.im_col.min(),
-                         coords_all.im_row.max()) - coords_all.im_row.min()) / \
-            np.mean((measures_cam.j.max() - measures_cam.j.min(),
-                     measures_cam.i.max() - measures_cam.i.min()))
-    else:
-        scale = _get_scale(scale, units='dpi')
-
-    scaled = measures_cam.copy()
-    scaled['j'] *= scale
-    scaled['i'] *= scale
-
     coords_all = []
 
     for fid, templ in templates.items():
@@ -79,6 +62,23 @@ def find_fiducials(fn_img, templates, fn_cam=None, thresh_tol=0.9, npeaks=5, min
         coords_all.append(these_coords)
 
     coords_all = pd.concat(coords_all, ignore_index=True)
+
+    if fn_cam is None:
+        fn_cam = os.path.join('Ori-InterneScan', 'MeasuresCamera.xml')
+    measures_cam = micmac.parse_im_meas(fn_cam)
+
+    if scale is None:
+        # if scale isn't given, estimate it based on the found fidicual markers
+        scale = np.mean((coords_all.im_col.max() - coords_all.im_col.min(),
+                         coords_all.im_row.max()) - coords_all.im_row.min()) / \
+            np.mean((measures_cam.j.max() - measures_cam.j.min(),
+                     measures_cam.i.max() - measures_cam.i.min()))
+    else:
+        scale = _get_scale(scale, units='dpi')
+
+    scaled = measures_cam.copy()
+    scaled['j'] *= scale
+    scaled['i'] *= scale
 
     for ind, row in coords_all.iterrows():
         this_fid = scaled.loc[scaled['name'] == row['gcp']]
@@ -126,12 +126,13 @@ def find_fiducials(fn_img, templates, fn_cam=None, thresh_tol=0.9, npeaks=5, min
 
 
 def _get_scale(scale, units):
-	if units == 'dpi':
-		scale = 1 / ((1 / scale) * 25.4)
-	else:
-		scale = 1 / scale * 1000
+    if units == 'dpi':
+        scale = 1 / ((1 / scale) * 25.4)
+    else:
+        scale = 1 / scale * 1000
 
-	return scale
+    return scale
+
 
 def _fix_fiducials(coords, measures_cam):
     joined = coords.merge(measures_cam, left_on='gcp', right_on='name')
