@@ -28,7 +28,7 @@ from spymicmac import image, micmac, resample
 ######################################################################################################################
 # tools for matching fiducial markers (or things like fiducial markers)
 ######################################################################################################################
-def find_fiducials(fn_img, templates, fn_cam=None, thresh_tol=0.9, npeaks=5, min_dist=100, scale=None, units='microns'):
+def find_fiducials(fn_img, templates, fn_cam=None, thresh_tol=0.9, npeaks=5, min_dist=1, angle=None):
     """
     Match the location of fiducial markers for a scanned aerial photo.
 
@@ -38,21 +38,40 @@ def find_fiducials(fn_img, templates, fn_cam=None, thresh_tol=0.9, npeaks=5, min
         Ori-InterneScan/MeasuresCamera.xml
     :param float thresh_tol: the minimum relative peak intensity to use for detecting matches (default: 0.9)
     :param int npeaks: maximum number of potential matches to accept for each fiducial marker template (default: 5)
-    :param float scale: the image scale in either dpi or microns. If not set, will attempt to calculate based on the
-        located fiducial markers.
-    :param str units: the units corresponding to the image scale. Must be one of [microns, dpi].
+    :param int min_dist: the minimum distance allowed between potential peaks (default: not set)
+    :param int angle:
     """
-    assert units in ['microns', 'dpi'], "scale must be one of [microns, dpi]"
+    # assert units in ['microns', 'dpi'], "scale must be one of [microns, dpi]"
 
     img = io.imread(fn_img)
 
+    if fn_cam is None:
+        fn_cam = os.path.join('Ori-InterneScan', 'MeasuresCamera.xml')
+    measures_cam = micmac.parse_im_meas(fn_cam)
+    measures_cam.set_index('name', inplace=True)
+
+    if angle is not None:
+        measures_cam = _rotate_meas(measures_cam, angle)
+
+    # now, get the fractional locations (0.05, 0.5, 0.95) in the image of each marker
+    measures_cam = _get_rough_locs(measures_cam)
+    measures_cam['rough_j'] *= img.shape[1]
+    measures_cam['rough_i'] *= img.shape[0]
+
     coords_all = []
 
-    for fid, templ in templates.items():
-        res = cv2.matchTemplate(img.astype(np.uint8), templ.astype(np.uint8), cv2.TM_CCORR_NORMED)
+    for fid, row in measures_cam.iterrows():
+        templ = templates[fid]
+        tsize = int(min(0.05 * np.array(img.shape)))
+
+        subimg, _, _ = make_template(img, (row['rough_i'], row['rough_j']), half_size=tsize)
+        res = cv2.matchTemplate(subimg.astype(np.uint8), templ.astype(np.uint8), cv2.TM_CCORR_NORMED)
 
         coords = peak_local_max(res, threshold_rel=thresh_tol, min_distance=min_dist, num_peaks=npeaks).astype(float)
         coords += templ.shape[0] / 2 - 0.5
+
+        coords[:, 1] += row['rough_j'] - tsize
+        coords[:, 0] += row['rough_i'] - tsize
 
         these_coords = pd.DataFrame()
         these_coords['im_col'] = coords[:, 1]
@@ -63,27 +82,10 @@ def find_fiducials(fn_img, templates, fn_cam=None, thresh_tol=0.9, npeaks=5, min
 
     coords_all = pd.concat(coords_all, ignore_index=True)
 
-    if fn_cam is None:
-        fn_cam = os.path.join('Ori-InterneScan', 'MeasuresCamera.xml')
-    measures_cam = micmac.parse_im_meas(fn_cam)
-
-    if scale is None:
-        # if scale isn't given, estimate it based on the found fidicual markers
-        scale = np.mean((coords_all.im_col.max() - coords_all.im_col.min(),
-                         coords_all.im_row.max()) - coords_all.im_row.min()) / \
-            np.mean((measures_cam.j.max() - measures_cam.j.min(),
-                     measures_cam.i.max() - measures_cam.i.min()))
-    else:
-        scale = _get_scale(scale, units='dpi')
-
-    scaled = measures_cam.copy()
-    scaled['j'] *= scale
-    scaled['i'] *= scale
-
     for ind, row in coords_all.iterrows():
-        this_fid = scaled.loc[scaled['name'] == row['gcp']]
-        dist = np.sqrt(((row.im_col - coords_all.im_col.min()) - this_fid.j)**2 +
-                       ((row.im_row - coords_all.im_row.min())- this_fid.i)**2)
+        this_fid = measures_cam.loc[measures_cam.index == row['gcp']]
+        dist = np.sqrt((row.im_col - this_fid['rough_j'])**2 +
+                       (row.im_row - this_fid['rough_i'])**2)
         coords_all.loc[ind, 'resid'] = dist.values[0]
 
     coords_all['resid'] = coords_all['resid'].astype(float)
@@ -153,6 +155,45 @@ def _fix_fiducials(coords, measures_cam):
     return coords.reset_index()
 
 
+def _rotate_meas(meas, angle):
+    M = np.array([[np.cos(angle), -np.sin(angle)], [np.sin(angle), np.cos(angle)]])
+
+    rot = meas.copy()
+
+    mean_j = meas.j.mean()
+    mean_i = meas.i.mean()
+
+    rot.j -= mean_j
+    rot.i -= mean_i
+
+    rot[['j', 'i']] = rot[['j', 'i']].values.dot(M)
+
+    rot.j += mean_j
+    rot.i += mean_i
+
+    return rot
+
+
+def _get_rough_locs(meas):
+    # get the rough locations of the corners and mid-side fiducial markers in an image
+    scaled = meas.copy()
+    scaled['j'] /= scaled.j.max()
+    scaled['i'] /= scaled.i.max()
+
+    rough_x, rough_y = np.meshgrid(np.array([0.05, 0.5, 0.95]), np.array([0.05, 0.5, 0.95]))
+    rough_pts = [Point(x, y) for x, y in zip(rough_x.flatten(), rough_y.flatten())]
+
+    for ind, row in scaled.iterrows():
+        pt = Point(row['j'], row['i'])
+        dists = [pt.distance(_pt) for _pt in rough_pts]
+        nind = np.argmin(dists)
+
+        meas.loc[ind, 'rough_j'] = rough_x.flatten()[nind]
+        meas.loc[ind, 'rough_i'] = rough_y.flatten()[nind]
+
+    return meas
+
+
 def _corner(size):
     templ = np.zeros((size, size), dtype=np.uint8)
     templ[:int(size/2)+1, int(size/2)+1:] = 255
@@ -173,23 +214,18 @@ def _inscribe(outer, inner):
     return outer - padded
 
 
-def zeiss_marker(size, dot_size):
+def padded_dot(size, disk_size):
     """
+    Pad a disk-shaped marker with zeros. Works for, e.g., Zeiss RMK mid-side fiducials.
 
-    :param size:
-    :param dot_size:
-    :return:
+    :param int size: the size of the padded template
+    :param int disk_size: the half-size of the disk to use
+    :return: **padded** (*array-like*) -- the disk with a padding of zeros around it
     """
-    size = int(size / np.sqrt(2))
-    template = ndimage.rotate(np.ones((size, size)), angle=45)
-    template[template > 0.8] = 255
-    template[:int(template.shape[0] / 2)] = 255
+    template = 255 * np.ones((size, size))
+    dot = 255 * disk(disk_size)
 
-    dot = 255 * disk(dot_size)
-
-    template = _inscribe(template, dot)
-
-    return 255 - template
+    return 255 - _inscribe(template, dot)
 
 
 def inscribed_cross(size, cross_size, width=3, angle=45):
@@ -261,26 +297,9 @@ def _zeiss_corner():
     pass
 
 
-def _zeiss_midside(size, dot_size, data_strip):
-    templ = zeiss_marker(size, dot_size)
-
-    top = templ # pointing down
-    bot = np.flipud(templ) # pointing up
-    left = templ.T # pointing right
-    right = np.fliplr(templ.T) # pointing left
-
-    # with data strip on left, P1 left, P2 right, P3 top, P4 bottom
-    # if image is rotated, need to re-arrange order of templates
-    if data_strip == 'left':
-        templates = [left, right, top, bot]
-    elif data_strip == 'right':
-        templates = [right, left, bot, top]
-    elif data_strip == 'bot':
-        templates = [bot, top, left, right]
-    else:
-        templates = [top, bot, right, left]
-
-    return templates
+def _zeiss_midside(size, dot_size):
+    templ = padded_dot(size, dot_size)
+    return 4 * [templ]
 
 
 def match_zeiss_rmk(fn_img, size, dot_size, data_strip='left', fn_cam=None, corners=False, **kwargs):
@@ -299,14 +318,23 @@ def match_zeiss_rmk(fn_img, size, dot_size, data_strip='left', fn_cam=None, corn
     if corners:
         fids = [f'P{n}' for n in range(1, 9)]
         ctempl = _zeiss_corner()
-        stempl = _zeiss_midside(size, dot_size, data_strip)
+        stempl = _zeiss_midside(size, dot_size)
         templates = ctempl + stempl
     else:
         fids = [f'P{n}' for n in range(1, 5)]
-        templates = _zeiss_midside(size, dot_size, data_strip)
+        templates = _zeiss_midside(size, dot_size)
+
+    if data_strip == 'left':
+        angle = None
+    elif data_strip == 'top':
+        angle = np.deg2rad(-90)
+    elif data_strip == 'right':
+        angle = np.deg2rad(180)
+    elif data_strip == 'bot':
+        angle = np.deg2rad(90)
 
     tdict = dict(zip(fids, templates))
-    find_fiducials(fn_img, tdict, fn_cam=fn_cam, **kwargs)
+    find_fiducials(fn_img, tdict, fn_cam=fn_cam, angle=angle, **kwargs)
 
 
 def cross_template(shape, width=3, angle=None):
