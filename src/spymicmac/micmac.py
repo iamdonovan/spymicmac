@@ -731,6 +731,30 @@ def move_bad_tapas(ori):
         shutil.move(im, 'bad')
 
 
+def batch_saisie_fids(imlist, flavor='qt'):
+    """
+    Run SaisieAppuisInit to locate the fiducial markers for a given list of images.
+
+    :param list imlist: the list of image filenames.
+    :param str flavor: which version of SaisieAppuisInit to run. Must be one of [qt, og] (default: qt)
+    """
+    assert flavor in ['qt', 'og'], "flavor must be one of [qt, og]"
+
+    os.makedirs('Ori-InterneScan', exist_ok=True)
+
+    if flavor == 'qt':
+        saisie = 'SaisieAppuisInitQT'
+    else:
+        saisie = 'SaisieAppuisInit'
+
+    for fn_img in imlist:
+        p = subprocess.Popen(['mm3d', saisie, fn_img, 'NONE', 'id_fiducials.txt', f'MeasuresIm-{fn_img}.xml'])
+        p.wait()
+
+        shutil.move(f'MeasuresIm-{fn_img}-S2D.xml', os.path.join('Ori-InterneScan', f'MeasuresIm-{fn_img}.xml'))
+        os.remove(f'MeasuresIm-{fn_img}-S3D.xml')
+
+
 def tapioca(img_pattern='OIS.*tif', res_low=400, res_high=1200):
     """
     Run mm3d Tapioca MulScale
