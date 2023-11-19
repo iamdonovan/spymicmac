@@ -309,8 +309,9 @@ def match_zeiss_rmk(fn_img, size, dot_size, data_strip='left', fn_cam=None, corn
     :param size:
     :param dot_size:
     :param data_strip:
-    :param fn_cam:
+    :param str fn_cam: the filename of the MeasuresCamera.xml file corresponding to the image
     :param corners:
+    :param kwargs: additional keyword arguments to pass to matching.find_fiducials()
     :return:
     """
     assert data_strip in ['left', 'right', 'top', 'bot'], "data_strip must be one of [left, right, top, bot]"
@@ -337,6 +338,76 @@ def match_zeiss_rmk(fn_img, size, dot_size, data_strip='left', fn_cam=None, corn
     find_fiducials(fn_img, tdict, fn_cam=fn_cam, angle=angle, **kwargs)
 
 
+def _wild_corner(size, model, circle_size, ring_width):
+
+    target_angle = 45
+    if model.upper() in ['RC5', 'RC8']:
+        if circle_size is not None:
+            template = inscribed_cross(circle_size, size, angle=45)
+        else:
+            template = cross_template(size, angle=45)
+            template[template > 0.8] = 255
+    else:
+        template = wagon_wheel(size, width=3, circle_size=circle_size, circle_width=ring_width, angle=target_angle)
+
+    return template
+
+
+def _wild_midside(size, model, circle_size, ring_width):
+
+    if model.upper() in ['RC5', 'RC8']:
+        target_angle = 45
+    else:
+        target_angle = None
+
+    template = wagon_wheel(size, width=3, circle_size=circle_size, circle_width=ring_width, angle=target_angle)
+
+    return template
+
+
+def match_wild_rc(fn_img, size, model, data_strip='left', fn_cam=None, midside=False, circle_size=None,
+                  ring_width=7, **kwargs):
+    """
+    Match the "fiducial" locations for a Wild RC-style camera (4 cross/bulls-eye markers in the corner, possibly
+    4 bulls-eye markers along the sides).
+
+    :param str fn_img: the filename of the image to match
+    :param int size: the size of the marker to match
+    :param str model: whether the camera is an RC5/RC8 (4 corner markers) or RC10-style (corner + midside markers)
+    :param str data_strip: the location of the data strip in the image (left, right, top, bot). Most calibration reports
+        assume the data strip is along the left-hand side, but scanned images may be rotated relative to this.
+    :param str fn_cam: the filename of the MeasuresCamera.xml file corresponding to the
+        image (default: Ori-InterneScan/MeasuresCamera.xml)
+    :param bool midside:
+    :param int circle_size: the size of the circle in which to inscribe the cross-shaped marker (default: no circle)
+    :param int ring_width: the width of the ring if the marker(s) are a cross inscribed with a ring. Only used if
+    :param kwargs: additional keyword arguments to pass to matching.find_fiducials()
+    :return:
+    """
+    assert data_strip in ['left', 'right', 'top', 'bot'], "data_strip must be one of [left, right, top, bot]"
+
+    if midside:
+        fids = [f'P{n}' for n in range(1, 9)]
+        stempl = _wild_midside(size, model)
+        ctempl = _wild_corner(size, model, circle_size, ring_width)
+        templates = 4 * [ctempl] + 4 * [stempl]
+    else:
+        fids = [f'P{n}' for n in range(1, 5)]
+        templates = 4 * [_wild_corner(size, model, circle_size, ring_width)]
+
+    if data_strip == 'left':
+        angle = None
+    elif data_strip == 'top':
+        angle = np.deg2rad(-90)
+    elif data_strip == 'right':
+        angle = np.deg2rad(180)
+    else:
+        angle = np.deg2rad(90)
+
+    tdict = dict(zip(fids, templates))
+    find_fiducials(fn_img, tdict, fn_cam=fn_cam, angle=angle, **kwargs)
+
+
 def cross_template(shape, width=3, angle=None):
     """
     Create a cross-shaped template for matching reseau or fiducial marks.
@@ -351,6 +422,18 @@ def cross_template(shape, width=3, angle=None):
         cols = shape
     else:
         rows, cols = shape
+
+    if angle is not None:
+        rows *= (np.sin(np.deg2rad(angle)) + np.cos(np.deg2rad(angle)))
+        rows = int(np.round(rows))
+        if rows % 2 == 0:
+            rows += 1
+
+        cols *= (np.sin(np.deg2rad(angle)) + np.cos(np.deg2rad(angle)))
+        cols = int(np.round(cols))
+        if cols % 2 == 0:
+            cols += 1
+
     half_r = int((rows - 1) / 2)
     half_c = int((cols - 1) / 2)
     half_w = int((width - 1) / 2)
@@ -365,7 +448,12 @@ def cross_template(shape, width=3, angle=None):
     if angle is None:
         return cross
     else:
-        return np.round(ndimage.rotate(cross, angle, reshape=False))
+        cross = np.round(ndimage.rotate(cross, angle, reshape=False))
+        rs, = np.where(cross.sum(axis=1) > 0)
+        cs, = np.where(cross.sum(axis=0) > 0)
+
+        return cross[rs[0]+1:rs[-1], cs[0]+1:cs[-1]]
+
 
 
 def find_crosses(img, cross):
@@ -702,25 +790,47 @@ def find_reseau_grid(fn_img, csize=361, return_val=False):
         return grid_df
 
 
-def wagon_wheel(size, width=3, mult=255):
+def wagon_wheel(size, width=3, mult=255, circle_size=None, circle_width=None, angle=None):
     """
     Creates a template in the shape of a "wagon wheel" (a cross inscribed in a ring).
 
     :param int size: the width (and height) of the template, in pixels
     :param int width: the width/thickness of the cross, in pixels
     :param mult: a multiplier to use for the template [default: 255]
+    :param int circle_size: the size of the circle to inscribe the cross into (default: same as cross size)
+    :param int circle_width: the width of the ring to inscribe the cross into (default: same as cross width)
+    :param float angle: the angle by which to rotate the cross (default: do not rotate)
 
     :return: **template** (*array-like*) the wagon wheel template
     """
-    cross = cross_template(size, width)
-    cross[cross > 1] = 0
+    cross = cross_template(size, width, angle=angle)
+    cross[cross > 0.8] = 1
 
-    templ = disk(int(size / 2))
-    padded = np.zeros(templ.shape, dtype=templ.dtype)
-    padded[width:-width, width:-width] = disk(int((size - 2 * width) / 2))
+    if circle_size is None:
+        templ = disk(int(size / 2))
+        padded = np.zeros(templ.shape, dtype=templ.dtype)
+        padded[width:-width, width:-width] = disk(int((size - 2 * width) / 2))
+    else:
+        templ = disk(int(circle_size / 2))
+        padded = np.zeros(templ.shape, dtype=templ.dtype)
+        if circle_width is None:
+            padded[width:-width, width:-width] = disk(int((circle_size - 2 * width) / 2))
+        else:
+            padded[circle_width:-circle_width,
+                   circle_width:-circle_width] = disk(int((circle_size - 2 * circle_width) / 2))
 
     templ -= padded
-    templ += cross.astype(templ.dtype)
+
+    if circle_size is None:
+        templ += cross.astype(templ.dtype)
+    else:
+        padded = np.zeros(cross.shape)
+        pad = int((cross.shape[0] - circle_size) / 2)
+        padded[pad:-pad, pad:-pad] = templ
+        padded += cross
+
+        templ = padded
+
     templ[templ > 1] = 1
 
     return mult * templ
