@@ -240,7 +240,7 @@ def inscribed_cross(size, cross_size, width=3, angle=45):
     """
 
     circle = 255 * disk(size)
-    cross = cross_template((cross_size, cross_size), width=width, angle=angle)
+    cross = cross_template(cross_size, width=width, angle=angle)
     cross[cross > 0.8] = 255
 
     pad = int((circle.shape[0] - cross.shape[0]) / 2)
@@ -293,8 +293,8 @@ def match_fairchild_k17(fn_img, size=101, fn_cam=None):
     find_fiducials(fn_img, templ_dict, fn_cam)
 
 
-def _zeiss_corner():
-    pass
+def _zeiss_corner(size):
+    return 4 * [cross_template(size)]
 
 
 def _zeiss_midside(size, dot_size):
@@ -302,23 +302,26 @@ def _zeiss_midside(size, dot_size):
     return 4 * [templ]
 
 
-def match_zeiss_rmk(fn_img, size, dot_size, data_strip='left', fn_cam=None, corners=False, **kwargs):
+def match_zeiss_rmk(fn_img, size, dot_size, data_strip='left', fn_cam=None, corner_size=None, **kwargs):
     """
+    Match the fiducial locations for a Zeiss RMK-style camera (4 dot-shaped markers on the side, possibly 4 cross-shaped
+    markers in the corners).
 
-    :param fn_img:
-    :param size:
-    :param dot_size:
-    :param data_strip:
+    :param str fn_img: the filename of the image to match
+    :param int size: the size of the marker to match
+    :param int dot_size: the size of the dot marker to match
+    :param str data_strip: the location of the data strip in the image (left, right, top, bot). Most calibration reports
+        assume the data strip is along the left-hand side, but scanned images may be rotated relative to this.
     :param str fn_cam: the filename of the MeasuresCamera.xml file corresponding to the image
-    :param corners:
+    :param int corner_size: the size of the corner markers (default: do not find corner markers)
     :param kwargs: additional keyword arguments to pass to matching.find_fiducials()
     :return:
     """
     assert data_strip in ['left', 'right', 'top', 'bot'], "data_strip must be one of [left, right, top, bot]"
 
-    if corners:
+    if corner_size is not None:
         fids = [f'P{n}' for n in range(1, 9)]
-        ctempl = _zeiss_corner()
+        ctempl = _zeiss_corner(corner_size)
         stempl = _zeiss_midside(size, dot_size)
         templates = ctempl + stempl
     else:
@@ -331,7 +334,7 @@ def match_zeiss_rmk(fn_img, size, dot_size, data_strip='left', fn_cam=None, corn
         angle = np.deg2rad(-90)
     elif data_strip == 'right':
         angle = np.deg2rad(180)
-    elif data_strip == 'bot':
+    else:
         angle = np.deg2rad(90)
 
     tdict = dict(zip(fids, templates))
@@ -368,7 +371,7 @@ def _wild_midside(size, model, circle_size, ring_width):
 def match_wild_rc(fn_img, size, model, data_strip='left', fn_cam=None, midside=False, circle_size=None,
                   ring_width=7, **kwargs):
     """
-    Match the "fiducial" locations for a Wild RC-style camera (4 cross/bulls-eye markers in the corner, possibly
+    Match the fiducial locations for a Wild RC-style camera (4 cross/bulls-eye markers in the corner, possibly
     4 bulls-eye markers along the sides).
 
     :param str fn_img: the filename of the image to match
@@ -378,14 +381,13 @@ def match_wild_rc(fn_img, size, model, data_strip='left', fn_cam=None, midside=F
         assume the data strip is along the left-hand side, but scanned images may be rotated relative to this.
     :param str fn_cam: the filename of the MeasuresCamera.xml file corresponding to the
         image (default: Ori-InterneScan/MeasuresCamera.xml)
-    :param bool midside:
+    :param bool midside: whether to include markers along the sides of the image or not (default: False)
     :param int circle_size: the size of the circle in which to inscribe the cross-shaped marker (default: no circle)
     :param int ring_width: the width of the ring if the marker(s) are a cross inscribed with a ring. Only used if
     :param kwargs: additional keyword arguments to pass to matching.find_fiducials()
     :return:
     """
     assert data_strip in ['left', 'right', 'top', 'bot'], "data_strip must be one of [left, right, top, bot]"
-
     if midside:
         fids = [f'P{n}' for n in range(1, 9)]
         stempl = _wild_midside(size, model)
@@ -453,7 +455,6 @@ def cross_template(shape, width=3, angle=None):
         cs, = np.where(cross.sum(axis=0) > 0)
 
         return cross[rs[0]+1:rs[-1], cs[0]+1:cs[-1]]
-
 
 
 def find_crosses(img, cross):
