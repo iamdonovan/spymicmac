@@ -348,7 +348,7 @@ def _wild_corner(size, model, circle_size, ring_width):
         if circle_size is not None:
             template = inscribed_cross(circle_size, size, angle=45)
         else:
-            template = cross_template(size, angle=45)
+            template = cross_template(size, width=1, angle=45)
             template[template > 0.8] = 255
     else:
         template = wagon_wheel(size, width=3, circle_size=circle_size, circle_width=ring_width, angle=target_angle)
