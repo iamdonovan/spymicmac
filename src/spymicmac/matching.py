@@ -204,6 +204,12 @@ def _box(size):
     templ = np.zeros((size, size), dtype=np.uint8)
     templ[:int(size / 2) + 1, int(size / 2) + 1:] = 255
     templ[int(size / 2) + 1:, :int(size / 2) + 1] = 255
+
+    # now, remove the inner 4 pixels along the vertical axis
+    # and the inner 3 pixels along the horizontal axis
+    templ[:, int(size/2)-2:-(int(size/2)-1)] = 0
+    templ[int(size / 2) - 1:-(int(size / 2) - 1), :] = 0
+
     return templ
 
 
