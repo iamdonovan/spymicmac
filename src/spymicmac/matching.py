@@ -126,6 +126,8 @@ def find_fiducials(fn_img, templates, fn_cam=None, thresh_tol=0.9, npeaks=5, min
     tree.write(os.path.join('Ori-InterneScan', 'MeasuresIm-' + fn_img + '.xml'), pretty_print=True,
                xml_declaration=True, encoding="utf-8")
 
+    return residuals.mean()
+
 
 def _get_scale(scale, units):
     if units == 'dpi':
@@ -180,7 +182,7 @@ def _get_rough_locs(meas):
     scaled['j'] /= scaled.j.max()
     scaled['i'] /= scaled.i.max()
 
-    rough_x, rough_y = np.meshgrid(np.array([0.05, 0.5, 0.95]), np.array([0.05, 0.5, 0.95]))
+    rough_x, rough_y = np.meshgrid(np.array([0.075, 0.5, 0.925]), np.array([0.075, 0.5, 0.925]))
     rough_pts = [Point(x, y) for x, y in zip(rough_x.flatten(), rough_y.flatten())]
 
     for ind, row in scaled.iterrows():
@@ -322,7 +324,8 @@ def match_fairchild(fn_img, size, model, data_strip, fn_cam=None, dot_size=4, **
     tdict = dict(zip(fids, templates))
     angle = ldict[data_strip]
 
-    find_fiducials(fn_img, tdict, fn_cam=fn_cam, angle=angle, **kwargs)
+    return find_fiducials(fn_img, tdict, fn_cam=fn_cam, angle=angle, **kwargs)
+
 
 def _zeiss_corner(size):
     return 4 * [cross_template(size)]
@@ -369,7 +372,7 @@ def match_zeiss_rmk(fn_img, size, dot_size, data_strip='left', fn_cam=None, corn
         angle = np.deg2rad(90)
 
     tdict = dict(zip(fids, templates))
-    find_fiducials(fn_img, tdict, fn_cam=fn_cam, angle=angle, **kwargs)
+    return find_fiducials(fn_img, tdict, fn_cam=fn_cam, angle=angle, **kwargs)
 
 
 def _wild_corner(size, model, circle_size, ring_width):
@@ -438,7 +441,7 @@ def match_wild_rc(fn_img, size, model, data_strip='left', fn_cam=None, midside=F
         angle = np.deg2rad(90)
 
     tdict = dict(zip(fids, templates))
-    find_fiducials(fn_img, tdict, fn_cam=fn_cam, angle=angle, **kwargs)
+    return find_fiducials(fn_img, tdict, fn_cam=fn_cam, angle=angle, **kwargs)
 
 
 def cross_template(shape, width=3, angle=None):
