@@ -274,24 +274,45 @@ def templates_from_meas(fn_img, half_size=100):
     return dict(zip(meas_im.name.values, templates))
 
 
-def match_fairchild_k17(fn_img, size=101, fn_cam=None):
+def match_fairchild(fn_img, size, model, data_strip, fn_cam=None, **kwargs):
     """
-    Match the "fiducial" locations for a Fairchild K17B-style camera (4 "wing" style fiducial markers in the middle of
-    each side of the image).
+    Match the fiducial locations for a Fairchild-style camera (4 fiducial markers markers on the side).
 
-    :param str fn_img: the filename of the image to find fiducial markers in.
-    :param int size: the size of the template to use (default: 101 pixels)
-    :param str fn_cam: the filename of the MeasuresCamera.xml file for the image. defaults to
-        Ori-InterneScan/MeasuresCamera.xml
+    :param str fn_img: the filename of the image to match
+    :param int size: the size of the marker to match
+    :param str model: the type of fiducial marker: T11 style (checkerboard-style markers) or K17 style ("wing" style
+        markers). Must be one of [K17, T11].
+    :param str data_strip: the location of the data strip in the image (left, right, top, bot). For T11 style cameras,
+        the data strip should be along the left-hand side; for K17 style cameras, the "data strip" (focal length
+        indicator) should be on the right-hand side. Be sure to check your images, as the scanned images may be rotated
+        relative to this expectation.
+    :param str fn_cam: the filename of the MeasuresCamera.xml file corresponding to the image
+    :param kwargs: additional keyword arguments to pass to matching.find_fiducials()
+    :return:
     """
-    templ = _corner(size)
+    assert model.upper() in ['K17', 'T11'], "model must be one of [K17, T11]"
+    assert data_strip in ['left', 'right', 'top', 'bot'], "data_strip must be one of [left, right, top, bot]"
     fids = [f'P{n}' for n in range(1, 5)]
-    templates = [templ, np.fliplr(templ), templ.T, np.fliplr(templ).T]
+    if model.upper() == 'K17':
+        templ = _corner(size)
+        templates = [templ, np.fliplr(templ), templ.T, np.fliplr(templ).T]
 
-    templ_dict = dict(zip(fids, templates))
+        locs = ['right', 'top', 'left', 'bot']
+        angles = [None, np.deg2rad(-90), np.deg2rad(180), np.deg2rad(90)]
+        ldict = dict(zip(locs, angles))
 
-    find_fiducials(fn_img, templ_dict, fn_cam)
+    elif model.upper() == 'T11':
+        templ = _box(size)
+        templates = [templ, templ, np.fliplr(templ), np.fliplr(templ)]
 
+        locs = ['left', 'top', 'right', 'bot']
+        angles = [None, np.deg2rad(-90), np.deg2rad(180), np.deg2rad(90)]
+        ldict = dict(zip(locs, angles))
+
+    tdict = dict(zip(fids, templates))
+    angle = ldict[data_strip]
+
+    find_fiducials(fn_img, tdict, fn_cam=fn_cam, angle=angle, **kwargs)
 
 def _zeiss_corner(size):
     return 4 * [cross_template(size)]
