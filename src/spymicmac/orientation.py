@@ -22,6 +22,13 @@ from . import register, micmac
 
 
 def plot_camera_centers(ori, ax=None):
+    """
+    Plot camera center locations in a 3D axis using matplotlib.
+
+    :param str ori: the name of the orientation directory (e.g., Ori-Relative).
+    :param ax: an existing 3d matplotlib axis. If None, one will be created.
+    :return: **ax** -- a matplotlib axis with the camera centers plotted
+    """
     if ax is None:
         fig = plt.figure()
         ax = fig.add_subplot(projection='3d')
