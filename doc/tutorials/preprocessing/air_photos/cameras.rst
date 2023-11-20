@@ -64,7 +64,12 @@ Fairchild KC-1, KC-1B, T-11 (Metrogon Lens)
 
 .. note::
 
-    These cameras may have different fiducial patterns.
+    These cameras may have different fiducial patterns - for example, they may have a checked pattern like this:
+
+    .. image:: ../../../img/fairchild_t11.png
+        :width: 400
+        :align: center
+        :alt: a diagram of a Fairchild T-11 with fiducial markers labeled
 
 
 
