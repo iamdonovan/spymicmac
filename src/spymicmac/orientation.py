@@ -385,14 +385,14 @@ def fix_orientation(cameras, ori_df, ori, nsig=4):
 
 def transform_centers(img_gt, ref, imlist, footprints, ori, imgeom=True):
     """
-    Use the camera centers in relative space provided by MicMac Orientation files, along with camera footprints,
-    to estimate a transformation between the relative coordinate system and the absolute coordinate system.
+    Use the camera centers in relative space provided by MicMac Orientation files, along with camera centers or
+    footprints, to estimate a transformation between the relative coordinate system and the absolute coordinate system.
 
     :param array-like img_gt: the image GeoTransform (as read from a TFW file)
     :param GeoImg ref: the reference image to use to determine the output image shape
     :param list imlist: a list of the images that were used for the relative orthophoto
-    :param GeoDataFrame footprints: the (approximate) image footprints - the centroid will be used for the absolute
-        camera positions.
+    :param GeoDataFrame footprints: the (approximate) image footprints or camera centers. If geom_type is Polygon, the
+        centroid will be used for the absolute camera positions.
     :param str ori: name of orientation directory
     :param bool imgeom: calculate a transformation between image ij locations (True)
     :return:
@@ -404,11 +404,17 @@ def transform_centers(img_gt, ref, imlist, footprints, ori, imgeom=True):
     rel_ori = load_all_orientation(ori, imlist=imlist)
 
     footprints = footprints.to_crs(epsg=ref.epsg).copy()
+    if all(footprints.geom_type == 'Polygon'):
+        footprints['x'] = footprints.geometry.centroid.x
+        footprints['y'] = footprints.geometry.centroid.y
+    elif all(footprints.geom_type == 'Point'):
+        footprints['x'] = footprints.geometry.x
+        footprints['y'] = footprints.geometry.y
+    else:
+        raise ValueError("footprint geometry contains mixed types - please ensure that only Point or Polygon is used.")
 
-    for i, row in footprints.iterrows():
-        footprints.loc[i, 'x'] = row['geometry'].centroid.x
-        footprints.loc[i, 'y'] = row['geometry'].centroid.y
-        footprints.loc[i, 'name'] = 'OIS-Reech_' + row['ID'] + '.tif'
+    for ind, row in footprints.iterrows():
+        footprints.loc[ind, 'name'] = 'OIS-Reech_' + row['ID'] + '.tif'
 
     join = footprints.set_index('name').join(rel_ori.set_index('name'), lsuffix='abs', rsuffix='rel')
     join.dropna(inplace=True)
