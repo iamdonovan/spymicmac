@@ -274,23 +274,24 @@ def templates_from_meas(fn_img, half_size=100):
     return dict(zip(meas_im.name.values, templates))
 
 
-def match_fairchild(fn_img, size, model, data_strip, fn_cam=None, **kwargs):
+def match_fairchild(fn_img, size, model, data_strip, fn_cam=None, dot_size=4, **kwargs):
     """
     Match the fiducial locations for a Fairchild-style camera (4 fiducial markers markers on the side).
 
     :param str fn_img: the filename of the image to match
     :param int size: the size of the marker to match
-    :param str model: the type of fiducial marker: T11 style (checkerboard-style markers) or K17 style ("wing" style
-        markers). Must be one of [K17, T11].
+    :param str model: the type of fiducial marker: T11 style with either checkerboard-style markers (T11S) or dot style
+        markers (T11D), or K17 style ("wing" style markers). Must be one of [K17, T11S, T11D].
     :param str data_strip: the location of the data strip in the image (left, right, top, bot). For T11 style cameras,
         the data strip should be along the left-hand side; for K17 style cameras, the "data strip" (focal length
         indicator) should be on the right-hand side. Be sure to check your images, as the scanned images may be rotated
         relative to this expectation.
     :param str fn_cam: the filename of the MeasuresCamera.xml file corresponding to the image
+    :param int dot_size: the size of the dot to use for T11D style fiducial markers (default: 4 -> 9x9)
     :param kwargs: additional keyword arguments to pass to matching.find_fiducials()
     :return:
     """
-    assert model.upper() in ['K17', 'T11'], "model must be one of [K17, T11]"
+    assert model.upper() in ['K17', 'T11S', 'T11D'], "model must be one of [K17, T11S, T11D]"
     assert data_strip in ['left', 'right', 'top', 'bot'], "data_strip must be one of [left, right, top, bot]"
     fids = [f'P{n}' for n in range(1, 5)]
     if model.upper() == 'K17':
@@ -300,10 +301,13 @@ def match_fairchild(fn_img, size, model, data_strip, fn_cam=None, **kwargs):
         locs = ['right', 'top', 'left', 'bot']
         angles = [None, np.deg2rad(-90), np.deg2rad(180), np.deg2rad(90)]
         ldict = dict(zip(locs, angles))
-
-    elif model.upper() == 'T11':
-        templ = _box(size)
-        templates = [templ, templ, np.fliplr(templ), np.fliplr(templ)]
+    else:
+        if model.upper() == 'T11S':
+            templ = _box(size)
+            templates = [templ, templ, np.fliplr(templ), np.fliplr(templ)]
+        elif model.upper() == 'T11D':
+            templ = padded_dot(size, dot_size)
+            templates = [templ, templ, np.fliplr(templ), np.fliplr(templ)]
 
         locs = ['left', 'top', 'right', 'bot']
         angles = [None, np.deg2rad(-90), np.deg2rad(180), np.deg2rad(90)]
