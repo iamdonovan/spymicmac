@@ -92,7 +92,10 @@ def find_fiducials(fn_img, templates, fn_cam=None, thresh_tol=0.9, npeaks=5, min
 
     inds = []
     for fid in templates.keys():
-        inds.append(coords_all[coords_all['gcp'] == fid]['resid'].idxmin())
+        if len(coords_all.loc[coords_all['gcp'] == fid]) > 0:
+            inds.append(coords_all[coords_all['gcp'] == fid]['resid'].idxmin())
+        else:
+            continue
 
     coords_all = coords_all.loc[inds]
 
@@ -145,14 +148,14 @@ def _fix_fiducials(coords, measures_cam):
     model.estimate(joined[['im_col', 'im_row']].values,
                    joined[['j', 'i']].values)
 
-    missing = ~measures_cam['name'].isin(coords['gcp'])
+    missing = ~measures_cam.index.isin(coords['gcp'])
     coords.set_index('gcp', inplace=True)
 
-    for _, row in measures_cam.loc[missing].iterrows():
-        print('Predicting location of {}'.format(row['name']))
+    for ind, row in measures_cam.loc[missing].iterrows():
+        print('Predicting location of {}'.format(ind))
         x, y = model.inverse(row[['j', 'i']].values).flatten()
-        coords.loc[row['name'], 'im_col'] = x
-        coords.loc[row['name'], 'im_row'] = y
+        coords.loc[ind, 'im_col'] = x
+        coords.loc[ind, 'im_row'] = y
 
     return coords.reset_index()
 
