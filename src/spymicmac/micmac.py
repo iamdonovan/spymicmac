@@ -731,16 +731,55 @@ def move_bad_tapas(ori):
         shutil.move(im, 'bad')
 
 
-def batch_saisie_fids(imlist, flavor='qt'):
+def _generate_glob(fn_ids):
+    E = builder.ElementMaker()
+    ImMes = E.MesureAppuiFlottant1Im(E.NameIm('Glob'))
+    SpGlob = E.SetPointGlob()
+
+    gcp_df = pd.DataFrame()
+    with open(fn_ids, 'r') as f:
+        fids = [l.strip() for l in f.readlines()]
+
+    for fid in fids:
+        pt_glob = E.PointGlob(E.Type('eNSM_Pts'),
+                              E.Name(fid),
+                              E.LargeurFlou('0'),
+                              E.NumAuto('0'),
+                              E.SzRech('-1'))
+        SpGlob.append(pt_glob)
+
+    tree = etree.ElementTree(SpGlob)
+    tree.write('Tmp-SL-Glob.xml', pretty_print=True, xml_declaration=True, encoding="utf-8")
+
+
+def batch_saisie_fids(imlist, flavor='qt', fn_cam=None):
     """
     Run SaisieAppuisInit to locate the fiducial markers for a given list of images.
 
     :param list imlist: the list of image filenames.
     :param str flavor: which version of SaisieAppuisInit to run. Must be one of [qt, og] (default: qt)
+    :param str fn_cam: the filename for the MeasuresCamera.xml file (default: Ori-InterneScan/MeasuresCamera.xml)
     """
     assert flavor in ['qt', 'og'], "flavor must be one of [qt, og]"
 
     os.makedirs('Ori-InterneScan', exist_ok=True)
+    os.makedirs('Tmp-SaisieAppuis', exist_ok=True)
+
+    if fn_cam is None:
+        fn_cam = os.path.join('Ori-InterneScan', 'MeasuresCamera.xml')
+
+    if os.path.exists(fn_cam):
+        measures_cam = parse_im_meas(fn_cam)
+        with open('id_fiducials.txt', 'w') as f:
+            for fid in measures_cam['name']:
+                print(fid, file=f)
+        _generate_glob('id_fiducials.txt')
+    else:
+        try:
+            _generate_glob('id_fiducials.txt')
+        except FileNotFoundError as e:
+            raise FileNotFoundError('id_fiducials.txt not found. Please specify fn_cam, '
+                                    'or ensure that id_fiducials.txt exists in the current directory.')
 
     if flavor == 'qt':
         saisie = 'SaisieAppuisInitQT'
@@ -748,11 +787,19 @@ def batch_saisie_fids(imlist, flavor='qt'):
         saisie = 'SaisieAppuisInit'
 
     for fn_img in imlist:
+        if os.path.exists(os.path.join('Ori-InterneScan', f'MeasuresIm-{fn_img}.xml')):
+            shutil.copy(os.path.join('Ori-InterneScan', f'MeasuresIm-{fn_img}.xml'),
+                        f'MeasuresIm-{fn_img}-S2D.xml')
+            shutil.copy('Tmp-SL-Glob.xml',
+                        os.path.join('Tmp-SaisieAppuis', f'Tmp-SL-Glob-MeasuresIm-{fn_img}.xml'))
+
         p = subprocess.Popen(['mm3d', saisie, fn_img, 'NONE', 'id_fiducials.txt', f'MeasuresIm-{fn_img}.xml'])
         p.wait()
 
         shutil.move(f'MeasuresIm-{fn_img}-S2D.xml', os.path.join('Ori-InterneScan', f'MeasuresIm-{fn_img}.xml'))
         os.remove(f'MeasuresIm-{fn_img}-S3D.xml')
+
+    os.remove('Tmp-SL-Glob.xml')
 
 
 def tapioca(img_pattern='OIS.*tif', res_low=400, res_high=1200):
