@@ -8,6 +8,7 @@ import shutil
 import numpy as np
 from osgeo import gdal
 import pandas as pd
+import geopandas as gpd
 import lxml.etree as etree
 import lxml.builder as builder
 import difflib
@@ -173,24 +174,38 @@ def get_im_meas(points_df, E, name='gcp', x='im_col', y='im_row'):
 
 def parse_im_meas(fn_meas):
     """
-    Read an xml file with GCP image locations into a pandas DataFrame.
+    Read an xml file with image locations into a pandas DataFrame.
 
     :param fn_meas: the name of the measures file to read.
     :return: **gcp_df** (*pandas.DataFrame*) -- a DataFrame with gcp names and image locations.
     """
-    gcp_df = pd.DataFrame()
     root = ET.parse(fn_meas).getroot()
     if root.tag == 'MesureAppuiFlottant1Im':
         measures = root
     else:
-        measures = root.findall('MesureAppuiFlottant1Im')[0]
+        measures = root.findall('MesureAppuiFlottant1Im')
 
-    for i, mes in enumerate(measures.findall('OneMesureAF1I')):
-        gcp_df.loc[i, 'name'] = mes.find('NamePt').text
-        pt = mes.find('PtIm').text.split()
-        gcp_df.loc[i, 'i'] = float(pt[1])
-        gcp_df.loc[i, 'j'] = float(pt[0])
-    return gcp_df
+    meas_df = pd.DataFrame()
+
+    if type(measures) == list:
+        for img_mes in measures:
+            this_df = pd.DataFrame()
+            for ind, mes in enumerate(img_mes.findall('OneMesureAF1I')):
+                this_df.loc[ind, 'image'] = img_mes.find('NameIm').text
+                this_df.loc[ind, 'name'] = mes.find('NamePt').text
+                pt = mes.find('PtIm').text.split()
+                this_df.loc[ind, 'i'] = float(pt[1])
+                this_df.loc[ind, 'j'] = float(pt[0])
+
+            meas_df = pd.concat([meas_df, this_df], ignore_index=True)
+    else:
+        for ind, mes in enumerate(measures.findall('OneMesureAF1I')):
+            meas_df.loc[ind, 'name'] = mes.find('NamePt').text
+            pt = mes.find('PtIm').text.split()
+            meas_df.loc[ind, 'i'] = float(pt[1])
+            meas_df.loc[ind, 'j'] = float(pt[0])
+
+    return meas_df
 
 
 def generate_measures_files(joined=False):
@@ -1469,3 +1484,38 @@ def _gitignore():
             for ig in ignore_dict[sect]:
                 print(ig, file=f)
             print('\n', file=f)
+
+
+def meas_to_asp_gcp(fn_gcp, fn_meas, imlist, outname=None, scale=1):
+    """
+    Convert image measures stored in a micmac xml file to an ASP .gcp file format.
+
+    :param str fn_gcp: the filename of the shapefile with the GCP coordinates
+    :param str fn_meas: the filename of the xml file with the image measures
+    :param list imlist: the image(s) to write point locations for
+    :param str outname: the name of the output filename to create
+    :param int scale: the factor by which to scale the image point locations
+    """
+    if outname is None:
+        outname = fn_meas.replace('.xml', '.gcp')
+
+    gcps = gpd.read_file(fn_gcp).to_crs(crs='epsg:4326').set_index('id')
+    meas = parse_im_meas(fn_meas)
+
+    meas = meas.loc[meas['image'].isin(imlist)]
+
+    gcp_list = sorted(meas.name.unique())
+
+    with open(outname, 'w') as f:
+        for gcp in gcp_list:
+            if all([gcp in meas.loc[meas.image == img]['name'].values for img in imlist]):
+                _gcp = gcps.loc[gcp]
+                lon, lat = _gcp.geometry.x, _gcp.geometry.y
+
+                out_gcp = ','.join([gcp.strip('GCP'), str(lat), str(lon), str(_gcp.elevation), '1.0', '1.0', '1.0'])
+
+                for img in sorted(imlist):
+                    row, col = meas.loc[(meas.image == img) & (meas.name == gcp), ['i', 'j']].values[0]
+                    out_gcp += ',' + ','.join([img, str(col / scale), str(row / scale), '1.0', '1.0'])
+
+                print(out_gcp, file=f)

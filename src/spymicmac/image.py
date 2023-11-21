@@ -236,14 +236,15 @@ def _spike_filter(img, axis):
     return img_mean
 
 
-def get_rough_frame(img):
+def get_rough_frame(img, fact=10):
     """
     Find the rough location of an image frame/border.
 
     :param array-like img: the image to find a border for
+    :param int fact: the scaling factor for the low-resolution image (default: 10)
     :return: **xmin**, **xmax**, **ymin**, **ymax** (*float*) -- the left, right, top, and bottom indices for the rough border.
     """
-    img_lowres = resample.downsample(img, fact=10)
+    img_lowres = resample.downsample(img, fact=fact)
 
     rowmean = _spike_filter(img_lowres, axis=0)
     smooth_row = _moving_average(rowmean, n=5)
@@ -282,8 +283,8 @@ def get_rough_frame(img):
 
     # xmin = 10 * (sorted_row[min_ind] + 1)
     # xmax = 10 * (sorted_row[max_ind] + 1)
-    xmin = 10 * (left_ind + 1)
-    xmax = 10 * (right_ind + 1)
+    xmin = fact * (left_ind + 1)
+    xmax = fact * (right_ind + 1)
 
     # ymin = 10 * np.where(colmean > np.percentile(colmean, 10))[0][0]
     # ymax = 10 * np.where(colmean > np.percentile(colmean, 10))[0][-1]
@@ -293,8 +294,8 @@ def get_rough_frame(img):
     # of the difference, that's also in the right half of the image
     # min_ind = np.where(sorted_col < 0.2 * sorted_col.size)[0][-1]
     # max_ind = np.where(sorted_col > 0.8 * sorted_col.size)[0][0]
-    ymin = 10 * (top_ind + 1)
-    ymax = 10 * (bot_ind + 1)
+    ymin = fact * (top_ind + 1)
+    ymax = fact * (bot_ind + 1)
 
     # ymin = 10 * (sorted_col[min_ind] + 1)
     # ymax = 10 * (sorted_col[max_ind] + 1)

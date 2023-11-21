@@ -238,12 +238,58 @@ def to_wgs84_ellipsoid(fn_dem):
     ell.write(os.path.splitext(fn_dem)[0] + '_ell.tif')
 
 
-def download_arcticdem_mosaic(imlist=None, footprints=None, imgsource='DECLASSII', globstr='OIS*.tif', res='2m',
-                              write_urls=False):
-    """
-    Download the ArcticDEM v3.0 Mosaic tiles that intersect image footprints. Downloads .tar.gz files to
-    arctic_dem, extracts each DEM, and creates ArcticDEM.vrt in the current directory.
+def _pgc_url(flavor):
+    flavors = ['adem', 'rema']
+    urls = ['https://data.pgc.umn.edu/elev/dem/setsm/ArcticDEM/indexes/ArcticDEM_Mosaic_Index_latest_shp.zip',
+            'https://data.pgc.umn.edu/elev/dem/setsm/REMA/indexes/REMA_Mosaic_Index_latest_shp.zip']
+    url_dict = dict(zip(flavors, urls))
 
+    return url_dict[flavor]
+
+
+def _pgc_shp(flavor, res):
+    flavors = ['adem', 'rema']
+    paths = [Path(_data_dir(), f'ArcticDEM_Mosaic_Index_v4_1_{res}.shp'),
+             Path(_data_dir(), 'REMA_Mosaic_Index_v2_shp', f'REMA_Mosaic_Index_v2_{res}.shp')]
+    path_dict = dict(zip(flavors, paths))
+
+    return path_dict[flavor]
+
+
+def _get_pgc_tiles(flavor, res):
+    _check_data_dir()
+
+    # latest version is 4.1 - may need to update with future releases
+    fn_shp = _pgc_shp(flavor, res)
+
+    if not fn_shp.exists():
+        print('Downloading latest Mosaic Tile Index from data.pgc.umn.edu')
+        zip_url = _pgc_url(flavor)
+        zip_path = Path(_data_dir(), zip_url.split('/')[-1])
+        urllib.request.urlretrieve(zip_url, zip_path)
+
+        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+            zip_ref.extractall(_data_dir())
+
+        os.remove(zip_path)
+
+    return gpd.read_file(fn_shp)
+
+
+def _unpack_pgc(tarball, folder):
+    with tarfile.open(Path(folder, tarball), 'r') as tfile:
+        dem = tfile.getmember(tarball.replace('.tar.gz', '_dem.tif'))
+        dem.name = Path(folder, dem.name)  # will extract to arctic_dem
+        tfile.extract(dem)
+
+
+def download_pgc_mosaic(flavor, imlist=None, footprints=None, imgsource='DECLASSII', globstr='OIS*.tif', res='2m',
+                        write_urls=False):
+    """
+    Download either the latest ArcticDEM or REMA mosaic tiles that intersect image footprints. Downloads .tar.gz files
+    to a corresponding folder and creates a VRT file in the current directory.
+
+    :param str flavor: Which PGC product to download. Must be one of [adem, rema].
     :param list imlist: a list of image filenames. If None, uses globstr to search for images in the current directory.
     :param GeoDataFrame footprints: a GeoDataFrame of image footprints. If None, uses spymicmac.usgs.get_usgs_footprints
         to download footprints based on imlist.
@@ -253,61 +299,42 @@ def download_arcticdem_mosaic(imlist=None, footprints=None, imgsource='DECLASSII
     :param bool write_urls: write a text file with the urls for each tile, for downloading using curl,
         wget, etc., instead of via python (default: False)
     """
+    assert flavor in ['adem', 'rema'], "flavor must be one of [adem, rema]"
     assert res in ['2m', '10m', '32m'], "res must be one of 2m, 10m, or 32m"
+
+    if flavor == 'adem':
+        outfile = 'ArcticDEM.vrt'
+    else:
+        outfile = 'REMA.vrt'
 
     clean_imlist = _clean_imlist(imlist, globstr)
 
     if footprints is None:
         footprints = get_usgs_footprints(clean_imlist, dataset=imgsource)
 
-    os.makedirs('arctic_dem', exist_ok=True)
+    os.makedirs(flavor, exist_ok=True)
 
-    arcticdem_tiles = _arcticdem_shp(res=res)
-    intersects = arcticdem_tiles.intersects(footprints.to_crs(arcticdem_tiles.crs).unary_union)
+    # get the shapefile of tiles corresponding to our flavor and resolution
+    tiles = _get_pgc_tiles(flavor, res)
 
-    selection = arcticdem_tiles.loc[intersects].reset_index(drop=True)
+    intersects = tiles.intersects(footprints.to_crs(tiles.crs).unary_union)
+
+    selection = tiles.loc[intersects].reset_index(drop=True)
     if not write_urls:
         for ind, row in selection.iterrows():
-            this_path = Path('arctic_dem', row['dem_id'] + '.tar.gz')
-            print('Downloading', row['dem_id'], f'({ind+1}/{selection.shape[0]})')
+            this_path = Path(flavor, row['dem_id'] + '.tar.gz')
+            print('Downloading', row['dem_id'], f'({ind + 1}/{selection.shape[0]})')
             urllib.request.urlretrieve(row['fileurl'], this_path)
 
         tarlist = []
         for tarball in tarlist:
-            _unpack_adem(tarball)
+            _unpack_pgc(tarball)
 
-        filelist = glob(os.path.join('arctic_dem', '*_dem.tif'))
-        out_vrt = gdal.BuildVRT('ArcticDEM.vrt', filelist)
+        filelist = glob(os.path.join(flavor, '*_dem.tif'))
+        out_vrt = gdal.BuildVRT(outfile, filelist)
         out_vrt = None
 
     else:
-        with open('arcticdem_tiles.txt', 'w') as f:
+        with open(f'{flavor}_tiles.txt', 'w') as f:
             for ind, row in selection.iterrows():
                 print(row.fileurl, file=f)
-
-
-def _arcticdem_shp(res='2m'):
-    _check_data_dir()
-
-    # latest version is 4.1 - may need to update with future releases
-    fn_shp = Path(_data_dir(), f'ArcticDEM_Mosaic_Index_v4_1_{res}.shp')
-
-    if not fn_shp.exists():
-        print('Downloading latest ArcticDEM Mosaic Tile Index from data.pgc.umn.edu')
-        zip_url = 'https://data.pgc.umn.edu/elev/dem/setsm/ArcticDEM/indexes/ArcticDEM_Strip_Index_latest_shp.zip'
-        zip_path = Path(_data_dir(), 'ArcticDEM_Mosaic_Index_latest_shp.zip')
-        urllib.request.urlretrieve(zip_url, zip_path)
-
-        with zipfile.ZipFile(Path(_data_dir(), 'ArcticDEM_Mosaic_Index_latest_shp.zip'), 'r') as zip_ref:
-            zip_ref.extractall(_data_dir())
-
-        os.remove(zip_path)
-
-    return gpd.read_file(fn_shp)
-
-
-def _unpack_adem(tarball):
-    with tarfile.open(Path('arctic_dem', tarball), 'r') as tfile:
-        dem = tfile.getmember(tarball.replace('.tar.gz', '_dem.tif'))
-        dem.name = Path('arctic_dem', dem.name)  # will extract to arctic_dem
-        tfile.extract(dem)
