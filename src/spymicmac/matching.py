@@ -405,8 +405,7 @@ def _wild_midside(size, model, circle_size, ring_width):
     return template
 
 
-def match_wild_rc(fn_img, size, model, data_strip='left', fn_cam=None, midside=False, circle_size=None,
-                  ring_width=7, **kwargs):
+def match_wild_rc(fn_img, size, model, data_strip='left', fn_cam=None, circle_size=None, ring_width=7, **kwargs):
     """
     Match the fiducial locations for a Wild RC-style camera (4 cross/bulls-eye markers in the corner, possibly
     4 bulls-eye markers along the sides).
@@ -418,21 +417,21 @@ def match_wild_rc(fn_img, size, model, data_strip='left', fn_cam=None, midside=F
         assume the data strip is along the left-hand side, but scanned images may be rotated relative to this.
     :param str fn_cam: the filename of the MeasuresCamera.xml file corresponding to the
         image (default: Ori-InterneScan/MeasuresCamera.xml)
-    :param bool midside: whether to include markers along the sides of the image or not (default: False)
     :param int circle_size: the size of the circle in which to inscribe the cross-shaped marker (default: no circle)
     :param int ring_width: the width of the ring if the marker(s) are a cross inscribed with a ring. Only used if
     :param kwargs: additional keyword arguments to pass to matching.find_fiducials()
     :return:
     """
+    assert model.upper() in ['RC5', 'RC8', 'RC10'], "model must be one of [RC5, RC8, RC10]"
     assert data_strip in ['left', 'right', 'top', 'bot'], "data_strip must be one of [left, right, top, bot]"
-    if midside:
+    if model.upper() in ['RC5', 'RC8']:
+        fids = [f'P{n}' for n in range(1, 5)]
+        templates = 4 * [_wild_corner(size, model, circle_size, ring_width)]
+    else:
         fids = [f'P{n}' for n in range(1, 9)]
         stempl = _wild_midside(size, model)
         ctempl = _wild_corner(size, model, circle_size, ring_width)
         templates = 4 * [ctempl] + 4 * [stempl]
-    else:
-        fids = [f'P{n}' for n in range(1, 5)]
-        templates = 4 * [_wild_corner(size, model, circle_size, ring_width)]
 
     if data_strip == 'left':
         angle = None
