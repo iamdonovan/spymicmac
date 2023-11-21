@@ -159,7 +159,7 @@ def crop_from_extent(fn_img, border, angle=None, fact=None):
     left, right, top, bot = border
 
     print(f'Cropping to window (left, right, top, bot): {int(left)}, {int(right)}, {int(top)}, {int(bot)}')
-    cropped = rotated[int(top):int(bot), int(left):int(right)]
+    cropped = img[int(top):int(bot), int(left):int(right)]
 
     if fact is not None:
         cropped = downsample(cropped, fact=fact)
