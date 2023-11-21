@@ -180,19 +180,30 @@ def parse_im_meas(fn_meas):
     :return: **gcp_df** (*pandas.DataFrame*) -- a DataFrame with gcp names and image locations.
     """
     root = ET.parse(fn_meas).getroot()
-    measures = root.findall('MesureAppuiFlottant1Im')
+    if root.tag == 'MesureAppuiFlottant1Im':
+        measures = root
+    else:
+        measures = root.findall('MesureAppuiFlottant1Im')
 
     meas_df = pd.DataFrame()
-    for img_mes in measures:
-        this_df = pd.DataFrame()
-        for ind, mes in enumerate(img_mes.findall('OneMesureAF1I')):
-            this_df.loc[ind, 'image'] = img_mes.find('NameIm').text
-            this_df.loc[ind, 'name'] = mes.find('NamePt').text
-            pt = mes.find('PtIm').text.split()
-            this_df.loc[ind, 'i'] = float(pt[1])
-            this_df.loc[ind, 'j'] = float(pt[0])
 
-        meas_df = pd.concat([meas_df, this_df], ignore_index=True)
+    if type(measures) == list:
+        for img_mes in measures:
+            this_df = pd.DataFrame()
+            for ind, mes in enumerate(img_mes.findall('OneMesureAF1I')):
+                this_df.loc[ind, 'image'] = img_mes.find('NameIm').text
+                this_df.loc[ind, 'name'] = mes.find('NamePt').text
+                pt = mes.find('PtIm').text.split()
+                this_df.loc[ind, 'i'] = float(pt[1])
+                this_df.loc[ind, 'j'] = float(pt[0])
+
+            meas_df = pd.concat([meas_df, this_df], ignore_index=True)
+    else:
+        for ind, mes in enumerate(measures.findall('OneMesureAF1I')):
+            meas_df.loc[ind, 'name'] = mes.find('NamePt').text
+            pt = mes.find('PtIm').text.split()
+            meas_df.loc[ind, 'i'] = float(pt[1])
+            meas_df.loc[ind, 'j'] = float(pt[0])
 
     return meas_df
 
