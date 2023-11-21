@@ -172,3 +172,17 @@ def crop_from_extent(fn_img, border, angle=None, fact=None):
         cropped = np.fliplr(np.flipud(cropped))
 
     io.imsave('OIS-Reech_' + fn_img, cropped.astype(np.uint8))
+
+
+def _border_mask(img, border):
+    mask = 255 * np.ones(img.shape, dtype=np.uint8)
+    mask[border:-border, border:-border] = 0
+    return mask
+
+def align_image_borders(fn_left, fn_right, border):
+
+    left = io.imread(fn_left)
+    right = io.imread(fn_right)
+
+    mask_left = _border_mask(left, border)
+    mask_right = _border_mask(right, border)
