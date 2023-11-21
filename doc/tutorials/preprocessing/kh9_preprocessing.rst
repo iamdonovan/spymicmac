@@ -1,12 +1,27 @@
-KH-9 pre-processing steps
-==========================
-There are a number of necessary pre-processing steps when working with KH-9 imagery. Distortions in the film,
-caused by storage and other conditions, must be corrected to be able to accurately process the images. After
+KH-9 mapping camera pre-processing steps
+==========================================
+There are a number of necessary pre-processing steps when working with KH-9 mapping camera imagery. Distortions in the
+film, caused by storage and other conditions, must be corrected to be able to accurately process the images. After
 resampling, it is also possible to remove the Reseau marks from the images, in order to improve the final results.
 
 Finally, because of the size of the film (approx. 9"x18"), the images are scanned in two halves that must be joined
 together. And finally, it can also be helpful to improve contrast in the images, in order to help improve the
 final results.
+
+If you have a number of images, the convenience tool :doc:`../../spymicmac/scripts/preprocess_kh9` will do the following
+steps, starting from tarballs of the image halves (as downloaded from USGS):
+
+- extract the images from tar files (moving the tar files to a new folder, "tarballs")
+- join the scanned image halves
+- detect the location of Reseau markers in each image
+- erase the detected Reseau markers from each image
+- filter images using a 1-sigma Gaussian Filter to reduce noise in the scanned images
+- resample the images to a common size, using the Reseau marker locations
+- call ``mm3d Tapioca`` to find tie points in the images
+- call ``mm3d Tapas``, to calibrate the camera model and find the relative image orientation
+- call ``mm3d AperiCloud`` to create a point cloud using the calibrated camera model and relative camera positions
+
+Some of these steps, including the relevant ``spymicmac`` functions, are detailed below.
 
 image joining
 --------------
