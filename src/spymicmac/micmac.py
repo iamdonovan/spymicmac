@@ -694,16 +694,19 @@ def get_campari_residuals(fn_resids, gcp_df):
     camp_x = []
     camp_y = []
     camp_z = []
+    camp_dist = []
 
     for a in last_iter:
         try:
             camp_x.append(float(a.find('EcartFaiscTerrain').text.split()[0]))
             camp_y.append(float(a.find('EcartFaiscTerrain').text.split()[1]))
             camp_z.append(float(a.find('EcartFaiscTerrain').text.split()[2]))
+            camp_dist.append(float(a.find('DistFaiscTerrain').text))
         except AttributeError:
             camp_x.append(np.nan)
             camp_y.append(np.nan)
             camp_z.append(np.nan)
+            camp_dist.append(np.nan)
 
     for data_ in zip(camp_gcp_names, err_max):
         gcp_df.loc[gcp_df.id == data_[0], 'camp_res'] = data_[1]
@@ -716,6 +719,9 @@ def get_campari_residuals(fn_resids, gcp_df):
 
     for data_ in zip(camp_gcp_names, camp_z):
         gcp_df.loc[gcp_df.id == data_[0], 'camp_zres'] = data_[1]
+
+    for data_ in zip(camp_gcp_names, camp_dist):
+        gcp_df.loc[gcp_df.id == data_[0], 'camp_dist'] = data_[1]
 
     return gcp_df
 
@@ -1048,9 +1054,9 @@ def campari(in_gcps, outdir, img_pattern, sub, dx, ortho_res, allfree=True,
                           inori + sub,
                           outori + sub,
                           'GCP=[{},{},{},{}]'.format(os.path.join(outdir, fn_gcp),
-                                                     np.abs(dx) / 2,  # should be correct within 1/2 pixel
+                                                     np.abs(dx) / 4,  # should be correct within 1/4 pixel
                                                      os.path.join(outdir, fn_meas),
-                                                     0.25),  # should be correct within 1/4 pixel
+                                                     1),  # best balance for distortion
                           'SH={}'.format(homol),
                           'AllFree={}'.format(int(allfree))], stdin=echo.stdout)
     p.wait()
@@ -1058,6 +1064,39 @@ def campari(in_gcps, outdir, img_pattern, sub, dx, ortho_res, allfree=True,
     out_gcps = get_campari_residuals('Ori-{}/Residus.xml'.format(outori + sub), in_gcps)
     # out_gcps.dropna(inplace=True)  # sometimes, campari can return no information for a gcp
     return out_gcps
+
+
+def banana(fn_dem, fn_ref, deg=2, dZthresh=200., fn_mask=None, spacing=100):
+    """
+    Interface for running mm3d Postproc Banana, for computing a polynomial correction to a "banana" or dome.
+
+    :param str fn_dem: the filename of the input DEM to correct
+    :param str fn_ref: the filename of the reference DEM to use for the correction
+    :param int deg: the degree of the polynomial correction (0 - 3, default: 2)
+    :param float dZthresh: the threshold elevation difference between the reference and input DEMs (default: 200)
+    :param str fn_mask: an (optional) exclusion mask to use for the reference DEM
+    :param int spacing: the pixel spacing of the DEM to write (default: every 100 pixels)
+    """
+    assert deg in range(0, 4), "Polynomial degree limited to 0, 1, 2, or 3"
+
+    dem_ext = os.path.splitext(fn_ref)[-1]
+    fn_txt = fn_ref.replace(dem_ext, '.txt')
+    dem_to_text(fn_ref, fn_out=fn_txt, spacing=spacing, fn_mask=fn_mask)
+
+    # first, run gdal_translate to make a TFW file for the input dem
+    p = subprocess.Popen(['gdal_translate', fn_dem, 'tmp.tif', '-co', 'TFW=YES'])
+    p.wait()
+
+    shutil.move('tmp.tfw', fn_dem.replace(os.path.splitext(fn_dem)[-1], '.tfw'))
+    os.remove('tmp.tif')
+
+    p = subprocess.Popen(['mm3d', 'Postproc', 'Banana',
+                          fn_dem,
+                          f'ListGCPs={fn_txt}',
+                          f'DegPoly={deg}',
+                          f'dZthresh={dZthresh}'])
+
+    p.wait()
 
 
 def remove_worst_mesures(fn_meas, ori):
@@ -1132,12 +1171,12 @@ def iterate_campari(gcps, out_dir, match_pattern, subscript, dx, ortho_res, fn_g
                    inori=inori, outori=outori, fn_gcp=fn_gcp, fn_meas=fn_meas,
                    allfree=allfree)
 
-    gcps['camp_dist'] = np.sqrt(gcps.camp_xres ** 2 + gcps.camp_yres ** 2)
+    gcps['camp_xy'] = np.sqrt(gcps.camp_xres ** 2 + gcps.camp_yres ** 2)
 
-    while any([np.any(np.abs(gcps.camp_res - gcps.camp_res.median()) > 4 * nmad(gcps.camp_res)),
-               np.any(np.abs(gcps.camp_dist - gcps.camp_dist.median()) > 4 * nmad(gcps.camp_dist)),
+    while any([np.any(np.abs(gcps.camp_res - gcps.camp_res.median()) > 3 * nmad(gcps.camp_res)),
+               np.any(np.abs(gcps.camp_dist - gcps.camp_dist.median()) > 3 * nmad(gcps.camp_dist)),
                gcps.camp_res.max() > 2]) and niter <= max_iter:
-        valid_inds = np.logical_and.reduce((np.abs(gcps.camp_res - gcps.camp_res.median()) < 4 * nmad(gcps.camp_res),
+        valid_inds = np.logical_and.reduce((np.abs(gcps.camp_dist - gcps.camp_dist.median()) < 3 * nmad(gcps.camp_dist),
                                             gcps.camp_res < gcps.camp_res.max()))
         if np.count_nonzero(valid_inds) < 10:
             break
@@ -1153,7 +1192,7 @@ def iterate_campari(gcps, out_dir, match_pattern, subscript, dx, ortho_res, fn_g
                        inori=inori, outori=outori, fn_gcp=fn_gcp, fn_meas=fn_meas,
                        allfree=allfree, homol=homol)
 
-        gcps['camp_dist'] = np.sqrt(gcps.camp_xres ** 2 + gcps.camp_yres ** 2)
+        gcps['camp_xy'] = np.sqrt(gcps.camp_xres ** 2 + gcps.camp_yres ** 2)
         niter += 1
 
     return gcps
@@ -1257,7 +1296,7 @@ def save_gcps(in_gcps, outdir, utmstr, sub, fn_gcp='AutoGCPs', fn_meas='AutoMeas
                   encoding="utf-8", xml_declaration=True)
 
 
-def dem_to_text(fn_dem, fn_out='dem_pts.txt', spacing=100):
+def dem_to_text(fn_dem, fn_out='dem_pts.txt', spacing=100, fn_mask=None):
     """
     Write elevations from a DEM raster to a text file for use in mm3d PostProc Banana.
 
@@ -1269,6 +1308,11 @@ def dem_to_text(fn_dem, fn_out='dem_pts.txt', spacing=100):
         dem = fn_dem
     else:
         dem = GeoImg(fn_dem)
+
+    if fn_mask is not None:
+        mask = create_mask_from_shapefile(dem, fn_mask)
+        dem.img[mask] = np.nan
+
     x, y = dem.xy()
 
     z = dem.img[::spacing, ::spacing].flatten()
