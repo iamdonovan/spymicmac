@@ -15,6 +15,7 @@ from skimage.measure import ransac
 from skimage.feature import peak_local_max
 from skimage.transform import AffineTransform, EuclideanTransform
 from scipy.interpolate import RectBivariateSpline as RBS
+from scipy import ndimage
 import numpy as np
 from shapely.ops import nearest_points
 from shapely.geometry import LineString, MultiPoint, Point
@@ -27,7 +28,7 @@ from spymicmac import image, micmac, resample
 ######################################################################################################################
 # tools for matching fiducial markers (or things like fiducial markers)
 ######################################################################################################################
-def find_fiducials(fn_img, templates, fn_cam=None):
+def find_fiducials(fn_img, templates, fn_cam=None, thresh_tol=0.9, npeaks=5, min_dist=1, angle=None):
     """
     Match the location of fiducial markers for a scanned aerial photo.
 
@@ -35,16 +36,42 @@ def find_fiducials(fn_img, templates, fn_cam=None):
     :param dict templates: a dict of (name, template) pairs corresponding to each fiducial marker.
     :param str fn_cam: the filename of the MeasuresCamera.xml file for the image. defaults to
         Ori-InterneScan/MeasuresCamera.xml
+    :param float thresh_tol: the minimum relative peak intensity to use for detecting matches (default: 0.9)
+    :param int npeaks: maximum number of potential matches to accept for each fiducial marker template (default: 5)
+    :param int min_dist: the minimum distance allowed between potential peaks (default: not set)
+    :param int angle:
     """
+    # assert units in ['microns', 'dpi'], "scale must be one of [microns, dpi]"
+
     img = io.imread(fn_img)
+
+    if fn_cam is None:
+        fn_cam = os.path.join('Ori-InterneScan', 'MeasuresCamera.xml')
+    measures_cam = micmac.parse_im_meas(fn_cam)
+    measures_cam.set_index('name', inplace=True)
+
+    if angle is not None:
+        measures_cam = _rotate_meas(measures_cam, angle)
+
+    # now, get the fractional locations (0.05, 0.5, 0.95) in the image of each marker
+    measures_cam = _get_rough_locs(measures_cam)
+    measures_cam['rough_j'] *= img.shape[1]
+    measures_cam['rough_i'] *= img.shape[0]
 
     coords_all = []
 
-    for fid, templ in templates.items():
-        res = cv2.matchTemplate(img.astype(np.uint8), templ.astype(np.uint8), cv2.TM_CCORR_NORMED)
+    for fid, row in measures_cam.iterrows():
+        templ = templates[fid]
+        tsize = int(min(0.05 * np.array(img.shape)))
 
-        coords = peak_local_max(res, threshold_rel=0.9, min_distance=100, num_peaks=5).astype(float)
+        subimg, _, _ = make_template(img, (row['rough_i'], row['rough_j']), half_size=tsize)
+        res = cv2.matchTemplate(subimg.astype(np.uint8), templ.astype(np.uint8), cv2.TM_CCORR_NORMED)
+
+        coords = peak_local_max(res, threshold_rel=thresh_tol, min_distance=min_dist, num_peaks=npeaks).astype(float)
         coords += templ.shape[0] / 2 - 0.5
+
+        coords[:, 1] += row['rough_j'] - tsize
+        coords[:, 0] += row['rough_i'] - tsize
 
         these_coords = pd.DataFrame()
         these_coords['im_col'] = coords[:, 1]
@@ -55,41 +82,30 @@ def find_fiducials(fn_img, templates, fn_cam=None):
 
     coords_all = pd.concat(coords_all, ignore_index=True)
 
-    if fn_cam is None:
-        fn_cam = os.path.join('Ori-InterneScan', 'MeasuresCamera.xml')
-    measures_cam = micmac.parse_im_meas(fn_cam)
-
-    scale = np.mean((coords_all.im_col.max() - coords_all.im_col.min(),
-                     coords_all.im_row.max()) - coords_all.im_row.min()) / \
-        np.mean((measures_cam.j.max() - measures_cam.j.min(),
-                 measures_cam.i.max() - measures_cam.i.min()))
-
-    scaled = measures_cam.copy()
-    scaled['j'] -= scaled['j'].min()
-    scaled['i'] -= scaled['i'].min()
-
-    scaled['j'] *= scale
-    scaled['i'] *= scale
-
-    model = AffineTransform()
-    model.estimate(scaled[['j', 'i']].values,
-                   measures_cam[['j', 'i']].values)
-
     for ind, row in coords_all.iterrows():
-        src = row[['im_col', 'im_row']].values.reshape(1, 2).astype(float)
-        dst = measures_cam.loc[measures_cam['name'] == row['gcp'], ['j', 'i']].values
-
-        resid = model.residuals(src, dst)
-        coords_all.loc[ind, 'resid'] = resid[0]
+        this_fid = measures_cam.loc[measures_cam.index == row['gcp']]
+        dist = np.sqrt((row.im_col - this_fid['rough_j'])**2 +
+                       (row.im_row - this_fid['rough_i'])**2)
+        coords_all.loc[ind, 'resid'] = dist.values[0]
 
     coords_all['resid'] = coords_all['resid'].astype(float)
 
     inds = []
     for fid in templates.keys():
-        inds.append(coords_all[coords_all['gcp'] == fid]['resid'].idxmin())
+        if len(coords_all.loc[coords_all['gcp'] == fid]) > 0:
+            inds.append(coords_all[coords_all['gcp'] == fid]['resid'].idxmin())
+        else:
+            continue
 
     coords_all = coords_all.loc[inds]
 
+    # now, drop any duplicated values - if we have these, we need to replace/estimate
+    coords_all = coords_all.sort_values('resid').drop_duplicates(subset=['im_col', 'im_row']).sort_values('gcp')
+    if len(coords_all) < len(measures_cam):
+        print('One or more markers could not be found. \nAttempting to predict location(s) using affine transformation')
+        coords_all = _fix_fiducials(coords_all, measures_cam)
+
+    model = AffineTransform()
     model.estimate(coords_all[['im_col', 'im_row']].values,
                    measures_cam[['j', 'i']].values)
 
@@ -113,6 +129,75 @@ def find_fiducials(fn_img, templates, fn_cam=None):
     tree.write(os.path.join('Ori-InterneScan', 'MeasuresIm-' + fn_img + '.xml'), pretty_print=True,
                xml_declaration=True, encoding="utf-8")
 
+    return residuals.mean()
+
+
+def _get_scale(scale, units):
+    if units == 'dpi':
+        scale = 1 / ((1 / scale) * 25.4)
+    else:
+        scale = 1 / scale * 1000
+
+    return scale
+
+
+def _fix_fiducials(coords, measures_cam):
+    joined = coords.merge(measures_cam, left_on='gcp', right_on='name')
+
+    model = AffineTransform()
+    model.estimate(joined[['im_col', 'im_row']].values,
+                   joined[['j', 'i']].values)
+
+    missing = ~measures_cam.index.isin(coords['gcp'])
+    coords.set_index('gcp', inplace=True)
+
+    for ind, row in measures_cam.loc[missing].iterrows():
+        print('Predicting location of {}'.format(ind))
+        x, y = model.inverse(row[['j', 'i']].values).flatten()
+        coords.loc[ind, 'im_col'] = x
+        coords.loc[ind, 'im_row'] = y
+
+    return coords.reset_index()
+
+
+def _rotate_meas(meas, angle):
+    M = np.array([[np.cos(angle), -np.sin(angle)], [np.sin(angle), np.cos(angle)]])
+
+    rot = meas.copy()
+
+    mean_j = meas.j.mean()
+    mean_i = meas.i.mean()
+
+    rot.j -= mean_j
+    rot.i -= mean_i
+
+    rot[['j', 'i']] = rot[['j', 'i']].values.dot(M)
+
+    rot.j += mean_j
+    rot.i += mean_i
+
+    return rot
+
+
+def _get_rough_locs(meas):
+    # get the rough locations of the corners and mid-side fiducial markers in an image
+    scaled = meas.copy()
+    scaled['j'] /= scaled.j.max()
+    scaled['i'] /= scaled.i.max()
+
+    rough_x, rough_y = np.meshgrid(np.array([0.075, 0.5, 0.925]), np.array([0.075, 0.5, 0.925]))
+    rough_pts = [Point(x, y) for x, y in zip(rough_x.flatten(), rough_y.flatten())]
+
+    for ind, row in scaled.iterrows():
+        pt = Point(row['j'], row['i'])
+        dists = [pt.distance(_pt) for _pt in rough_pts]
+        nind = np.argmin(dists)
+
+        meas.loc[ind, 'rough_j'] = rough_x.flatten()[nind]
+        meas.loc[ind, 'rough_i'] = rough_y.flatten()[nind]
+
+    return meas
+
 
 def _corner(size):
     templ = np.zeros((size, size), dtype=np.uint8)
@@ -124,7 +209,56 @@ def _box(size):
     templ = np.zeros((size, size), dtype=np.uint8)
     templ[:int(size / 2) + 1, int(size / 2) + 1:] = 255
     templ[int(size / 2) + 1:, :int(size / 2) + 1] = 255
+
+    # now, remove the inner 4 pixels along the vertical axis
+    # and the inner 3 pixels along the horizontal axis
+    templ[:, int(size/2)-2:-(int(size/2)-1)] = 0
+    templ[int(size / 2) - 1:-(int(size / 2) - 1), :] = 0
+
     return templ
+
+
+def _inscribe(outer, inner):
+    padded = np.zeros(outer.shape)
+    pad = int((outer.shape[0] - inner.shape[0]) / 2)
+    padded[pad:-pad, pad:-pad] = inner
+    return outer - padded
+
+
+def padded_dot(size, disk_size):
+    """
+    Pad a disk-shaped marker with zeros. Works for, e.g., Zeiss RMK mid-side fiducials.
+
+    :param int size: the size of the padded template
+    :param int disk_size: the half-size of the disk to use
+    :return: **padded** (*array-like*) -- the disk with a padding of zeros around it
+    """
+    template = 255 * np.ones((size, size))
+    dot = 255 * disk(disk_size)
+
+    return 255 - _inscribe(template, dot)
+
+
+def inscribed_cross(size, cross_size, width=3, angle=45):
+    """
+    Create a cross-shaped template inscribed inside of a circle for matching fiducial marks.
+
+    :param int size: the half-size of the template. Final size will be (2 * size + 1, 2 * size + 1).
+    :param int cross_size: the size of the cross template to create
+    :param int width: the width of the cross at the center of the template (default: 3 pixels).
+    :param float angle: the angle to rotate the template by (default: None).
+    :return: **template** (*array-like*) -- the output template
+    """
+
+    circle = 255 * disk(size)
+    cross = cross_template(cross_size, width=width, angle=angle)
+    cross[cross > 0.8] = 255
+
+    pad = int((circle.shape[0] - cross.shape[0]) / 2)
+    padded = np.zeros(circle.shape)
+    padded[pad:-pad, pad:-pad] = cross
+
+    return circle - padded
 
 
 def templates_from_meas(fn_img, half_size=100):
@@ -151,31 +285,174 @@ def templates_from_meas(fn_img, half_size=100):
     return dict(zip(meas_im.name.values, templates))
 
 
-def match_fairchild_k17(fn_img, size=101, fn_cam=None):
+def match_fairchild(fn_img, size, model, data_strip, fn_cam=None, dot_size=4, **kwargs):
     """
-    Match the "fiducial" locations for a Fairchild K17B-style camera (4 "wing" style fiducial markers in the middle of
-    each side of the image).
+    Match the fiducial locations for a Fairchild-style camera (4 fiducial markers markers on the side).
 
-    :param str fn_img: the filename of the image to find fiducial markers in.
-    :param int size: the size of the template to use (default: 101 pixels)
-    :param str fn_cam: the filename of the MeasuresCamera.xml file for the image. defaults to
-        Ori-InterneScan/MeasuresCamera.xml
+    :param str fn_img: the filename of the image to match
+    :param int size: the size of the marker to match
+    :param str model: the type of fiducial marker: T11 style with either checkerboard-style markers (T11S) or dot style
+        markers (T11D), or K17 style ("wing" style markers). Must be one of [K17, T11S, T11D].
+    :param str data_strip: the location of the data strip in the image (left, right, top, bot). For T11 style cameras,
+        the data strip should be along the left-hand side; for K17 style cameras, the "data strip" (focal length
+        indicator) should be on the right-hand side. Be sure to check your images, as the scanned images may be rotated
+        relative to this expectation.
+    :param str fn_cam: the filename of the MeasuresCamera.xml file corresponding to the image
+    :param int dot_size: the size of the dot to use for T11D style fiducial markers (default: 4 -> 9x9)
+    :param kwargs: additional keyword arguments to pass to matching.find_fiducials()
+    :return:
     """
-    templ = _corner(size)
+    assert model.upper() in ['K17', 'T11S', 'T11D'], "model must be one of [K17, T11S, T11D]"
+    assert data_strip in ['left', 'right', 'top', 'bot'], "data_strip must be one of [left, right, top, bot]"
     fids = [f'P{n}' for n in range(1, 5)]
-    templates = [templ, np.fliplr(templ), templ.T, np.fliplr(templ).T]
+    if model.upper() == 'K17':
+        templ = _corner(size)
+        templates = [templ, np.fliplr(templ), templ.T, np.fliplr(templ).T]
 
-    templ_dict = dict(zip(fids, templates))
+        locs = ['right', 'top', 'left', 'bot']
+        angles = [None, np.deg2rad(-90), np.deg2rad(180), np.deg2rad(90)]
+        ldict = dict(zip(locs, angles))
+    else:
+        if model.upper() == 'T11S':
+            templ = _box(size)
+            templates = [templ, templ, np.fliplr(templ), np.fliplr(templ)]
+        elif model.upper() == 'T11D':
+            templ = padded_dot(size, dot_size)
+            templates = [templ, templ, np.fliplr(templ), np.fliplr(templ)]
 
-    find_fiducials(fn_img, templ_dict, fn_cam)
+        locs = ['left', 'top', 'right', 'bot']
+        angles = [None, np.deg2rad(-90), np.deg2rad(180), np.deg2rad(90)]
+        ldict = dict(zip(locs, angles))
+
+    tdict = dict(zip(fids, templates))
+    angle = ldict[data_strip]
+
+    return find_fiducials(fn_img, tdict, fn_cam=fn_cam, angle=angle, **kwargs)
 
 
-def cross_template(shape, width=3):
+def _zeiss_corner(size):
+    return 4 * [cross_template(size)]
+
+
+def _zeiss_midside(size, dot_size):
+    templ = padded_dot(size, dot_size)
+    return 4 * [templ]
+
+
+def match_zeiss_rmk(fn_img, size, dot_size, data_strip='left', fn_cam=None, corner_size=None, **kwargs):
+    """
+    Match the fiducial locations for a Zeiss RMK-style camera (4 dot-shaped markers on the side, possibly 4 cross-shaped
+    markers in the corners).
+
+    :param str fn_img: the filename of the image to match
+    :param int size: the size of the marker to match
+    :param int dot_size: the size of the dot marker to match
+    :param str data_strip: the location of the data strip in the image (left, right, top, bot). Most calibration reports
+        assume the data strip is along the left-hand side, but scanned images may be rotated relative to this.
+    :param str fn_cam: the filename of the MeasuresCamera.xml file corresponding to the image
+    :param int corner_size: the size of the corner markers (default: do not find corner markers)
+    :param kwargs: additional keyword arguments to pass to matching.find_fiducials()
+    :return:
+    """
+    assert data_strip in ['left', 'right', 'top', 'bot'], "data_strip must be one of [left, right, top, bot]"
+
+    if corner_size is not None:
+        fids = [f'P{n}' for n in range(1, 9)]
+        ctempl = _zeiss_corner(corner_size)
+        stempl = _zeiss_midside(size, dot_size)
+        templates = ctempl + stempl
+    else:
+        fids = [f'P{n}' for n in range(1, 5)]
+        templates = _zeiss_midside(size, dot_size)
+
+    if data_strip == 'left':
+        angle = None
+    elif data_strip == 'top':
+        angle = np.deg2rad(-90)
+    elif data_strip == 'right':
+        angle = np.deg2rad(180)
+    else:
+        angle = np.deg2rad(90)
+
+    tdict = dict(zip(fids, templates))
+    return find_fiducials(fn_img, tdict, fn_cam=fn_cam, angle=angle, **kwargs)
+
+
+def _wild_corner(size, model, circle_size, ring_width):
+
+    target_angle = 45
+    if model.upper() in ['RC5', 'RC8']:
+        if circle_size is not None:
+            template = inscribed_cross(circle_size, size, angle=45)
+        else:
+            template = cross_template(size, width=1, angle=45)
+            template[template > 0.8] = 255
+    else:
+        template = wagon_wheel(size, width=3, circle_size=circle_size, circle_width=ring_width, angle=target_angle)
+
+    return template
+
+
+def _wild_midside(size, model, circle_size, ring_width):
+
+    if model.upper() in ['RC5', 'RC8']:
+        target_angle = 45
+    else:
+        target_angle = None
+
+    template = wagon_wheel(size, width=3, circle_size=circle_size, circle_width=ring_width, angle=target_angle)
+
+    return template
+
+
+def match_wild_rc(fn_img, size, model, data_strip='left', fn_cam=None, circle_size=None, ring_width=7, **kwargs):
+    """
+    Match the fiducial locations for a Wild RC-style camera (4 cross/bulls-eye markers in the corner, possibly
+    4 bulls-eye markers along the sides).
+
+    :param str fn_img: the filename of the image to match
+    :param int size: the size of the marker to match
+    :param str model: whether the camera is an RC5/RC8 (4 corner markers) or RC10-style (corner + midside markers)
+    :param str data_strip: the location of the data strip in the image (left, right, top, bot). Most calibration reports
+        assume the data strip is along the left-hand side, but scanned images may be rotated relative to this.
+    :param str fn_cam: the filename of the MeasuresCamera.xml file corresponding to the
+        image (default: Ori-InterneScan/MeasuresCamera.xml)
+    :param int circle_size: the size of the circle in which to inscribe the cross-shaped marker (default: no circle)
+    :param int ring_width: the width of the ring if the marker(s) are a cross inscribed with a ring. Only used if
+    :param kwargs: additional keyword arguments to pass to matching.find_fiducials()
+    :return:
+    """
+    assert model.upper() in ['RC5', 'RC8', 'RC10'], "model must be one of [RC5, RC8, RC10]"
+    assert data_strip in ['left', 'right', 'top', 'bot'], "data_strip must be one of [left, right, top, bot]"
+    if model.upper() in ['RC5', 'RC8']:
+        fids = [f'P{n}' for n in range(1, 5)]
+        templates = 4 * [_wild_corner(size, model, circle_size, ring_width)]
+    else:
+        fids = [f'P{n}' for n in range(1, 9)]
+        stempl = _wild_midside(size, model)
+        ctempl = _wild_corner(size, model, circle_size, ring_width)
+        templates = 4 * [ctempl] + 4 * [stempl]
+
+    if data_strip == 'left':
+        angle = None
+    elif data_strip == 'top':
+        angle = np.deg2rad(-90)
+    elif data_strip == 'right':
+        angle = np.deg2rad(180)
+    else:
+        angle = np.deg2rad(90)
+
+    tdict = dict(zip(fids, templates))
+    return find_fiducials(fn_img, tdict, fn_cam=fn_cam, angle=angle, **kwargs)
+
+
+def cross_template(shape, width=3, angle=None):
     """
     Create a cross-shaped template for matching reseau or fiducial marks.
 
     :param int shape: the output shape of the template
     :param int width: the width of the cross at the center of the template (default: 3 pixels).
+    :param float angle: the angle to rotate the template by (default: None).
     :return: **cross** (*array-like*) -- the cross template
     """
     if isinstance(shape, int):
@@ -183,6 +460,18 @@ def cross_template(shape, width=3):
         cols = shape
     else:
         rows, cols = shape
+
+    if angle is not None:
+        rows *= (np.sin(np.deg2rad(angle)) + np.cos(np.deg2rad(angle)))
+        rows = int(np.round(rows))
+        if rows % 2 == 0:
+            rows += 1
+
+        cols *= (np.sin(np.deg2rad(angle)) + np.cos(np.deg2rad(angle)))
+        cols = int(np.round(cols))
+        if cols % 2 == 0:
+            cols += 1
+
     half_r = int((rows - 1) / 2)
     half_c = int((cols - 1) / 2)
     half_w = int((width - 1) / 2)
@@ -193,7 +482,15 @@ def cross_template(shape, width=3):
 
     cross[half_r - half_w:half_r + half_w + 1, :] = 1
     cross[:, half_c - half_w:half_c + half_w + 1] = 1
-    return cross
+
+    if angle is None:
+        return cross
+    else:
+        cross = np.round(ndimage.rotate(cross, angle, reshape=False))
+        rs, = np.where(cross.sum(axis=1) > 0)
+        cs, = np.where(cross.sum(axis=0) > 0)
+
+        return cross[rs[0]+1:rs[-1], cs[0]+1:cs[-1]]
 
 
 def find_crosses(img, cross):
@@ -530,25 +827,47 @@ def find_reseau_grid(fn_img, csize=361, return_val=False):
         return grid_df
 
 
-def wagon_wheel(size, width=3, mult=255):
+def wagon_wheel(size, width=3, mult=255, circle_size=None, circle_width=None, angle=None):
     """
     Creates a template in the shape of a "wagon wheel" (a cross inscribed in a ring).
 
     :param int size: the width (and height) of the template, in pixels
     :param int width: the width/thickness of the cross, in pixels
     :param mult: a multiplier to use for the template [default: 255]
+    :param int circle_size: the size of the circle to inscribe the cross into (default: same as cross size)
+    :param int circle_width: the width of the ring to inscribe the cross into (default: same as cross width)
+    :param float angle: the angle by which to rotate the cross (default: do not rotate)
 
     :return: **template** (*array-like*) the wagon wheel template
     """
-    cross = cross_template(size, width)
-    cross[cross > 1] = 0
+    cross = cross_template(size, width, angle=angle)
+    cross[cross > 0.8] = 1
 
-    templ = disk(int(size / 2))
-    padded = np.zeros(templ.shape, dtype=templ.dtype)
-    padded[width:-width, width:-width] = disk(int((size - 2 * width) / 2))
+    if circle_size is None:
+        templ = disk(int(size / 2))
+        padded = np.zeros(templ.shape, dtype=templ.dtype)
+        padded[width:-width, width:-width] = disk(int((size - 2 * width) / 2))
+    else:
+        templ = disk(int(circle_size / 2))
+        padded = np.zeros(templ.shape, dtype=templ.dtype)
+        if circle_width is None:
+            padded[width:-width, width:-width] = disk(int((circle_size - 2 * width) / 2))
+        else:
+            padded[circle_width:-circle_width,
+                   circle_width:-circle_width] = disk(int((circle_size - 2 * circle_width) / 2))
 
     templ -= padded
-    templ += cross.astype(templ.dtype)
+
+    if circle_size is None:
+        templ += cross.astype(templ.dtype)
+    else:
+        padded = np.zeros(cross.shape)
+        pad = int((cross.shape[0] - circle_size) / 2)
+        padded[pad:-pad, pad:-pad] = templ
+        padded += cross
+
+        templ = padded
+
     templ[templ > 1] = 1
 
     return mult * templ
@@ -928,6 +1247,8 @@ def get_matches(img1, img2, mask1=None, mask2=None, dense=False, npix=100, nbloc
     :param array-like mask1: a mask to use for the first image. (default: no mask)
     :param array-like mask2: a mask to use for the second image. (default: no mask)
     :param bool dense: compute matches over sub-blocks (True) or the entire image (False). (default: False)
+    :param int npix: the block size (in pixels) to divide the image into, if doing dense matching (default: 100).
+    :param int nblocks: the number of blocks to divide the image into. If set, overrides value given by npix.
     :return:
         - **keypoints** (*tuple*) -- the keypoint locations for the first and second image.
         - **descriptors** (*tuple*) -- the descriptors for the first and second image.
