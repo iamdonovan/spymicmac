@@ -12,6 +12,8 @@ look like, and the approximate coordinates of the fiducial marks that you can us
     The information provided here is for those cases where a calibration report does not exist, or has been lost to time.
 
 
+.. _fairchild k17:
+
 Fairchild F224, K17B (Metrogon Lens)
 ------------------------------------
 
@@ -39,9 +41,10 @@ Fairchild F224, K17B (Metrogon Lens)
     These are the approximate coordinates for the corners of the fiducial marker, as these tend to be more stable
     than the tips of the "wings"
 
-
 Fairchild KC-1, KC-1B, T-11 (Metrogon Lens)
 -------------------------------------------
+
+.. _fairchild t11d:
 
 .. image:: ../../../img/fairchild_kc1b.png
     :width: 400
@@ -66,12 +69,15 @@ Fairchild KC-1, KC-1B, T-11 (Metrogon Lens)
 
     These cameras may have different fiducial patterns - for example, they may have a checked pattern like this:
 
+    .. _fairchild t11s:
+
     .. image:: ../../../img/fairchild_t11.png
         :width: 400
         :align: center
         :alt: a diagram of a Fairchild T-11 with fiducial markers labeled
 
 
+.. _wild rc5:
 
 Wild RC5, RC8 (Aviogon Lens)
 -----------------------------
@@ -95,6 +101,7 @@ Wild RC5, RC8 (Aviogon Lens)
 | P4 | 0   | 0   |
 +----+-----+-----+
 
+.. _wild rc10:
 
 Wild RC10 (Aviogon Lens)
 -------------------------
@@ -126,6 +133,8 @@ Wild RC10 (Aviogon Lens)
 | P8 | 110 | 220 |
 +----+-----+-----+
 
+.. _zeiss midside:
+
 Zeiss RMK 15/23 (Pleogon Lens)
 -------------------------------
 
@@ -152,6 +161,7 @@ Zeiss RMK 15/23 (Pleogon Lens)
 
     The coordinates above correspond to the center of the small dot near the tip of the fiducial marker.
 
+.. _zeiss corner:
 
 Zeiss RMK A 15/23 (Pleogon Lens)
 ---------------------------------
