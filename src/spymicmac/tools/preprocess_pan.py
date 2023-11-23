@@ -43,6 +43,9 @@ def _argparser():
     parser.add_argument('-s', '--factor', action='store', type=int, default=None,
                         help='The number by which to divide the image width and height to scale the image '
                              '(default: do not scale)')
+    parser.add_argument('-o', '--overlap', action='store', type=int, default=None,
+                        help='The amount of overlap between image parts to use to search for matches. Default depends'
+                             'on flavor: KH4 -> 8000, KH9 -> 1000')
     parser.add_argument('-b', '--blend', action='store_true',
                         help='Blend across image halves to prevent a sharp line at edge.')
     parser.add_argument('--clip_limit', action='store', type=float, default=0.005,
@@ -95,7 +98,12 @@ def main():
             if len(parts_list) < 2:
                 continue
 
-            join_hexagon(fn_img, overlap=8000, block_size=2000, blend=args.blend)
+            if args.flavor == 'KH4' and args.overlap is None:
+                join_hexagon(fn_img, overlap=8000, block_size=2000, blend=args.blend)
+            elif args.flavor == 'KH9' and args.overlap is None:
+                join_hexagon(fn_img, overlap=1000, block_size=600, blend=args.blend)
+            else:
+                join_hexagon(fn_img, overlap=args.overlap, blend=args.blend)
             for fn in parts_list:
                 shutil.move(f'{fn_img}_{fn}.tif', 'parts')
 
