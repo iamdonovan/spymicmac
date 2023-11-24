@@ -5,7 +5,7 @@ import os
 import subprocess
 import numpy as np
 from osgeo import gdal
-from shapely.ops import split
+from shapely.ops import split, orient
 from shapely.geometry import LineString, Point, Polygon
 from spymicmac import data
 
@@ -122,12 +122,13 @@ def cam_from_footprint(fn_img, flavor, scan_res, fn_dem, north_up=True, footprin
 def _stanrogers(fprint, north_up):
 
     # oriented_envelope (mrr) goes lr, ur, ul, ll
-    outer = fprint.buffer(0.05).minimum_rotated_rectangle
-    inner = fprint.buffer(0.01).minimum_rotated_rectangle
+    # use orient to ensure that it is properly oriented - for some reason this isn't always the case with mrr?
+    outer = orient(fprint.buffer(0.05).minimum_rotated_rectangle)
+    inner = orient(fprint.buffer(0.01).minimum_rotated_rectangle)
     x, y = outer.exterior.coords.xy
     coords = np.array(list(zip(x, y)))
 
-    # get the right, top, left, bottom sides of the envelope
+    # get the right, top, left, bottomrig sides of the envelope
     right = LineString(coords[0:2])
     top = LineString(coords[1:3])
     left = LineString(coords[2:4])
