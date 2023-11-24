@@ -48,6 +48,8 @@ def _argparser():
                              'on flavor: KH4 -> 8000, KH9 -> 1000')
     parser.add_argument('-b', '--blend', action='store_true',
                         help='Blend across image halves to prevent a sharp line at edge.')
+    parser.add_argument('-r', '--reversed', action='store_true',
+                        help='Order of image parts is reversed (a is the right side of the image). (default: False)')
     parser.add_argument('--clip_limit', action='store', type=float, default=0.005,
                         help='Clipping limit, for contrast-limited adaptive histogram equalization. (default: 0.005)')
     return parser
@@ -99,9 +101,9 @@ def main():
                 continue
 
             if args.flavor == 'KH4' and args.overlap is None:
-                join_hexagon(fn_img, overlap=8000, block_size=2000, blend=args.blend)
+                join_hexagon(fn_img, overlap=8000, block_size=2000, blend=args.blend, is_reversed=args.reversed)
             elif args.flavor == 'KH9' and args.overlap is None:
-                join_hexagon(fn_img, overlap=1000, block_size=600, blend=args.blend)
+                join_hexagon(fn_img, overlap=1000, block_size=600, blend=args.blend, is_reversed=args.reversed)
             else:
                 join_hexagon(fn_img, overlap=args.overlap, blend=args.blend)
             for fn in parts_list:
