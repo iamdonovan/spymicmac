@@ -102,7 +102,7 @@ def cam_from_footprint(fn_img, flavor, scan_res, fn_dem, north_up=True, footprin
         footprints = data.get_usgs_footprints([clean_name], dataset=usgs_datasets[flavor])
         fprint = footprints.loc[0, 'geometry']
     else:
-        fprint = footprints.loc[footprints['ID'] == clean_name, 'geometry']
+        fprint = footprints.loc[footprints['ID'] == clean_name, 'geometry'].values[0]
 
     coords = _stanrogers(fprint, north_up)
 
