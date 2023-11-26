@@ -25,7 +25,32 @@ def _isaft(fn_img):
     return os.path.splitext(fn_img)[0][-4] == 'A'
 
 
-def optical_bar_cam(fn_img, flavor, out_name, scan_res=7e-6, fn_dem=None):
+def _parse_cam(fn_cam):
+    with open(fn_cam, 'r') as f:
+        cam_lines = [l.strip() for l in f.readlines()]
+
+    cam = dict()
+    cam['version'] = cam_lines[0]
+    cam['type'] = cam_lines[1]
+    cam['image_size'] = tuple([int(p) for p in cam_lines[2].split(' = ')[-1].split()])
+
+    for ll in cam_lines[2:]:
+        name, val = ll.split(' = ')
+        if len(val.split()) < 2:
+            try:
+                cam[name] = float(val)
+            except ValueError as e:
+                cam[name] = val
+        else:
+            try:
+                cam[name] = [float(p) for p in val.split()]
+            except ValueError as e:
+                cam[name] = val
+
+    return cam
+
+
+def optical_bar_cam(fn_img, flavor, out_name, scan_res=7e-6):
     """
     Generate a sample ASP camera file for a KH-4 Optical Bar camera.
 
