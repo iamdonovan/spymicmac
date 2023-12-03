@@ -15,7 +15,7 @@ import pyproj
 from osgeo import gdal
 from shapely.geometry.polygon import Polygon
 from usgs import api, USGSAuthExpiredError
-from pybob.GeoImg import GeoImg
+import geoutils as gu
 
 
 def _check_data_dir():
@@ -231,11 +231,11 @@ def to_wgs84_ellipsoid(fn_dem):
         this_url = 'https://download.osgeo.org/proj/vdatum/egm08_25/egm08_25.gtx'
         urllib.request.urlretrieve(this_url, Path(proj_data, 'egm08_25.gtx'))
 
-    dem = GeoImg(fn_dem)
-    geoid = GeoImg(str(Path(proj_data, 'egm08_25.gtx'))).reproject(dem)
+    dem = gu.Raster(fn_dem)
+    geoid = gu.Raster(str(Path(proj_data, 'egm08_25.gtx'))).reproject(dem)
 
-    ell = dem.copy(new_raster=(dem.img + geoid.img))
-    ell.write(os.path.splitext(fn_dem)[0] + '_ell.tif')
+    ell = dem + geoid
+    ell.save(os.path.splitext(fn_dem)[0] + '_ell.tif')
 
 
 def _pgc_url(flavor):
