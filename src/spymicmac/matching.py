@@ -1128,7 +1128,7 @@ def find_grid_matches(tfm_img, refgeo, mask, initM=None, spacing=200, srcwin=60,
     Find matches between two images on a grid using normalized cross-correlation template matching.
 
     :param array-like tfm_img: the image to use for matching.
-    :param GeoImg refgeo: the reference image to use for matching.
+    :param Raster refgeo: the reference image to use for matching.
     :param array-like mask: a mask indicating areas that should be used for matching.
     :param initM: the model used for transforming the initial, non-georeferenced image.
     :param int spacing: the grid spacing, in pixels (default: 200 pixels)
@@ -1140,15 +1140,15 @@ def find_grid_matches(tfm_img, refgeo, mask, initM=None, spacing=200, srcwin=60,
     z_corrs = []
     peak_corrs = []
 
-    jj = np.arange(srcwin, spacing * np.ceil((refgeo.img.shape[1]-srcwin) / spacing) + 1, spacing).astype(int)
-    ii = np.arange(srcwin, spacing * np.ceil((refgeo.img.shape[0]-srcwin) / spacing) + 1, spacing).astype(int)
+    jj = np.arange(srcwin, spacing * np.ceil((refgeo.shape[1]-srcwin) / spacing) + 1, spacing).astype(int)
+    ii = np.arange(srcwin, spacing * np.ceil((refgeo.shape[0]-srcwin) / spacing) + 1, spacing).astype(int)
 
     search_pts = []
 
     for _i in ii:
         for _j in jj:
             search_pts.append((_j, _i))
-            match, z_corr, peak_corr = do_match(tfm_img, refgeo.img, mask, (_i, _j), srcwin, dstwin)
+            match, z_corr, peak_corr = do_match(tfm_img, refgeo.data, mask, (_i, _j), srcwin, dstwin)
             match_pts.append(match)
             z_corrs.append(z_corr)
             peak_corrs.append(peak_corr)
