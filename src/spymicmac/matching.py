@@ -20,7 +20,6 @@ import numpy as np
 from shapely.ops import nearest_points
 from shapely.geometry import LineString, MultiPoint, Point
 import geopandas as gpd
-from pybob.image_tools import nanmedian_filter
 from pybob.ddem_tools import nmad
 from spymicmac import image, micmac, resample
 
@@ -638,7 +637,7 @@ def _fix_cross(subimg):
         cross = cross[:, :subimg.shape[1]]
 
     subimg[cross != 0] = np.nan
-    fixed = nanmedian_filter(subimg, footprint=disk(7))
+    fixed = image.nanmedian_filter(subimg, footprint=disk(7))
     subimg[np.isnan(subimg)] = fixed[np.isnan(subimg)]
     return subimg.astype(np.uint8)
 
@@ -664,7 +663,7 @@ def remove_crosses(fn_img, nproc=1):
 
     subim = subim.astype(np.float32)
     subim[cross != 0] = np.nan
-    fixed = nanmedian_filter(subim, footprint=disk(7))
+    fixed = image.nanmedian_filter(subim, footprint=disk(7))
     subim[np.isnan(subim)] = fixed[np.isnan(subim)]
     img[int(pt[0]) - row_[0]:int(pt[0]) + row_[1] + 1, int(pt[1]) - col_[0]:int(pt[1]) + col_[1] + 1] = subim.astype(
         np.uint8)
@@ -771,8 +770,8 @@ def find_reseau_grid(fn_img, csize=361, return_val=False):
     ux = x_res.values.reshape(23, 47)
     uy = y_res.values.reshape(23, 47)
 
-    xdiff = ux - nanmedian_filter(ux, footprint=disk(3))
-    ydiff = uy - nanmedian_filter(uy, footprint=disk(3))
+    xdiff = ux - image.nanmedian_filter(ux, footprint=disk(3))
+    ydiff = uy - image.nanmedian_filter(uy, footprint=disk(3))
 
     xout = _outlier_filter(xdiff, n=5)
     yout = _outlier_filter(ydiff, n=5)
@@ -782,8 +781,8 @@ def find_reseau_grid(fn_img, csize=361, return_val=False):
     ux[outliers.reshape(23, 47)] = np.nan
     uy[outliers.reshape(23, 47)] = np.nan
 
-    ux[outliers.reshape(23, 47)] = nanmedian_filter(ux, footprint=disk(1))[outliers.reshape(23, 47)]
-    uy[outliers.reshape(23, 47)] = nanmedian_filter(uy, footprint=disk(1))[outliers.reshape(23, 47)]
+    ux[outliers.reshape(23, 47)] = image.nanmedian_filter(ux, footprint=disk(1))[outliers.reshape(23, 47)]
+    uy[outliers.reshape(23, 47)] = image.nanmedian_filter(uy, footprint=disk(1))[outliers.reshape(23, 47)]
 
     grid_df.loc[outliers, 'match_j'] = dst[outliers, 0] + ux.flatten()[outliers]
     grid_df.loc[outliers, 'match_i'] = dst[outliers, 1] + uy.flatten()[outliers]
