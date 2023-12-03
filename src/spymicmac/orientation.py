@@ -17,7 +17,6 @@ from shapely.geometry.point import Point
 from shapely.geometry import LineString, MultiPoint
 from skimage.transform import AffineTransform
 from skimage.measure import ransac
-from pybob.ddem_tools import nmad
 from . import register, micmac
 
 
@@ -377,7 +376,7 @@ def fix_orientation(cameras, ori_df, ori, nsig=4):
 
     res = model.residuals(join[['xabs', 'yabs']].values, join[['xrel', 'yrel']].values)
 
-    outliers = res - np.nanmedian(res) > nsig * nmad(res)
+    outliers = res - np.nanmedian(res) > nsig * register.nmad(res)
     if np.count_nonzero(outliers) > 0:
         interp = LinearNDInterpolator(join.loc[~outliers, ['xrel', 'yrel']].values, join.loc[~outliers, 'zrel'])
         print('found {} outliers using nsig={}'.format(np.count_nonzero(outliers), nsig))

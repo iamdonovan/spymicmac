@@ -18,10 +18,22 @@ from shapely.geometry.point import Point
 from skimage.io import imread
 from skimage.measure import ransac
 from skimage.transform import AffineTransform, warp
-from pybob.ddem_tools import nmad
 from pybob.image_tools import create_mask_from_shapefile
 from pybob.GeoImg import GeoImg
 from spymicmac import data, image, matching, micmac, orientation
+
+
+def nmad(values, nfact=1.4826):
+    """
+    Calculate the normalized median absolute deviation (NMAD) of an array.
+
+    :param array-like values: input data
+    :param float nfact: normalization factor for the data; default is 1.4826
+
+    :returns nmad: (normalized) median absolute deviation of data.
+    """
+    m = np.nanmedian(values)
+    return nfact * np.nanmedian(np.abs(data - m))
 
 
 def _sliding_window_filter(img_shape, pts_df, winsize, stepsize=None, mindist=2000, how='residual', is_ascending=True):

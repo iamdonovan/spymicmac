@@ -20,8 +20,7 @@ import numpy as np
 from shapely.ops import nearest_points
 from shapely.geometry import LineString, MultiPoint, Point
 import geopandas as gpd
-from pybob.ddem_tools import nmad
-from spymicmac import image, micmac, resample
+from spymicmac import image, micmac, resample, register
 
 
 ######################################################################################################################
@@ -954,7 +953,7 @@ def _refine_rail(coords):
         fit = np.polyval(p, coords[:, 1])
 
         diff = coords[:, 0] - fit
-        valid = np.abs(diff - np.median(diff)) < 4 * nmad(diff)
+        valid = np.abs(diff - np.median(diff)) < 4 * register.nmad(diff)
 
         nout = prev_valid - np.count_nonzero(valid)
         prev_valid = np.count_nonzero(valid)

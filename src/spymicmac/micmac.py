@@ -17,7 +17,6 @@ from glob import glob
 from shapely.strtree import STRtree
 from skimage.io import imread, imsave
 from pybob.GeoImg import GeoImg
-from pybob.ddem_tools import nmad
 from pybob.image_tools import create_mask_from_shapefile
 from spymicmac import data, register
 
@@ -1122,7 +1121,7 @@ def remove_worst_mesures(fn_meas, ori):
         if appui.find('NameImMax') is not None:
             resids_df.loc[ii, 'immax'] = appui.find('NameImMax').text
 
-    bad_meas = np.abs(resids_df.errmax - resids_df.errmax.median()) > nmad(resids_df.errmax)
+    bad_meas = np.abs(resids_df.errmax - resids_df.errmax.median()) > register.nmad(resids_df.errmax)
     bad_resids = resids_df[bad_meas].copy()
 
     for im in auto_root.findall('MesureAppuiFlottant1Im'):
@@ -1173,10 +1172,10 @@ def iterate_campari(gcps, out_dir, match_pattern, subscript, dx, ortho_res, fn_g
 
     gcps['camp_xy'] = np.sqrt(gcps.camp_xres ** 2 + gcps.camp_yres ** 2)
 
-    while any([np.any(np.abs(gcps.camp_res - gcps.camp_res.median()) > 3 * nmad(gcps.camp_res)),
-               np.any(np.abs(gcps.camp_dist - gcps.camp_dist.median()) > 3 * nmad(gcps.camp_dist)),
+    while any([np.any(np.abs(gcps.camp_res - gcps.camp_res.median()) > 3 * register.nmad(gcps.camp_res)),
+               np.any(np.abs(gcps.camp_dist - gcps.camp_dist.median()) > 3 * register.nmad(gcps.camp_dist)),
                gcps.camp_res.max() > 2]) and niter <= max_iter:
-        valid_inds = np.logical_and.reduce((np.abs(gcps.camp_dist - gcps.camp_dist.median()) < 3 * nmad(gcps.camp_dist),
+        valid_inds = np.logical_and.reduce((np.abs(gcps.camp_dist - gcps.camp_dist.median()) < 3 * register.nmad(gcps.camp_dist),
                                             gcps.camp_res < gcps.camp_res.max()))
         if np.count_nonzero(valid_inds) < 10:
             break
