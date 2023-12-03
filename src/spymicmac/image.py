@@ -9,18 +9,45 @@ from skimage.morphology import disk
 from skimage.feature import peak_local_max
 from skimage.transform import warp
 from scipy import ndimage
+from scipy.ndimage.filters import generic_filter
 import numpy as np
 from numba import jit
-from pybob.image_tools import nanmedian_filter
 from spymicmac import matching, resample
 
 
 ######################################################################################################################
 # image filtering tools
 ######################################################################################################################
-@jit
+@jit(nopython=True)
 def nanstd(a):
     return np.nanstd(a)
+
+
+def nanmedian_filter(img, **kwargs):
+    """
+    Calculate a multi-dimensional median filter that respects NaN values
+    and masked arrays.
+
+    :param img: image on which to calculate the median filter
+    :param kwargs: additional arguments to ndimage.generic_filter
+        Note that either size or footprint must be defined. size gives the shape
+        that is taken from the input array, at every element position, to define
+        the input to the filter function. footprint is a boolean array that
+        specifies (implicitly) a shape, but also which of the elements within
+        this shape will get passed to the filter function. Thus size=(n,m) is
+        equivalent to footprint=np.ones((n,m)). We adjust size to the number
+        of dimensions of the input array, so that, if the input array is
+        shape (10,10,10), and size is 2, then the actual size used is (2,2,2).
+    :type img: array-like
+
+    :returns filtered: Filtered array of same shape as input.
+    """
+    # set up the wrapper function to call generic filter
+    @jit(nopython=True)
+    def nanmed(a):
+        return np.nanmedian(a)
+
+    return generic_filter(img, nanmed, **kwargs)
 
 
 def highpass_filter(img):
