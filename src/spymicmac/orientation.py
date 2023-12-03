@@ -395,7 +395,7 @@ def transform_centers(img_gt, ref, imlist, footprints, ori, imgeom=True):
     footprints, to estimate a transformation between the relative coordinate system and the absolute coordinate system.
 
     :param array-like img_gt: the image GeoTransform (as read from a TFW file)
-    :param GeoImg ref: the reference image to use to determine the output image shape
+    :param Raster ref: the reference image to use to determine the output image shape
     :param list imlist: a list of the images that were used for the relative orthophoto
     :param GeoDataFrame footprints: the (approximate) image footprints or camera centers. If geom_type is Polygon, the
         centroid will be used for the absolute camera positions.
@@ -409,7 +409,7 @@ def transform_centers(img_gt, ref, imlist, footprints, ori, imgeom=True):
 
     rel_ori = load_all_orientation(ori, imlist=imlist)
 
-    footprints = footprints.to_crs(epsg=ref.epsg).copy()
+    footprints = footprints.to_crs(crs=ref.crs).copy()
     if all(footprints.geom_type == 'Polygon'):
         footprints['x'] = footprints.geometry.centroid.x
         footprints['y'] = footprints.geometry.centroid.y
@@ -460,7 +460,7 @@ def transform_points(ref, ref_pts, rel_gt, rel_pts):
     """
     Given x,y points and two "geo"-referenced images, finds an affine transformation between the two images.
 
-    :param GeoImg ref: the reference image
+    :param Raster ref: the reference image
     :param np.array ref_pts: an Mx2 array of the x,y points in the reference image
     :param array-like rel_gt: the "geo" transform for the second image, as read from a .tfw file.
     :param np.array rel_pts: an Mx2 array of the x,y points in the second image.
