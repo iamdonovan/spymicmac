@@ -29,7 +29,7 @@ def nmad(values, nfact=1.4826):
     :returns nmad: (normalized) median absolute deviation of data.
     """
     m = np.nanmedian(values)
-    return nfact * np.nanmedian(np.abs(data - m))
+    return nfact * np.nanmedian(np.abs(values - m))
 
 
 def _sliding_window_filter(img_shape, pts_df, winsize, stepsize=None, mindist=2000, how='residual', is_ascending=True):
@@ -217,11 +217,11 @@ def _get_footprint_mask(shpfile, rast, filelist, fprint_out=False):
     else:
         fp = shpfile[shpfile.ID.isin(imlist)].copy()
 
-    fprint = _get_footprint_overlap(fp.to_crs(rast.proj4))
+    fprint = _get_footprint_overlap(fp.to_crs(rast.crs))
 
     tmp_gdf = gpd.GeoDataFrame(columns=['geometry'])
     tmp_gdf.loc[0, 'geometry'] = fprint
-    tmp_gdf.crs = rast.crs.to_proj4
+    tmp_gdf.crs = rast.crs
     tmp_gdf.to_file('tmp_fprint.shp')
 
     maskout = gu.Vector('tmp_fprint.shp').create_mask(rast)
@@ -234,7 +234,6 @@ def _get_footprint_mask(shpfile, rast, filelist, fprint_out=False):
         return maskout
 
 
-# copied from pymmaster.mmaster_tools
 def _get_mask(footprints, img, imlist, landmask=None, glacmask=None):
     """
     Create a mask for an image from different sources.
@@ -251,23 +250,24 @@ def _get_mask(footprints, img, imlist, landmask=None, glacmask=None):
         - **img** (*Raster*) -- the input Raster, cropped to a 10 pixel buffer around the image footprints
     """
     fmask, fprint = _get_footprint_mask(footprints, img, imlist, fprint_out=True)
-    fmask_geo = img.copy(new_array=fmask)
 
-    img.crop(fprint.buffer(img.res[0] * 10), mode='match_pixel', inplace=True)
+    img.crop(fprint.buffer(img.res[0] * 10).bounds, mode='match_pixel', inplace=True)
 
-    fmask_geo.crop(fprint.buffer(img.res[0]*10), mode='match_pixel', inplace=True)
+    fmask.crop(fprint.buffer(img.res[0]*10).bounds, mode='match_pixel', inplace=True)
 
-    mask = image.make_binary_mask(img.img, erode=3, mask_value=np.nan)
+    mask = img.copy(new_array=np.zeros(img.shape))
+    mask[~img.data.mask] = 255
+
     if landmask is not None:
         lmask = gu.Vector(landmask).create_mask(img)
-        mask[~lmask] = False
+        mask[~lmask] = 0
     if glacmask is not None:
         gmask = gu.Vector(glacmask).create_mask(img)
-        mask[gmask] = False
+        mask[gmask] = 0
 
-    mask[~fmask_geo.data] = 0
+    mask[~fmask] = 0
 
-    return mask, fmask_geo.data, img
+    return mask, fmask, img
 
 
 def _search_size(imshape):
@@ -378,7 +378,7 @@ def register_relative(dirmec, fn_dem, fn_ref=None, fn_ortho=None, glacmask=None,
 
     rough_spacing = max(1000, np.round(max(ref_img.shape) / 20 / 1000) * 1000)
 
-    rough_gcps = matching.find_grid_matches(rough_tfm, ref_img, mask_full, Minit,
+    rough_gcps = matching.find_grid_matches(rough_tfm, ref_img, mask_full.data.data, Minit,
                                             spacing=int(rough_spacing), dstwin=int(rough_spacing))
 
     try:
@@ -401,13 +401,13 @@ def register_relative(dirmec, fn_dem, fn_ref=None, fn_ortho=None, glacmask=None,
     plt.close(fig)
 
     # for each of these pairs (src, dst), find the precise subpixel match (or not...)
-    gcps = matching.find_grid_matches(rough_tfm, ref_img, mask_full, model,
+    gcps = matching.find_grid_matches(rough_tfm, ref_img, mask_full.data.data, model,
                                       spacing=density, dstwin=_search_size(rough_tfm.shape))
 
-    x, y = ref_img.ij2xy(gcps[['search_j', 'search_i']].values)
+    x, y = ref_img.ij2xy(gcps['search_i'], gcps['search_j'])
     gcps['geometry'] = gpd.points_from_xy(x, y, crs=ref_img.crs)
 
-    gcps = gcps.loc[mask_full[gcps.search_i, gcps.search_j] == 255]
+    gcps = gcps.loc[mask_full.data.data[gcps.search_i, gcps.search_j] == 255]
 
     gcps['rel_x'] = reg_gt[4] + gcps['orig_j'].values * reg_gt[0]  # need the original image coordinates
     gcps['rel_y'] = reg_gt[5] + gcps['orig_i'].values * reg_gt[3]
@@ -425,11 +425,12 @@ def register_relative(dirmec, fn_dem, fn_ref=None, fn_ortho=None, glacmask=None,
         dem = ref_img
 
     # gcps.crs = {'init': 'epsg:{}'.format(ref_img.epsg)}
-    gcps['elevation'] = dem.interp_points(x, y)
+    gcps['elevation'] = dem.interp_points(zip(gcps.geometry.x, gcps.geometry.y))
     gcps['el_rel'] = rel_dem.interp_points(gcps[['rel_x', 'rel_y']].values)
 
     # drop any gcps where we don't have a DEM value or a valid match
-    gcps.loc[np.abs(gcps.elevation - dem.NDV) < 1, 'elevation'] = np.nan
+    if dem.nodata is not None:
+        gcps.loc[np.abs(gcps.elevation - dem.nodata) < 1, 'elevation'] = np.nan
     gcps.dropna(inplace=True)
     print('{} matches with valid elevations'.format(gcps.shape[0]))
 
@@ -490,7 +491,7 @@ def register_relative(dirmec, fn_dem, fn_ref=None, fn_ortho=None, glacmask=None,
     micmac.save_gcps(gcps, out_dir, utm_str, subscript)
 
     # now, iterate campari to refine the orientation
-    gcps = micmac.iterate_campari(gcps, out_dir, match_pattern, subscript, ref_img.dx, ortho_res,
+    gcps = micmac.iterate_campari(gcps, out_dir, match_pattern, subscript, ref_img.res[0], ortho_res,
                                   rel_ori=ori, allfree=allfree, max_iter=max_iter)
 
     # final write of gcps to disk.
