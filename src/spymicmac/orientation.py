@@ -468,7 +468,8 @@ def transform_points(ref, ref_pts, rel_gt, rel_pts):
         - **model** (*AffineTransform*) -- the estimated Affine Transformation between relative and absolute space
         - **inliers** (*array-like*) -- a list of the inliers returned by skimage.measure.ransac
     """
-    ref_ij = np.array([ref.xy2ij(pt) for pt in ref_pts])
+    ref_ij = np.array(ref.xy2ij(ref_pts[:, 0], ref_pts[:, 1])).T
+
     rel_ij = np.array([((pt[0] - rel_gt[4]) / rel_gt[0],
                         (pt[1] - rel_gt[5]) / rel_gt[3]) for pt in rel_pts])
 
