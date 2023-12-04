@@ -7,10 +7,7 @@ import subprocess
 import shutil
 import numpy as np
 import matplotlib.pyplot as plt
-import pandas as pd
 import geopandas as gpd
-import lxml.etree as etree
-import lxml.builder as builder
 import geoutils as gu
 from glob import glob
 from rtree import index
