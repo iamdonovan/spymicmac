@@ -153,8 +153,8 @@ def download_cop30_vrt(imlist=None, footprints=None, imgsource='DECLASSII', glob
     downloaded to cop30_dem/ within the current directory.
 
     :param list imlist: a list of image filenames. If None, uses globstr to search for images in the current directory.
-    :param GeoDataFrame footprints: a GeoDataFrame of image footprints. If None, uses spymicmac.usgs.get_usgs_footprints
-        to download footprints based on imlist.
+    :param GeoDataFrame|Polygon footprints: a GeoDataFrame of image footprints, or a Polygon of an image footprint in
+        WGS84 lat/lon. If None, uses spymicmac.usgs.get_usgs_footprints to download footprints based on imlist.
     :param str imgsource: the EE Dataset name for the images (default: DECLASSII)
     :param str globstr: the search string to use to find images in the current directory.
     """
@@ -163,9 +163,14 @@ def download_cop30_vrt(imlist=None, footprints=None, imgsource='DECLASSII', glob
 
     if footprints is None:
         footprints = get_usgs_footprints(clean_imlist, dataset=imgsource)
+        fprint = footprints.unary_union
+    elif isinstance(footprints, Polygon):
+        fprint = footprints
+    elif isinstance(footprints, gpd.GeoDataFrame):
+        fprint = footprints.to_crs(crs='epsg:4326').unary_union
 
     # now, get the envelope
-    xmin, ymin, xmax, ymax = footprints.unary_union.bounds
+    xmin, ymin, xmax, ymax = fprint.bounds
 
     lat_min = int(np.floor(ymin))
     lat_max = int(np.ceil(ymax))
