@@ -4,6 +4,7 @@ spymicmac.asp is a collection of tools for interfacing with Ames Stereo Pipeline
 import os
 import subprocess
 import numpy as np
+import pyproj
 from osgeo import gdal
 from shapely.ops import split, orient
 from shapely.geometry import LineString, Point, Polygon
@@ -50,7 +51,20 @@ def _parse_cam(fn_cam):
     return cam
 
 
-def optical_bar_cam(fn_img, flavor, out_name, scan_res=7e-6):
+def _init_center(fprint):
+    cx, cy = fprint.centroid.x, fprint.centroid.y
+    alt = 180000  # very rough estimated altitude of 180 km
+
+    geocent = pyproj.Proj(proj='geocent', ellps='WGS84', datum='WGS84')
+    geodet = pyproj.Proj(proj='latlong', ellps='WGS84', datum='WGS84')
+
+    transformer = pyproj.Transformer.from_proj(geodet, geocent)
+    x, y, z = transformer.transform(cx, cy, alt)
+
+    return x, y, z
+
+
+def optical_bar_cam(fn_img, flavor, out_name, fprint=None, scan_res=7e-6):
     """
     Generate a sample ASP camera file for a KH-4 Optical Bar camera.
 
@@ -58,6 +72,7 @@ def optical_bar_cam(fn_img, flavor, out_name, scan_res=7e-6):
         the aft or forward camera.
     :param str flavor: what type of camera the image came from - currently either KH4 or KH9
     :param str out_name: the filename to write the camera file to.
+    :param Polygon fprint: an optional image, footprint used to estimate the initial camera position
     :param float scan_res: the image scanning resolution, in m per pixel (e.g., 7 microns -> 7.0e-6)
     """
     assert flavor in sample_params.keys(), "flavor must be one of {}".format(list(sample_params.keys()))
@@ -79,14 +94,18 @@ def optical_bar_cam(fn_img, flavor, out_name, scan_res=7e-6):
         print(f'pitch = {scan_res}', file=f)
         print(f'f = {params["f"]}', file=f)
         print(f'scan_time = {params["scan_time"]}', file=f)
+
         if _isaft(fn_img):
             print(f'forward_tilt = {-params["tilt"]}', file=f)
         else:
             print(f'forward_tilt = {params["tilt"]}', file=f)
-        print('iC = -1030862.1946224371 5468503.8842079658 3407902.5154047827', file=f)
-        print('iR = -0.95700845635275322 -0.27527006183758934 0.091439638698163225 -0.26345593052063937 '
-              '0.69302501329766897 -0.67104940475144637 0.1213498543172795 -0.66629027007731101 -0.73575232847574434',
-              file=f)
+
+        if fprint is not None:
+            icx, icy, icz = _init_center(fprint)
+        else:
+            icx, icy, icz = 0, 0, 0
+        print(f'iC = {icx} {icy} {icz}', file=f)
+        print('iR = 1 0 0 0 1 0 0 0 1', file=f)
 
         print(f'speed = {params["speed"]}', file=f)
         print('mean_earth_radius = 6371000', file=f)
@@ -115,19 +134,19 @@ def cam_from_footprint(fn_img, flavor, scan_res, fn_dem, north_up=True, footprin
     """
     clean_name = fn_img.split('OIS-Reech_')[-1].split('.tif')[0]
 
-    if _isaft(fn_img):
-        optical_bar_cam(fn_img, flavor, 'samp_aft.tsai', scan_res=scan_res)
-        fn_samp = 'samp_aft.tsai'
-    else:
-        optical_bar_cam(fn_img, flavor, 'samp_for.tsai', scan_res=scan_res)
-        fn_samp = 'samp_for.tsai'
-
     # now, get the image footprint, and use ul_corner to get the ul, ur, lr, ll coordinates
     if footprints is None:
         footprints = data.get_usgs_footprints([clean_name], dataset=usgs_datasets[flavor])
         fprint = footprints.loc[0, 'geometry']
     else:
         fprint = footprints.loc[footprints['ID'] == clean_name, 'geometry'].values[0]
+
+    if _isaft(fn_img):
+        optical_bar_cam(fn_img, flavor, 'samp_aft.tsai', fprint, scan_res=scan_res)
+        fn_samp = 'samp_aft.tsai'
+    else:
+        optical_bar_cam(fn_img, flavor, 'samp_for.tsai', fprint, scan_res=scan_res)
+        fn_samp = 'samp_for.tsai'
 
     coords = _stanrogers(fprint, north_up)
 
