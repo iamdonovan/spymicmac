@@ -54,7 +54,7 @@ def write_neighbour_images(imlist, fprints=None, nameField='ID', prefix='OIS-Ree
         print(fn)
 
         res = s.query(fp)
-        intersects = [c for c in res if fp.intersection(c).area > 0]
+        intersects = [fprints.loc[c, 'geometry'] for c in res if fp.intersection(fprints.loc[c, 'geometry']).area > 0]
         fnames = [fprints[nameField][fprints['geometry'] == c].values[0] for c in intersects]
         try:
             fnames.remove(fn)
