@@ -726,6 +726,27 @@ def get_campari_residuals(fn_resids, gcp_df):
     return gcp_df
 
 
+def get_tapas_residuals(ori):
+    """
+    Read the image residuals output from Tapas.
+
+    :param str ori: the name of the Ori directory to read the residuals from (e.g., 'Relative' for Ori-Relative)
+    :return: img_df (DataFrame) -- a DataFrame with image names and residuals
+    """
+    root = ET.parse(os.path.join(f'Ori-{ori}', 'Residus.xml'))
+    last = root.findall('Iters')[-1]
+
+    img_df = pd.DataFrame()
+    for ind, img in enumerate(last.findall('OneIm')):
+        img_df.loc[ind, 'name'] = img.find('Name').text
+        img_df.loc[ind, 'res'] = float(img.find('Residual').text)
+        img_df.loc[ind, 'perc_ok'] = float(img.find('PercOk').text)
+        img_df.loc[ind, 'npts'] = int(img.find('NbPts').text)
+        img_df.loc[ind, 'nmult'] = int(img.find('NbPtsMul').text)
+
+    return img_df
+
+
 def find_empty_homol(dir_homol='Homol'):
     """
     Search through a Homol directory to find images without any matches, then move them to a new directory called
