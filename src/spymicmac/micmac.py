@@ -726,6 +726,23 @@ def get_campari_residuals(fn_resids, gcp_df):
     return gcp_df
 
 
+def find_empty_homol(dir_homol='Homol'):
+    """
+    Search through a Homol directory to find images without any matches, then move them to a new directory called
+    'EmptyMatch'
+
+    :param str dir_homol: the Homol directory to search in (default: Homol)
+    """
+    pastis = glob('Pastis*', root_dir=dir_homol)
+    empty = [d.split('Pastis')[-1] for d in pastis if len(glob('OIS*.tif.dat', root_dir=os.path.join('Homol', d))) == 0]
+
+    os.makedirs('EmptyMatch', exist_ok=True)
+
+    for fn_img in empty:
+        print(f'{fn_img} -> EmptyMatch/{fn_img}')
+        shutil.move(fn_img, 'EmptyMatch')
+
+
 def move_bad_tapas(ori):
     """
     Read residual files output from Tapas (or Campari, GCPBascule), and move images with a NaN residual.
