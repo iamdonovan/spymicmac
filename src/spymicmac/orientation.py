@@ -370,13 +370,20 @@ def fix_orientation(cameras, ori_df, ori, nsig=4):
         a camera an outlier (default: 4)
     """
     join = cameras.set_index('name').join(ori_df.set_index('name'), lsuffix='abs', rsuffix='rel')
+    join.dropna(subset=['xabs', 'yabs', 'zabs', 'xrel', 'yrel', 'zrel'], inplace=True)
 
     model = AffineTransform()
-    model.estimate(join.dropna()[['xabs', 'yabs']].values, join.dropna()[['xrel', 'yrel']].values)
+    est = model.estimate(join[['xabs', 'yabs']].values, join[['xrel', 'yrel']].values)
+
+    if not est:
+        print('Unable to estimate transformation. Trying with RANSAC.')
+        model, inliers = ransac((join[['xabs', 'yabs']].values, join[['xrel', 'yrel']].values), AffineTransform,
+                                min_samples=10, residual_threshold=10, max_trials=10000)
+        print('transformation found with {} inliers'.format(np.count_nonzero(inliers)))
 
     res = model.residuals(join[['xabs', 'yabs']].values, join[['xrel', 'yrel']].values)
+    outliers = np.abs(res - np.nanmedian(res)) > nsig * register.nmad(res)
 
-    outliers = res - np.nanmedian(res) > nsig * register.nmad(res)
     if np.count_nonzero(outliers) > 0:
         interp = LinearNDInterpolator(join.loc[~outliers, ['xrel', 'yrel']].values, join.loc[~outliers, 'zrel'])
         print('found {} outliers using nsig={}'.format(np.count_nonzero(outliers), nsig))
