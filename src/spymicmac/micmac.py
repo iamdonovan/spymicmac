@@ -16,9 +16,7 @@ import xml.etree.ElementTree as ET
 from glob import glob
 from shapely.strtree import STRtree
 from skimage.io import imread, imsave
-from pybob.GeoImg import GeoImg
-from pybob.ddem_tools import nmad
-from pybob.image_tools import create_mask_from_shapefile
+import geoutils as gu
 from spymicmac import data, register
 
 
@@ -56,7 +54,7 @@ def write_neighbour_images(imlist, fprints=None, nameField='ID', prefix='OIS-Ree
         print(fn)
 
         res = s.query(fp)
-        intersects = [c for c in res if fp.intersection(c).area > 0]
+        intersects = [fprints.loc[c, 'geometry'] for c in res if fp.intersection(fprints.loc[c, 'geometry']).area > 0]
         fnames = [fprints[nameField][fprints['geometry'] == c].values[0] for c in intersects]
         try:
             fnames.remove(fn)
@@ -541,11 +539,13 @@ def write_image_mesures(imlist, gcps, outdir='.', sub='', ort_dir='Ortho-MEC-Rel
 
     for im in imlist:
         print(im)
-        img_geo = GeoImg(os.path.join(ort_dir, 'Ort_' + im))
+        img_geo = gu.Raster(os.path.join(ort_dir, 'Ort_' + im))
         impts = pd.read_csv('Auto-{}.txt'.format(im), sep=' ', names=['j', 'i'])
         # impts_nodist = pd.read_csv('NoDist-{}.txt'.format(im), sep=' ', names=['j', 'i'])
 
-        xmin, xmax, ymin, ymax = img_geo.find_valid_bbox()
+        # TODO: replace GeoImg.find_valid_bbox
+        # could potentially polygonize the valid mask
+        xmin, ymin, xmax, ymax = img_geo.bounds
 
         # valid_pts = get_valid_image_points(img.shape, impts, impts_nodist)
         valid_pts = np.logical_and.reduce([xmin <= gcps.rel_x, gcps.rel_x < xmax,
@@ -724,6 +724,44 @@ def get_campari_residuals(fn_resids, gcp_df):
         gcp_df.loc[gcp_df.id == data_[0], 'camp_dist'] = data_[1]
 
     return gcp_df
+
+
+def get_tapas_residuals(ori):
+    """
+    Read the image residuals output from Tapas.
+
+    :param str ori: the name of the Ori directory to read the residuals from (e.g., 'Relative' for Ori-Relative)
+    :return: img_df (DataFrame) -- a DataFrame with image names and residuals
+    """
+    root = ET.parse(os.path.join(f'Ori-{ori}', 'Residus.xml'))
+    last = root.findall('Iters')[-1]
+
+    img_df = pd.DataFrame()
+    for ind, img in enumerate(last.findall('OneIm')):
+        img_df.loc[ind, 'name'] = img.find('Name').text
+        img_df.loc[ind, 'res'] = float(img.find('Residual').text)
+        img_df.loc[ind, 'perc_ok'] = float(img.find('PercOk').text)
+        img_df.loc[ind, 'npts'] = int(img.find('NbPts').text)
+        img_df.loc[ind, 'nmult'] = int(img.find('NbPtsMul').text)
+
+    return img_df
+
+
+def find_empty_homol(dir_homol='Homol'):
+    """
+    Search through a Homol directory to find images without any matches, then move them to a new directory called
+    'EmptyMatch'
+
+    :param str dir_homol: the Homol directory to search in (default: Homol)
+    """
+    pastis = glob('Pastis*', root_dir=dir_homol)
+    empty = [d.split('Pastis')[-1] for d in pastis if len(glob('OIS*.tif.dat', root_dir=os.path.join('Homol', d))) == 0]
+
+    os.makedirs('EmptyMatch', exist_ok=True)
+
+    for fn_img in empty:
+        print(f'{fn_img} -> EmptyMatch/{fn_img}')
+        shutil.move(fn_img, 'EmptyMatch')
 
 
 def move_bad_tapas(ori):
@@ -1122,7 +1160,7 @@ def remove_worst_mesures(fn_meas, ori):
         if appui.find('NameImMax') is not None:
             resids_df.loc[ii, 'immax'] = appui.find('NameImMax').text
 
-    bad_meas = np.abs(resids_df.errmax - resids_df.errmax.median()) > nmad(resids_df.errmax)
+    bad_meas = np.abs(resids_df.errmax - resids_df.errmax.median()) > register.nmad(resids_df.errmax)
     bad_resids = resids_df[bad_meas].copy()
 
     for im in auto_root.findall('MesureAppuiFlottant1Im'):
@@ -1173,10 +1211,10 @@ def iterate_campari(gcps, out_dir, match_pattern, subscript, dx, ortho_res, fn_g
 
     gcps['camp_xy'] = np.sqrt(gcps.camp_xres ** 2 + gcps.camp_yres ** 2)
 
-    while any([np.any(np.abs(gcps.camp_res - gcps.camp_res.median()) > 3 * nmad(gcps.camp_res)),
-               np.any(np.abs(gcps.camp_dist - gcps.camp_dist.median()) > 3 * nmad(gcps.camp_dist)),
+    while any([np.any(np.abs(gcps.camp_res - gcps.camp_res.median()) > 3 * register.nmad(gcps.camp_res)),
+               np.any(np.abs(gcps.camp_dist - gcps.camp_dist.median()) > 3 * register.nmad(gcps.camp_dist)),
                gcps.camp_res.max() > 2]) and niter <= max_iter:
-        valid_inds = np.logical_and.reduce((np.abs(gcps.camp_dist - gcps.camp_dist.median()) < 3 * nmad(gcps.camp_dist),
+        valid_inds = np.logical_and.reduce((np.abs(gcps.camp_dist - gcps.camp_dist.median()) < 3 * register.nmad(gcps.camp_dist),
                                             gcps.camp_res < gcps.camp_res.max()))
         if np.count_nonzero(valid_inds) < 10:
             break
@@ -1210,7 +1248,7 @@ def mask_invalid_els(dir_mec, fn_dem, fn_mask, ori, match_pattern='OIS.*tif', zo
     :param str match_pattern: the match pattern used to
     :param int zoomf: the final zoom level to run Malt at (default: ZoomF=1)
     """
-    zlist = glob(os.path.join(dir_mec, 'Z*.tif'))
+    zlist = glob('Z*.tif', root_dir=dir_mec)
     zlist.sort()
 
     etapes = [int(f.split('_')[1].replace('Num', '')) for f in zlist]
@@ -1223,22 +1261,23 @@ def mask_invalid_els(dir_mec, fn_dem, fn_mask, ori, match_pattern='OIS.*tif', zo
     print(fn_auto)
     print(zlist[ind])
 
-    dem = GeoImg(zlist[ind])
+    dem = gu.Raster(os.path.join(dir_mec, zlist[ind]))
 
-    automask = GeoImg(os.path.join(dir_mec, 'AutoMask_STD-MALT_Num_{}.tif'.format(etape0 - 1)))
+    automask = gu.Raster(os.path.join(dir_mec, 'AutoMask_STD-MALT_Num_{}.tif'.format(etape0 - 1)))
 
     shutil.copy(zlist[ind].replace('tif', 'tfw'),
                 fn_auto.replace('tif', 'tfw'))
 
-    ref_dem = GeoImg(fn_dem).reproject(dem)
+    # TODO: dem needs to have CRS set
+    ref_dem = gu.Raster(fn_dem).reproject(dem)
 
-    mask = create_mask_from_shapefile(dem, fn_mask)
+    mask = gu.Vector(fn_mask).create_mask(dem).data
 
-    dem.img[mask] = ref_dem.img[mask]
-    automask.img[mask] = 1
+    dem.data[mask] = ref_dem.data[mask]
+    automask.data[mask] = 1
 
-    automask.write(fn_auto)
-    dem.write(zlist[ind])
+    automask.save(fn_auto)
+    dem.save(zlist[ind])
 
     if os.name == 'nt':
         echo = subprocess.Popen('echo', stdout=subprocess.PIPE, shell=True)
@@ -1304,24 +1343,24 @@ def dem_to_text(fn_dem, fn_out='dem_pts.txt', spacing=100, fn_mask=None):
     :param str fn_out: the name of the text file to write out (default: dem_pts.txt)
     :param int spacing: the pixel spacing of the DEM to write (default: every 100 pixels)
     """
-    if isinstance(fn_dem, GeoImg):
+    if isinstance(fn_dem, gu.Raster):
         dem = fn_dem
     else:
-        dem = GeoImg(fn_dem)
+        dem = gu.Raster(fn_dem)
 
     if fn_mask is not None:
-        mask = create_mask_from_shapefile(dem, fn_mask)
-        dem.img[mask] = np.nan
+        mask = gu.Vector(fn_mask).create_mask(dem).data
+        dem.data[mask] = np.nan
 
-    x, y = dem.xy()
+    x, y = dem.coords()
 
-    z = dem.img[::spacing, ::spacing].flatten()
+    z = dem.data[::spacing, ::spacing].flatten()
     x = x[::spacing, ::spacing].flatten()
     y = y[::spacing, ::spacing].flatten()
 
-    x = x[np.isfinite(z)]
-    y = y[np.isfinite(z)]
-    z = z[np.isfinite(z)]
+    x = x[np.logical_and(np.isfinite(z), ~z.mask)]
+    y = y[np.logical_and(np.isfinite(z), ~z.mask)]
+    z = z[np.logical_and(np.isfinite(z), ~z.mask)]
 
     with open(fn_out, 'w') as f:
         for pt in list(zip(x, y, z)):

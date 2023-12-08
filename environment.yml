@@ -6,6 +6,7 @@ dependencies:
   - python>=3.10
   - scikit-image>=0.19,<0.20.0
   - geopandas
+  - geoutils
   - matplotlib
   - sphinx
   - opencv
@@ -17,7 +18,6 @@ dependencies:
   - pillow>9.1.0
   - pip
   - pip:
-      - pybob>=0.25.1
       - sphinx-argparse
       - sphinx-rtd-theme
       - usgs

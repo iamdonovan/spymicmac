@@ -20,9 +20,7 @@ import numpy as np
 from shapely.ops import nearest_points
 from shapely.geometry import LineString, MultiPoint, Point
 import geopandas as gpd
-from pybob.image_tools import nanmedian_filter
-from pybob.ddem_tools import nmad
-from spymicmac import image, micmac, resample
+from spymicmac import image, micmac, resample, register
 
 
 ######################################################################################################################
@@ -638,7 +636,7 @@ def _fix_cross(subimg):
         cross = cross[:, :subimg.shape[1]]
 
     subimg[cross != 0] = np.nan
-    fixed = nanmedian_filter(subimg, footprint=disk(7))
+    fixed = image.nanmedian_filter(subimg, footprint=disk(7))
     subimg[np.isnan(subimg)] = fixed[np.isnan(subimg)]
     return subimg.astype(np.uint8)
 
@@ -664,7 +662,7 @@ def remove_crosses(fn_img, nproc=1):
 
     subim = subim.astype(np.float32)
     subim[cross != 0] = np.nan
-    fixed = nanmedian_filter(subim, footprint=disk(7))
+    fixed = image.nanmedian_filter(subim, footprint=disk(7))
     subim[np.isnan(subim)] = fixed[np.isnan(subim)]
     img[int(pt[0]) - row_[0]:int(pt[0]) + row_[1] + 1, int(pt[1]) - col_[0]:int(pt[1]) + col_[1] + 1] = subim.astype(
         np.uint8)
@@ -771,8 +769,8 @@ def find_reseau_grid(fn_img, csize=361, return_val=False):
     ux = x_res.values.reshape(23, 47)
     uy = y_res.values.reshape(23, 47)
 
-    xdiff = ux - nanmedian_filter(ux, footprint=disk(3))
-    ydiff = uy - nanmedian_filter(uy, footprint=disk(3))
+    xdiff = ux - image.nanmedian_filter(ux, footprint=disk(3))
+    ydiff = uy - image.nanmedian_filter(uy, footprint=disk(3))
 
     xout = _outlier_filter(xdiff, n=5)
     yout = _outlier_filter(ydiff, n=5)
@@ -782,8 +780,8 @@ def find_reseau_grid(fn_img, csize=361, return_val=False):
     ux[outliers.reshape(23, 47)] = np.nan
     uy[outliers.reshape(23, 47)] = np.nan
 
-    ux[outliers.reshape(23, 47)] = nanmedian_filter(ux, footprint=disk(1))[outliers.reshape(23, 47)]
-    uy[outliers.reshape(23, 47)] = nanmedian_filter(uy, footprint=disk(1))[outliers.reshape(23, 47)]
+    ux[outliers.reshape(23, 47)] = image.nanmedian_filter(ux, footprint=disk(1))[outliers.reshape(23, 47)]
+    uy[outliers.reshape(23, 47)] = image.nanmedian_filter(uy, footprint=disk(1))[outliers.reshape(23, 47)]
 
     grid_df.loc[outliers, 'match_j'] = dst[outliers, 0] + ux.flatten()[outliers]
     grid_df.loc[outliers, 'match_i'] = dst[outliers, 1] + uy.flatten()[outliers]
@@ -955,7 +953,7 @@ def _refine_rail(coords):
         fit = np.polyval(p, coords[:, 1])
 
         diff = coords[:, 0] - fit
-        valid = np.abs(diff - np.median(diff)) < 4 * nmad(diff)
+        valid = np.abs(diff - np.median(diff)) < 4 * register.nmad(diff)
 
         nout = prev_valid - np.count_nonzero(valid)
         prev_valid = np.count_nonzero(valid)
@@ -1130,7 +1128,7 @@ def find_grid_matches(tfm_img, refgeo, mask, initM=None, spacing=200, srcwin=60,
     Find matches between two images on a grid using normalized cross-correlation template matching.
 
     :param array-like tfm_img: the image to use for matching.
-    :param GeoImg refgeo: the reference image to use for matching.
+    :param Raster refgeo: the reference image to use for matching.
     :param array-like mask: a mask indicating areas that should be used for matching.
     :param initM: the model used for transforming the initial, non-georeferenced image.
     :param int spacing: the grid spacing, in pixels (default: 200 pixels)
@@ -1142,15 +1140,15 @@ def find_grid_matches(tfm_img, refgeo, mask, initM=None, spacing=200, srcwin=60,
     z_corrs = []
     peak_corrs = []
 
-    jj = np.arange(srcwin, spacing * np.ceil((refgeo.img.shape[1]-srcwin) / spacing) + 1, spacing).astype(int)
-    ii = np.arange(srcwin, spacing * np.ceil((refgeo.img.shape[0]-srcwin) / spacing) + 1, spacing).astype(int)
+    jj = np.arange(srcwin, spacing * np.ceil((refgeo.shape[1]-srcwin) / spacing) + 1, spacing).astype(int)
+    ii = np.arange(srcwin, spacing * np.ceil((refgeo.shape[0]-srcwin) / spacing) + 1, spacing).astype(int)
 
     search_pts = []
 
     for _i in ii:
         for _j in jj:
             search_pts.append((_j, _i))
-            match, z_corr, peak_corr = do_match(tfm_img, refgeo.img, mask, (_i, _j), srcwin, dstwin)
+            match, z_corr, peak_corr = do_match(tfm_img, refgeo.data, mask, (_i, _j), srcwin, dstwin)
             match_pts.append(match)
             z_corrs.append(z_corr)
             peak_corrs.append(peak_corr)
