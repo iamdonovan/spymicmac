@@ -26,7 +26,7 @@ from spymicmac import image, micmac, resample, register
 ######################################################################################################################
 # tools for matching fiducial markers (or things like fiducial markers)
 ######################################################################################################################
-def find_fiducials(fn_img, templates, fn_cam=None, thresh_tol=0.9, npeaks=5, min_dist=1, angle=None):
+def find_fiducials(fn_img, templates, fn_cam=None, thresh_tol=0.9, npeaks=5, min_dist=1, angle=None, use_frame=True):
     """
     Match the location of fiducial markers for a scanned aerial photo.
 
@@ -37,7 +37,8 @@ def find_fiducials(fn_img, templates, fn_cam=None, thresh_tol=0.9, npeaks=5, min
     :param float thresh_tol: the minimum relative peak intensity to use for detecting matches (default: 0.9)
     :param int npeaks: maximum number of potential matches to accept for each fiducial marker template (default: 5)
     :param int min_dist: the minimum distance allowed between potential peaks (default: not set)
-    :param int angle:
+    :param int angle: the angle by which to rotate the points in MeasuresCam (default: do not rotate)
+    :param bool use_frame: use the rough image frame to try to find fiducial markers (default: True)
     """
     # assert units in ['microns', 'dpi'], "scale must be one of [microns, dpi]"
 
@@ -52,9 +53,12 @@ def find_fiducials(fn_img, templates, fn_cam=None, thresh_tol=0.9, npeaks=5, min
         measures_cam = _rotate_meas(measures_cam, angle)
 
     # now, get the fractional locations (0.05, 0.5, 0.95) in the image of each marker
-    measures_cam = _get_rough_locs(measures_cam)
-    measures_cam['rough_j'] *= img.shape[1]
-    measures_cam['rough_i'] *= img.shape[0]
+    if not use_frame:
+        measures_cam = _get_rough_locs(measures_cam)
+        measures_cam['rough_j'] *= img.shape[1]
+        measures_cam['rough_i'] *= img.shape[0]
+    else:
+        measures_cam = _get_rough_locs(measures_cam, img)
 
     coords_all = []
 
@@ -177,14 +181,28 @@ def _rotate_meas(meas, angle):
     return rot
 
 
-def _get_rough_locs(meas):
+def _get_rough_locs(meas, img=None):
     # get the rough locations of the corners and mid-side fiducial markers in an image
     scaled = meas.copy()
     scaled['j'] /= scaled.j.max()
     scaled['i'] /= scaled.i.max()
 
-    rough_x, rough_y = np.meshgrid(np.array([0.075, 0.5, 0.925]), np.array([0.075, 0.5, 0.925]))
-    rough_pts = [Point(x, y) for x, y in zip(rough_x.flatten(), rough_y.flatten())]
+    if img is None:
+        rough_x, rough_y = np.meshgrid(np.array([0.075, 0.5, 0.925]), np.array([0.075, 0.5, 0.925]))
+        rough_pts = [Point(x, y) for x, y in zip(rough_x.flatten(), rough_y.flatten())]
+
+    else:
+        left, right, top, bot = image.get_rough_frame(img)
+        x_mid = left + (right - left) / 2
+        y_mid = top + (bot - top) / 2
+
+        scaled['j'] = scaled['j'] * (right - left) + left
+        scaled['i'] = scaled['i'] * (bot - top) + top
+
+        rough_x = np.array([left, x_mid, right, left, right, left, x_mid, right])
+        rough_y = np.array([top, top, top, y_mid, y_mid, bot, bot, bot])
+
+        rough_pts = [Point(x, y) for x, y in zip(rough_x, rough_y)]
 
     for ind, row in scaled.iterrows():
         pt = Point(row['j'], row['i'])
@@ -193,6 +211,7 @@ def _get_rough_locs(meas):
 
         meas.loc[ind, 'rough_j'] = rough_x.flatten()[nind]
         meas.loc[ind, 'rough_i'] = rough_y.flatten()[nind]
+
 
     return meas
 
@@ -290,7 +309,8 @@ def match_fairchild(fn_img, size, model, data_strip, fn_cam=None, dot_size=4, **
     :param str fn_img: the filename of the image to match
     :param int size: the size of the marker to match
     :param str model: the type of fiducial marker: T11 style with either checkerboard-style markers (T11S) or dot style
-        markers (T11D), or K17 style ("wing" style markers). Must be one of [K17, T11S, T11D].
+        markers (T11D), side + corner dot style markers (T12), or K17 style ("wing" style markers). Must be one of
+        [K17, T11S, T11D, T12].
     :param str data_strip: the location of the data strip in the image (left, right, top, bot). For T11 style cameras,
         the data strip should be along the left-hand side; for K17 style cameras, the "data strip" (focal length
         indicator) should be on the right-hand side. Be sure to check your images, as the scanned images may be rotated
@@ -300,9 +320,14 @@ def match_fairchild(fn_img, size, model, data_strip, fn_cam=None, dot_size=4, **
     :param kwargs: additional keyword arguments to pass to matching.find_fiducials()
     :return:
     """
-    assert model.upper() in ['K17', 'T11S', 'T11D'], "model must be one of [K17, T11S, T11D]"
+    assert model.upper() in ['K17', 'T11S', 'T11D', 'T12'], "model must be one of [K17, T11S, T11D, T12]"
     assert data_strip in ['left', 'right', 'top', 'bot'], "data_strip must be one of [left, right, top, bot]"
-    fids = [f'P{n}' for n in range(1, 5)]
+
+    if model.upper in ['K17', 'T11S', 'T11D']:
+        fids = [f'P{n}' for n in range(1, 5)]
+    else:
+        fids = [f'P{n}' for n in range(1, 9)]
+
     if model.upper() == 'K17':
         templ = _corner(size)
         templates = [templ, np.fliplr(templ), templ.T, np.fliplr(templ).T]
@@ -317,6 +342,8 @@ def match_fairchild(fn_img, size, model, data_strip, fn_cam=None, dot_size=4, **
         elif model.upper() == 'T11D':
             templ = padded_dot(size, dot_size)
             templates = [templ, templ, np.fliplr(templ), np.fliplr(templ)]
+        elif model.upper() == 'T12':
+            templates = 8 * [padded_dot(size, dot_size)]
 
         locs = ['left', 'top', 'right', 'bot']
         angles = [None, np.deg2rad(-90), np.deg2rad(180), np.deg2rad(90)]
