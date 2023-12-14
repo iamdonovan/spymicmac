@@ -45,6 +45,7 @@ def write_neighbour_images(imlist, fprints=None, nameField='ID', prefix='OIS-Ree
     else:
         fprints = fprints[fprints[nameField].isin(imlist)]
 
+    fprints.reset_index(inplace=True)  # do this to ensure that strtree indices are correct
     s = STRtree([f for f in fprints['geometry'].values])
 
     for i, row in fprints.iterrows():
