@@ -757,7 +757,7 @@ def find_empty_homol(imlist=None, dir_homol='Homol', pattern='OIS*.tif'):
     :param str dir_homol: the Homol directory to search in (default: Homol)
     :param str pattern: the search pattern to use to find images (default: OIS*.tif)
     """
-    pastis = glob('Pastis*', root_dir=dir_homol)
+
     if imlist is None:
         imlist = glob(pattern)
 
