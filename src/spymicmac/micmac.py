@@ -748,21 +748,75 @@ def get_tapas_residuals(ori):
     return img_df
 
 
-def find_empty_homol(dir_homol='Homol'):
+def find_empty_homol(imlist=None, dir_homol='Homol', pattern='OIS*.tif'):
     """
     Search through a Homol directory to find images without any matches, then move them to a new directory called
     'EmptyMatch'
 
+    :param list|None imlist: a list of images in the current directory. If None, uses pattern to find images.
     :param str dir_homol: the Homol directory to search in (default: Homol)
+    :param str pattern: the search pattern to use to find images (default: OIS*.tif)
     """
     pastis = glob('Pastis*', root_dir=dir_homol)
-    empty = [d.split('Pastis')[-1] for d in pastis if len(glob('*.dat', root_dir=os.path.join('Homol', d))) == 0]
+    if imlist is None:
+        imlist = glob(pattern)
+
+    empty = [fn_img for fn_img in imlist if len(_get_homol(fn_img, dir_homol)) == 0]
 
     os.makedirs('EmptyMatch', exist_ok=True)
 
     for fn_img in empty:
         print(f'{fn_img} -> EmptyMatch/{fn_img}')
         shutil.move(fn_img, 'EmptyMatch')
+
+
+def _get_homol(fn_img, dir_homol='Homol'):
+    if not os.path.exists(os.path.join(dir_homol, 'Pastis' + fn_img)):
+        return []
+    else:
+        return sorted([h.split('.dat')[0] for h in glob('*.dat', root_dir=os.path.join(dir_homol, 'Pastis' + fn_img))])
+
+
+# adapted from the fantastic answer provided by
+# user matias-thayer and edited by user redbeam_
+# at https://stackoverflow.com/a/50639220
+def _get_connected_block(img, seen, hdict):
+    result = []
+    imgs = set([img])
+    while imgs:
+        img = imgs.pop()
+        seen.add(img)
+        imgs = imgs or set(hdict[img]) - seen
+        result.append(img)
+
+    return result, seen
+
+
+# adapted from the fantastic answer provided by
+# user matias-thayer and edited by user redbeam_
+# at https://stackoverflow.com/a/50639220
+def find_connected_blocks(pattern='OIS*.tif', dir_homol='Homol'):
+    """
+    Find connected blocks of images.
+
+    :param str pattern: the search pattern to use to get image names
+    :param str dir_homol: the Homologue directory to use to determine what images are connected
+    :return: blocks -- a list containing lists of connected blocks of images
+    """
+    imlist = glob(pattern)
+    homols = [_get_homol(fn_img, dir_homol) for fn_img in imlist]
+
+    hdict = dict(zip(imlist, homols))
+
+    seen = set()
+    blocks = []
+
+    for img in hdict:
+        if img not in seen:
+            block, seen = _get_connected_block(img, seen, hdict)
+            blocks.append(sorted(block))
+
+    return blocks
 
 
 def move_bad_tapas(ori):
