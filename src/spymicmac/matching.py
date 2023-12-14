@@ -268,7 +268,7 @@ def inscribed_cross(size, cross_size, width=3, angle=45):
     """
 
     circle = 255 * disk(size)
-    cross = cross_template(cross_size, width=width, angle=angle)
+    cross = cross_template(cross_size, width=width, angle=angle, no_border=True)
     cross[cross > 0.8] = 255
 
     pad = int((circle.shape[0] - cross.shape[0]) / 2)
@@ -356,7 +356,7 @@ def match_fairchild(fn_img, size, model, data_strip, fn_cam=None, dot_size=4, **
 
 
 def _zeiss_corner(size):
-    return 4 * [cross_template(size)]
+    return 4 * [cross_template(size, no_border=True)]
 
 
 def _zeiss_midside(size, dot_size):
@@ -410,7 +410,7 @@ def _wild_corner(size, model, circle_size, ring_width):
         if circle_size is not None:
             template = inscribed_cross(circle_size, size, angle=45)
         else:
-            template = cross_template(size, width=1, angle=45)
+            template = cross_template(size, width=1, angle=45, no_border=True)
             template[template > 0.8] = 255
     else:
         template = wagon_wheel(size, width=3, circle_size=circle_size, circle_width=ring_width, angle=target_angle)
@@ -471,13 +471,14 @@ def match_wild_rc(fn_img, size, model, data_strip='left', fn_cam=None, circle_si
     return find_fiducials(fn_img, tdict, fn_cam=fn_cam, angle=angle, use_frame=False, **kwargs)
 
 
-def cross_template(shape, width=3, angle=None):
+def cross_template(shape, width=3, angle=None, no_border=False):
     """
     Create a cross-shaped template for matching reseau or fiducial marks.
 
     :param int shape: the output shape of the template
     :param int width: the width of the cross at the center of the template (default: 3 pixels).
     :param float angle: the angle to rotate the template by (default: None).
+    :param no_border flat: do not include a border around the cross (default: False)
     :return: **cross** (*array-like*) -- the cross template
     """
     if isinstance(shape, int):
@@ -502,8 +503,9 @@ def cross_template(shape, width=3, angle=None):
     half_w = int((width - 1) / 2)
 
     cross = np.zeros((rows, cols))
-    cross[half_r - half_w - 1:half_r + half_w + 2:width + 1, :] = 2
-    cross[:, half_c - half_w - 1:half_c + half_w + 2:width + 1] = 2
+    if not no_border:
+        cross[half_r - half_w - 1:half_r + half_w + 2:width + 1, :] = 2
+        cross[:, half_c - half_w - 1:half_c + half_w + 2:width + 1] = 2
 
     cross[half_r - half_w:half_r + half_w + 1, :] = 1
     cross[:, half_c - half_w:half_c + half_w + 1] = 1
