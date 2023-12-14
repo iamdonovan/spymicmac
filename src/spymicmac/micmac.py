@@ -756,7 +756,7 @@ def find_empty_homol(dir_homol='Homol'):
     :param str dir_homol: the Homol directory to search in (default: Homol)
     """
     pastis = glob('Pastis*', root_dir=dir_homol)
-    empty = [d.split('Pastis')[-1] for d in pastis if len(glob('OIS*.tif.dat', root_dir=os.path.join('Homol', d))) == 0]
+    empty = [d.split('Pastis')[-1] for d in pastis if len(glob('*.dat', root_dir=os.path.join('Homol', d))) == 0]
 
     os.makedirs('EmptyMatch', exist_ok=True)
 
