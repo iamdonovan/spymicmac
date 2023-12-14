@@ -468,7 +468,7 @@ def match_wild_rc(fn_img, size, model, data_strip='left', fn_cam=None, circle_si
         angle = np.deg2rad(90)
 
     tdict = dict(zip(fids, templates))
-    return find_fiducials(fn_img, tdict, fn_cam=fn_cam, angle=angle, **kwargs)
+    return find_fiducials(fn_img, tdict, fn_cam=fn_cam, angle=angle, use_frame=False, **kwargs)
 
 
 def cross_template(shape, width=3, angle=None):
