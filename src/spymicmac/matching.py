@@ -3,6 +3,7 @@ spymicmac.matching is a collection of tools for matching templates in images
 """
 import os
 import shutil
+import itertools
 import multiprocessing as mp
 import cv2
 import matplotlib.pyplot as plt
@@ -84,25 +85,41 @@ def find_fiducials(fn_img, templates, fn_cam=None, thresh_tol=0.9, npeaks=5, min
 
     coords_all = pd.concat(coords_all, ignore_index=True)
 
-    for ind, row in coords_all.iterrows():
-        this_fid = measures_cam.loc[measures_cam.index == row['gcp']]
-        dist = np.sqrt((row.im_col - this_fid['rough_j'])**2 +
-                       (row.im_row - this_fid['rough_i'])**2)
-        coords_all.loc[ind, 'resid'] = dist.values[0]
+    nfids = len(coords_all.gcp.unique())
+    combs = list(itertools.combinations(coords_all.index, nfids))
 
-    coords_all['resid'] = coords_all['resid'].astype(float)
+    filtered_combs = [list(c) for c in combs if len(set(coords_all.loc[list(c), 'gcp'].to_list())) == nfids]
 
-    inds = []
-    for fid in templates.keys():
-        if len(coords_all.loc[coords_all['gcp'] == fid]) > 0:
-            inds.append(coords_all[coords_all['gcp'] == fid]['resid'].idxmin())
-        else:
-            continue
+    resids = []
+    for c in filtered_combs:
+        these_meas = coords_all.loc[c].set_index('gcp').join(measures_cam)
 
-    coords_all = coords_all.loc[inds]
+        model = AffineTransform()
+        model.estimate(these_meas[['im_col', 'im_row']].values, these_meas[['j', 'i']].values)
+        resids.append(model.residuals(these_meas[['im_col', 'im_row']].values,
+                                      these_meas[['j', 'i']].values).mean())
+
+    coords_all = coords_all.loc[filtered_combs[np.argmin(resids)]]
+
+    # for ind, row in coords_all.iterrows():
+    #     this_fid = measures_cam.loc[measures_cam.index == row['gcp']]
+    #     dist = np.sqrt((row.im_col - this_fid['rough_j'])**2 +
+    #                    (row.im_row - this_fid['rough_i'])**2)
+    #     coords_all.loc[ind, 'resid'] = dist.values[0]
+    #
+    # coords_all['resid'] = coords_all['resid'].astype(float)
+    #
+    # inds = []
+    # for fid in templates.keys():
+    #     if len(coords_all.loc[coords_all['gcp'] == fid]) > 0:
+    #         inds.append(coords_all[coords_all['gcp'] == fid]['resid'].idxmin())
+    #     else:
+    #         continue
+    #
+    # coords_all = coords_all.loc[inds]
 
     # now, drop any duplicated values - if we have these, we need to replace/estimate
-    coords_all = coords_all.sort_values('resid').drop_duplicates(subset=['im_col', 'im_row']).sort_values('gcp')
+    # coords_all = coords_all.sort_values('resid').drop_duplicates(subset=['im_col', 'im_row']).sort_values('gcp')
     if len(coords_all) < len(measures_cam):
         print('One or more markers could not be found. \nAttempting to predict location(s) using affine transformation')
         coords_all = _fix_fiducials(coords_all, measures_cam)
@@ -411,6 +428,17 @@ def _wild_corner(size, model, circle_size, ring_width):
             template = inscribed_cross(circle_size, size, angle=45)
         else:
             template = cross_template(size, width=1, angle=45, no_border=True)
+
+            rows, cols = template.shape
+            _width = 9
+
+            half_r = int((rows - 1) / 2)
+            half_c = int((rows - 1) / 2)
+            half_w = int((_width - 1) / 2)
+
+            template[half_r - half_w:half_r + half_w + 1, :] = 0
+            template[:, half_c - half_w:half_c + half_w + 1] = 0
+
             template[template > 0.8] = 255
     else:
         template = wagon_wheel(size, width=3, circle_size=circle_size, circle_width=ring_width, angle=target_angle)
