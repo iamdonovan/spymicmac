@@ -33,8 +33,8 @@ def find_fiducials(fn_img, templates, fn_cam=None, thresh_tol=0.9, npeaks=5, min
 
     :param str fn_img: the filename of the image to find fiducial markers in.
     :param dict templates: a dict of (name, template) pairs corresponding to each fiducial marker.
-    :param str fn_cam: the filename of the MeasuresCamera.xml file for the image. defaults to
-        Ori-InterneScan/MeasuresCamera.xml
+    :param str fn_cam: the filename of the MeasuresIm file for the template image, if templates are created using
+        templates_from_meas().
     :param float thresh_tol: the minimum relative peak intensity to use for detecting matches (default: 0.9)
     :param int npeaks: maximum number of potential matches to accept for each fiducial marker template (default: 5)
     :param int min_dist: the minimum distance allowed between potential peaks (default: not set)
@@ -45,21 +45,26 @@ def find_fiducials(fn_img, templates, fn_cam=None, thresh_tol=0.9, npeaks=5, min
 
     img = io.imread(fn_img)
 
-    if fn_cam is None:
-        fn_cam = os.path.join('Ori-InterneScan', 'MeasuresCamera.xml')
-    measures_cam = micmac.parse_im_meas(fn_cam)
+    measures_cam = micmac.parse_im_meas(os.path.join('Ori-InterneScan', 'MeasuresCamera.xml'))
     measures_cam.set_index('name', inplace=True)
 
     if angle is not None:
         measures_cam = _rotate_meas(measures_cam, angle)
 
-    # now, get the fractional locations (0.05, 0.5, 0.95) in the image of each marker
-    if not use_frame:
-        measures_cam = _get_rough_locs(measures_cam)
-        measures_cam['rough_j'] *= img.shape[1]
-        measures_cam['rough_i'] *= img.shape[0]
+    if fn_cam is not None:
+        measures_img = micmac.parse_im_meas(fn_cam)
+        measures_img.set_index('name', inplace=True)
+        measures_img.rename(columns={'i': 'rough_i', 'j': 'rough_j'}, inplace=True)
+
+        measures_cam = measures_cam.join(measures_img)
     else:
-        measures_cam = _get_rough_locs(measures_cam, img)
+        # now, get the fractional locations (0.05, 0.5, 0.95) in the image of each marker
+        if not use_frame:
+            measures_cam = _get_rough_locs(measures_cam)
+            measures_cam['rough_j'] *= img.shape[1]
+            measures_cam['rough_i'] *= img.shape[0]
+        else:
+            measures_cam = _get_rough_locs(measures_cam, img)
 
     coords_all = []
 
@@ -67,14 +72,14 @@ def find_fiducials(fn_img, templates, fn_cam=None, thresh_tol=0.9, npeaks=5, min
         templ = templates[fid]
         tsize = int(min(0.05 * np.array(img.shape)))
 
-        subimg, _, _ = make_template(img, (row['rough_i'], row['rough_j']), half_size=tsize)
+        subimg, isize, jsize = make_template(img, (row['rough_i'], row['rough_j']), half_size=tsize)
         res = cv2.matchTemplate(subimg.astype(np.uint8), templ.astype(np.uint8), cv2.TM_CCORR_NORMED)
 
         coords = peak_local_max(res, threshold_rel=thresh_tol, min_distance=min_dist, num_peaks=npeaks).astype(float)
         coords += templ.shape[0] / 2 - 0.5
 
-        coords[:, 1] += row['rough_j'] - tsize
-        coords[:, 0] += row['rough_i'] - tsize
+        coords[:, 1] += row['rough_j'] - jsize[0]
+        coords[:, 0] += row['rough_i'] - isize[0]
 
         these_coords = pd.DataFrame()
         these_coords['im_col'] = coords[:, 1]
