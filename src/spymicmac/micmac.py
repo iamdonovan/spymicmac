@@ -272,7 +272,7 @@ def create_measurescamera_xml(fn_csv, ori='InterneScan', translate=False, name='
     """
     Create a MeasuresCamera.xml file from a csv of fiducial marker locations.
 
-    :param str fn_csv: the filename of the CSV file.
+    :param str|DataFrame fn_csv: the filename of the CSV file, or a pandas DataFrame.
     :param str ori: the Ori directory to write the MeasuresCamera.xml file to. Defaults to (Ori-)InterneScan.
     :param bool translate: translate coordinates so that the origin is the upper left corner, rather than the principal
         point
@@ -280,7 +280,11 @@ def create_measurescamera_xml(fn_csv, ori='InterneScan', translate=False, name='
     :param str x: the column name in the csv file corresponding to the image x location [im_col]
     :param str y: the column name in the csv file corresponding to the image y location [im_row]
     """
-    fids = pd.read_csv(fn_csv)
+    assert type(fn_csv) in [pd.core.frame.DataFrame, str], "fn_csv must be one of [str, DataFrame]"
+    if isinstance(fn_csv, str):
+        fids = pd.read_csv(fn_csv)
+    else:
+        fids = fn_csv
 
     # if coordinates are relative to the principal point,
     # convert them to be relative to the upper left corner
