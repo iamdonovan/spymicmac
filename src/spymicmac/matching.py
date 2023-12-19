@@ -429,14 +429,14 @@ def match_zeiss_rmk(fn_img, size, dot_size, data_strip='left', fn_cam=None, corn
     return find_fiducials(fn_img, tdict, fn_cam=fn_cam, angle=angle, **kwargs)
 
 
-def _wild_corner(size, model, circle_size, ring_width):
+def _wild_corner(size, model, circle_size, ring_width, width=3):
 
     target_angle = 45
     if model.upper() in ['RC5', 'RC8']:
         if circle_size is not None:
             template = inscribed_cross(circle_size, size, angle=45)
         else:
-            template = cross_template(size, width=3, angle=45, no_border=True)
+            template = cross_template(size, width=width, angle=45, no_border=True)
 
             rows, cols = template.shape
             _width = 9
@@ -450,7 +450,7 @@ def _wild_corner(size, model, circle_size, ring_width):
 
             template[template > 0.8] = 255
     else:
-        template = wagon_wheel(size, width=3, circle_size=circle_size, circle_width=ring_width, angle=target_angle)
+        template = wagon_wheel(size, width=width, circle_size=circle_size, circle_width=ring_width, angle=target_angle)
 
     return template
 
@@ -467,7 +467,8 @@ def _wild_midside(size, model, circle_size, ring_width):
     return template
 
 
-def match_wild_rc(fn_img, size, model, data_strip='left', fn_cam=None, circle_size=None, ring_width=7, **kwargs):
+def match_wild_rc(fn_img, size, model, data_strip='left', fn_cam=None, width=3, circle_size=None, ring_width=7,
+                  **kwargs):
     """
     Match the fiducial locations for a Wild RC-style camera (4 cross/bulls-eye markers in the corner, possibly
     4 bulls-eye markers along the sides).
@@ -479,8 +480,10 @@ def match_wild_rc(fn_img, size, model, data_strip='left', fn_cam=None, circle_si
         assume the data strip is along the left-hand side, but scanned images may be rotated relative to this.
     :param str fn_cam: the filename of the MeasuresCamera.xml file corresponding to the
         image (default: Ori-InterneScan/MeasuresCamera.xml)
+    :param int width: the thickness of the cross template, in pixels (default: 3)
     :param int circle_size: the size of the circle in which to inscribe the cross-shaped marker (default: no circle)
-    :param int ring_width: the width of the ring if the marker(s) are a cross inscribed with a ring. Only used if
+    :param int ring_width: the width of the ring if the marker(s) are a cross inscribed with a ring. Only used for RC10
+        models.
     :param kwargs: additional keyword arguments to pass to matching.find_fiducials()
     :return:
     """
@@ -488,11 +491,11 @@ def match_wild_rc(fn_img, size, model, data_strip='left', fn_cam=None, circle_si
     assert data_strip in ['left', 'right', 'top', 'bot'], "data_strip must be one of [left, right, top, bot]"
     if model.upper() in ['RC5', 'RC8']:
         fids = [f'P{n}' for n in range(1, 5)]
-        templates = 4 * [_wild_corner(size, model, circle_size, ring_width)]
+        templates = 4 * [_wild_corner(size, model, circle_size, ring_width, width=width)]
     else:
         fids = [f'P{n}' for n in range(1, 9)]
         stempl = _wild_midside(size, model)
-        ctempl = _wild_corner(size, model, circle_size, ring_width)
+        ctempl = _wild_corner(size, model, circle_size, ring_width, width=width)
         templates = 4 * [ctempl] + 4 * [stempl]
 
     if data_strip == 'left':
