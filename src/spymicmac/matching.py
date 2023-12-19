@@ -66,72 +66,11 @@ def find_fiducials(fn_img, templates, fn_cam=None, thresh_tol=0.9, npeaks=5, min
         else:
             measures_cam = _get_rough_locs(measures_cam, img)
 
-    coords_all = []
+    # get all potential matches based on our input parameters
+    coords_all = _get_all_fid_matches(img, templates, measures_cam, thresh_tol, min_dist, npeaks)
 
-    for fid, row in measures_cam.iterrows():
-        templ = templates[fid]
-        tsize = int(min(0.05 * np.array(img.shape)))
-
-        subimg, isize, jsize = make_template(img, (row['rough_i'], row['rough_j']), half_size=tsize)
-        res = cv2.matchTemplate(subimg.astype(np.uint8), templ.astype(np.uint8), cv2.TM_CCORR_NORMED)
-
-        coords = peak_local_max(res, threshold_rel=thresh_tol, min_distance=min_dist, num_peaks=npeaks).astype(float)
-
-        # get subpixel by looking in a small window around each "peak"
-        for ind, coord in enumerate(coords):
-            ii, jj = coord.astype(int)
-            subres, _, _ = make_template(res, (ii, jj), half_size=3)
-
-            sub_x, sub_y = _subpixel(subres, how='max')
-            coords[ind, 1] += sub_x
-            coords[ind, 0] += sub_y
-
-        coords += templ.shape[0] / 2 - 0.5
-
-        coords[:, 1] += row['rough_j'] - jsize[0]
-        coords[:, 0] += row['rough_i'] - isize[0]
-
-        these_coords = pd.DataFrame()
-        these_coords['im_col'] = coords[:, 1]
-        these_coords['im_row'] = coords[:, 0]
-        these_coords['gcp'] = fid
-
-        coords_all.append(these_coords)
-
-    coords_all = pd.concat(coords_all, ignore_index=True)
-
-    nfids = len(coords_all.gcp.unique())
-    combs = list(itertools.combinations(coords_all.index, nfids))
-
-    filtered_combs = [list(c) for c in combs if len(set(coords_all.loc[list(c), 'gcp'].to_list())) == nfids]
-
-    resids = []
-    for c in filtered_combs:
-        these_meas = coords_all.loc[c].set_index('gcp').join(measures_cam)
-
-        model = AffineTransform()
-        model.estimate(these_meas[['im_col', 'im_row']].values, these_meas[['j', 'i']].values)
-        resids.append(model.residuals(these_meas[['im_col', 'im_row']].values,
-                                      these_meas[['j', 'i']].values).mean())
-
-    coords_all = coords_all.loc[filtered_combs[np.argmin(resids)]]
-
-    # for ind, row in coords_all.iterrows():
-    #     this_fid = measures_cam.loc[measures_cam.index == row['gcp']]
-    #     dist = np.sqrt((row.im_col - this_fid['rough_j'])**2 +
-    #                    (row.im_row - this_fid['rough_i'])**2)
-    #     coords_all.loc[ind, 'resid'] = dist.values[0]
-    #
-    # coords_all['resid'] = coords_all['resid'].astype(float)
-    #
-    # inds = []
-    # for fid in templates.keys():
-    #     if len(coords_all.loc[coords_all['gcp'] == fid]) > 0:
-    #         inds.append(coords_all[coords_all['gcp'] == fid]['resid'].idxmin())
-    #     else:
-    #         continue
-    #
-    # coords_all = coords_all.loc[inds]
+    # filter based on the best match
+    coords_all = _filter_fid_matches(coords_all, measures_cam)
 
     # now, drop any duplicated values - if we have these, we need to replace/estimate
     # coords_all = coords_all.sort_values('resid').drop_duplicates(subset=['im_col', 'im_row']).sort_values('gcp')
@@ -164,6 +103,61 @@ def find_fiducials(fn_img, templates, fn_cam=None, thresh_tol=0.9, npeaks=5, min
                xml_declaration=True, encoding="utf-8")
 
     return residuals.mean()
+
+
+def _get_all_fid_matches(img, templates, measures_cam, thresh_tol=0.9, min_dist=1, npeaks=5):
+
+    coords_all = []
+
+    for fid, row in measures_cam.iterrows():
+        templ = templates[fid]
+        tsize = int(min(0.05 * np.array(img.shape)))
+
+        subimg, isize, jsize = make_template(img, (row['rough_i'], row['rough_j']), half_size=tsize)
+        res = cv2.matchTemplate(subimg.astype(np.uint8), templ.astype(np.uint8), cv2.TM_CCORR_NORMED)
+
+        coords = peak_local_max(res, threshold_rel=thresh_tol, min_distance=min_dist, num_peaks=npeaks).astype(float)
+
+        # get subpixel by looking in a small window around each "peak"
+        for ind, coord in enumerate(coords):
+            ii, jj = coord.astype(int)
+            subres, _, _ = make_template(res, (ii, jj), half_size=3)
+
+            sub_x, sub_y = _subpixel(subres, how='max')
+            coords[ind, 1] += sub_x
+            coords[ind, 0] += sub_y
+
+        coords += templ.shape[0] / 2 - 0.5
+
+        coords[:, 1] += row['rough_j'] - jsize[0]
+        coords[:, 0] += row['rough_i'] - isize[0]
+
+        these_coords = pd.DataFrame()
+        these_coords['im_col'] = coords[:, 1]
+        these_coords['im_row'] = coords[:, 0]
+        these_coords['gcp'] = fid
+
+        coords_all.append(these_coords)
+
+    return pd.concat(coords_all, ignore_index=True)
+
+
+def _filter_fid_matches(coords_all, measures_cam):
+    nfids = len(coords_all.gcp.unique())
+    combs = list(itertools.combinations(coords_all.index, nfids))
+
+    filtered_combs = [list(c) for c in combs if len(set(coords_all.loc[list(c), 'gcp'].to_list())) == nfids]
+
+    resids = []
+    for c in filtered_combs:
+        these_meas = coords_all.loc[c].set_index('gcp').join(measures_cam)
+
+        model = AffineTransform()
+        model.estimate(these_meas[['im_col', 'im_row']].values, these_meas[['j', 'i']].values)
+        resids.append(model.residuals(these_meas[['im_col', 'im_row']].values,
+                                      these_meas[['j', 'i']].values).mean())
+
+    return coords_all.loc[filtered_combs[np.argmin(resids)]]
 
 
 def _get_scale(scale, units):
