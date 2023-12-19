@@ -152,12 +152,24 @@ def _filter_fid_matches(coords_all, measures_cam):
     for c in filtered_combs:
         these_meas = coords_all.loc[c].set_index('gcp').join(measures_cam)
 
-        model = AffineTransform()
-        model.estimate(these_meas[['im_col', 'im_row']].values, these_meas[['j', 'i']].values)
+        model, inliers = ransac((these_meas[['im_col', 'im_row']].values, these_meas[['j', 'i']].values),
+                                AffineTransform, min_samples=nfids-1, residual_threshold=1)
         resids.append(model.residuals(these_meas[['im_col', 'im_row']].values,
                                       these_meas[['j', 'i']].values).mean())
 
-    return coords_all.loc[filtered_combs[np.argmin(resids)]]
+    best = coords_all.loc[filtered_combs[np.argmin(resids)]].set_index('gcp').join(measures_cam)
+
+    model, inliers = ransac((best[['im_col', 'im_row']].values, best[['j', 'i']].values),
+                            AffineTransform, min_samples=nfids - 1, residual_threshold=1)
+
+    if np.count_nonzero(inliers) < nfids:
+        for fid, row in best.loc[~inliers].iterrows():
+            print(f'Replacing {fid} with estimated location.')
+            pt = model.inverse(row[['j', 'i']].values)[0]
+            best.loc[fid, 'im_col'] = pt[0]
+            best.loc[fid, 'im_row'] = pt[1]
+
+    return best[['im_col', 'im_row']].reset_index()
 
 
 def _get_scale(scale, units):
