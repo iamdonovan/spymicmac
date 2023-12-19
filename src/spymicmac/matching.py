@@ -76,6 +76,16 @@ def find_fiducials(fn_img, templates, fn_cam=None, thresh_tol=0.9, npeaks=5, min
         res = cv2.matchTemplate(subimg.astype(np.uint8), templ.astype(np.uint8), cv2.TM_CCORR_NORMED)
 
         coords = peak_local_max(res, threshold_rel=thresh_tol, min_distance=min_dist, num_peaks=npeaks).astype(float)
+
+        # get subpixel by looking in a small window around each "peak"
+        for ind, coord in enumerate(coords):
+            ii, jj = coord.astype(int)
+            subres, _, _ = make_template(res, (ii, jj), half_size=3)
+
+            sub_x, sub_y = _subpixel(subres, how='max')
+            coords[ind, 1] += sub_x
+            coords[ind, 0] += sub_y
+
         coords += templ.shape[0] / 2 - 0.5
 
         coords[:, 1] += row['rough_j'] - jsize[0]
