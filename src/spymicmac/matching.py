@@ -432,7 +432,7 @@ def _wild_corner(size, model, circle_size, ring_width):
         if circle_size is not None:
             template = inscribed_cross(circle_size, size, angle=45)
         else:
-            template = cross_template(size, width=1, angle=45, no_border=True)
+            template = cross_template(size, width=3, angle=45, no_border=True)
 
             rows, cols = template.shape
             _width = 9
