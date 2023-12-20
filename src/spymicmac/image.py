@@ -257,7 +257,8 @@ def _spike_filter(img, axis):
         window = []
         for ind in inds:
             window.extend(list(range(ind-10, ind+11)))
-        _inds = list(set(window))
+        _inds = np.array(list(set(window)))
+        _inds = _inds[np.logical_and(_inds >= 0, _inds < img_mean.size)]
         img_mean[_inds] = np.mean([img_mean[min(_inds)], img_mean[max(_inds)]])
 
     return img_mean
