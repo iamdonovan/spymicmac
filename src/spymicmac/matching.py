@@ -88,19 +88,7 @@ def find_fiducials(fn_img, templates, fn_cam=None, thresh_tol=0.9, npeaks=5, min
     print('Mean residual: {:.2f} pixels'.format(residuals.mean()))
 
     # write the measures
-    E = builder.ElementMaker()
-    ImMes = E.MesureAppuiFlottant1Im(E.NameIm(fn_img))
-
-    pt_els = micmac.get_im_meas(coords_all, E)
-    for p in pt_els:
-        ImMes.append(p)
-    os.makedirs('Ori-InterneScan', exist_ok=True)
-
-    outxml = E.SetOfMesureAppuisFlottants(ImMes)
-
-    tree = etree.ElementTree(outxml)
-    tree.write(os.path.join('Ori-InterneScan', 'MeasuresIm-' + fn_img + '.xml'), pretty_print=True,
-               xml_declaration=True, encoding="utf-8")
+    micmac.write_measures_im(coords_all, fn_img)
 
     return residuals.mean()
 
@@ -203,6 +191,36 @@ def _fix_fiducials(coords, measures_cam):
         coords.loc[ind, 'im_row'] = y
 
     return coords.reset_index()
+
+
+def fix_measures_xml(fn_img):
+    """
+    Use an affine transformation to estimate locations of any missing fiducial markers in an image. Output written to
+        Ori-InterneScan/MeasuresIm-{fn_img}.xml
+
+    :param str fn_img: the filename of the image.
+    """
+    measures_cam = micmac.parse_im_meas(os.path.join('Ori-InterneScan', 'MeasuresCamera.xml')).set_index('name')
+    measures_img = micmac.parse_im_meas(os.path.join('Ori-InterneScan', f'MeasuresIm-{fn_img}.xml')).set_index('name')
+
+    meas = measures_cam.join(measures_img, lsuffix='_cam', rsuffix='_img').dropna()
+
+    model = AffineTransform()
+    model.estimate(meas[['j_img', 'i_img']].values,
+                   meas[['j_cam', 'i_cam']].values)
+
+    missing = ~measures_cam.index.isin(measures_img.index)
+
+    for ind, row in measures_cam.loc[missing].iterrows():
+        print('Predicting location of {}'.format(ind))
+        x, y = model.inverse(row[['j', 'i']].values).flatten()
+        measures_img.loc[ind, 'j'] = x
+        measures_img.loc[ind, 'i'] = y
+
+    measures_img.reset_index(inplace=True)
+    measures_img.rename(columns={'name': 'gcp', 'j': 'im_col', 'i': 'im_row'}, inplace=True)
+
+    micmac.write_measures_im(measures_img, fn_img)
 
 
 def _rotate_meas(meas, angle):
@@ -894,18 +912,7 @@ def find_reseau_grid(fn_img, csize=361, return_val=False):
     this_out = os.path.splitext(fn_img)[0]
     fig.savefig(os.path.join('match_imgs', this_out + '_matches.png'), bbox_inches='tight', dpi=200)
 
-    E = builder.ElementMaker()
-    ImMes = E.MesureAppuiFlottant1Im(E.NameIm(fn_img))
-
-    pt_els = micmac.get_im_meas(grid_df, E)
-    for p in pt_els:
-        ImMes.append(p)
-    os.makedirs('Ori-InterneScan', exist_ok=True)
-
-    outxml = E.SetOfMesureAppuisFlottants(ImMes)
-    tree = etree.ElementTree(outxml)
-    tree.write(os.path.join('Ori-InterneScan', 'MeasuresIm-' + fn_img + '.xml'), pretty_print=True,
-               xml_declaration=True, encoding="utf-8")
+    micmac.write_auto_gcps(grid_df, fn_img)
 
     if return_val:
         return grid_df
