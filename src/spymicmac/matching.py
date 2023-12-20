@@ -99,7 +99,7 @@ def _get_all_fid_matches(img, templates, measures_cam, thresh_tol=0.9, min_dist=
 
     for fid, row in measures_cam.iterrows():
         templ = templates[fid]
-        tsize = int(min(0.075 * np.array(img.shape)))
+        tsize = int(min(0.05 * np.array(img.shape)))
         if int(tsize/4) & 1:
             bsize = int(tsize/4)
         else:
@@ -254,8 +254,21 @@ def _get_rough_locs(meas, img=None):
 
     else:
         left, right, top, bot = image.get_rough_frame(img)
-        x_mid = left + (right - left) / 2
-        y_mid = top + (bot - top) / 2
+        left = max(0, left)
+        right = min(img.shape[1], right)
+        top = max(0, top)
+        bot = min(img.shape[0], bot)
+
+        lr = (right - left)
+        tb = (bot - top)
+
+        x_mid = left + lr / 2
+        y_mid = top + tb / 2
+
+        left += 0.075 * lr
+        right -= 0.075 * lr
+        top += 0.075 * tb
+        bot -= 0.075 * tb
 
         scaled['j'] = scaled['j'] * (right - left) + left
         scaled['i'] = scaled['i'] * (bot - top) + top
@@ -543,7 +556,7 @@ def match_wild_rc(fn_img, size, model, data_strip='left', fn_cam=None, width=3, 
         angle = np.deg2rad(90)
 
     tdict = dict(zip(fids, templates))
-    return find_fiducials(fn_img, tdict, fn_cam=fn_cam, angle=angle, use_frame=False, **kwargs)
+    return find_fiducials(fn_img, tdict, fn_cam=fn_cam, angle=angle, **kwargs)
 
 
 def cross_template(shape, width=3, angle=None, no_border=False):
@@ -553,7 +566,7 @@ def cross_template(shape, width=3, angle=None, no_border=False):
     :param int shape: the output shape of the template
     :param int width: the width of the cross at the center of the template (default: 3 pixels).
     :param float angle: the angle to rotate the template by (default: None).
-    :param no_border flat: do not include a border around the cross (default: False)
+    :param bool no_border: do not include a border around the cross (default: False)
     :return: **cross** (*array-like*) -- the cross template
     """
     if isinstance(shape, int):
