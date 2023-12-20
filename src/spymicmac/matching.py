@@ -112,9 +112,13 @@ def _get_all_fid_matches(img, templates, measures_cam, thresh_tol=0.9, min_dist=
     for fid, row in measures_cam.iterrows():
         templ = templates[fid]
         tsize = int(min(0.075 * np.array(img.shape)))
+        if int(tsize/4) & 1:
+            bsize = int(tsize/4)
+        else:
+            bsize = int(tsize/4) + 1
 
         subimg, isize, jsize = make_template(img, (row['rough_i'], row['rough_j']), half_size=tsize)
-        thresh = subimg > filters.threshold_local(subimg, block_size=21)
+        thresh = subimg > filters.threshold_local(subimg, block_size=bsize)
         res = cv2.matchTemplate(thresh.astype(np.uint8), templ.astype(np.uint8), cv2.TM_CCORR_NORMED)
 
         coords = peak_local_max(res, threshold_rel=thresh_tol, min_distance=min_dist, num_peaks=npeaks).astype(float)
@@ -158,19 +162,19 @@ def _filter_fid_matches(coords_all, measures_cam):
         resids.append(model.residuals(these_meas[['im_col', 'im_row']].values,
                                       these_meas[['j', 'i']].values).mean())
 
-    best = coords_all.loc[filtered_combs[np.argmin(resids)]].set_index('gcp').join(measures_cam)
+    # best = coords_all.loc[filtered_combs[np.argmin(resids)]].set_index('gcp').join(measures_cam)
 
-    model, inliers = ransac((best[['im_col', 'im_row']].values, best[['j', 'i']].values),
-                            AffineTransform, min_samples=nfids - 1, residual_threshold=2, max_trials=20)
+    # model, inliers = ransac((best[['im_col', 'im_row']].values, best[['j', 'i']].values),
+    #                         AffineTransform, min_samples=nfids - 1, residual_threshold=2, max_trials=20)
 
-    if np.count_nonzero(inliers) < nfids:
-        for fid, row in best.loc[~inliers].iterrows():
-            print(f'Replacing {fid} with estimated location.')
-            pt = model.inverse(row[['j', 'i']].values)[0]
-            best.loc[fid, 'im_col'] = pt[0]
-            best.loc[fid, 'im_row'] = pt[1]
+    # if np.count_nonzero(inliers) < nfids:
+    #     for fid, row in best.loc[~inliers].iterrows():
+    #         print(f'Replacing {fid} with estimated location.')
+    #         pt = model.inverse(row[['j', 'i']].values)[0]
+    #         best.loc[fid, 'im_col'] = pt[0]
+    #         best.loc[fid, 'im_row'] = pt[1]
 
-    return best[['im_col', 'im_row']].reset_index()
+    return coords_all.loc[filtered_combs[np.argmin(resids)]]
 
 
 def _get_scale(scale, units):
