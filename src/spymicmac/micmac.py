@@ -209,7 +209,7 @@ def parse_im_meas(fn_meas):
 
 def write_measures_im(meas_df, fn_img):
     """
-    Create a MeasuresIm xml file with
+    Create a MeasuresIm xml file for an image.
 
     :param DataFrame meas_df: a DataFrame of image measures, with [gcp, im_col, im_row] columns
     :param str fn_img: the filename of the image.
