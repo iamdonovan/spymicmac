@@ -129,8 +129,8 @@ def _get_all_fid_matches(img, templates, measures_cam, thresh_tol=0.9, min_dist=
 
         coords += templ.shape[0] / 2 - 0.5
 
-        coords[:, 1] += row['rough_j'] - jsize[0]
-        coords[:, 0] += row['rough_i'] - isize[0]
+        coords[:, 1] += np.round(row['rough_j']) - jsize[0]
+        coords[:, 0] += np.round(row['rough_i']) - isize[0]
 
         these_coords = pd.DataFrame()
         these_coords['im_col'] = coords[:, 1]
@@ -153,14 +153,14 @@ def _filter_fid_matches(coords_all, measures_cam):
         these_meas = coords_all.loc[c].set_index('gcp').join(measures_cam)
 
         model, inliers = ransac((these_meas[['im_col', 'im_row']].values, these_meas[['j', 'i']].values),
-                                AffineTransform, min_samples=nfids-1, residual_threshold=1)
+                                AffineTransform, min_samples=nfids-1, residual_threshold=2)
         resids.append(model.residuals(these_meas[['im_col', 'im_row']].values,
                                       these_meas[['j', 'i']].values).mean())
 
     best = coords_all.loc[filtered_combs[np.argmin(resids)]].set_index('gcp').join(measures_cam)
 
     model, inliers = ransac((best[['im_col', 'im_row']].values, best[['j', 'i']].values),
-                            AffineTransform, min_samples=nfids - 1, residual_threshold=1)
+                            AffineTransform, min_samples=nfids - 1, residual_threshold=2)
 
     if np.count_nonzero(inliers) < nfids:
         for fid, row in best.loc[~inliers].iterrows():
