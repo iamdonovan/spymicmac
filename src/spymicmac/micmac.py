@@ -207,6 +207,31 @@ def parse_im_meas(fn_meas):
     return meas_df
 
 
+def write_measures_im(meas_df, fn_img):
+    """
+    Create a MeasuresIm xml file with
+
+    :param DataFrame meas_df: a DataFrame of image measures, with [gcp, im_col, im_row] columns
+    :param str fn_img: the filename of the image.
+    :return:
+    """
+    os.makedirs('Ori-InterneScan', exist_ok=True)
+
+    # write the measures
+    E = builder.ElementMaker()
+    ImMes = E.MesureAppuiFlottant1Im(E.NameIm(fn_img))
+
+    pt_els = get_im_meas(meas_df, E)
+    for p in pt_els:
+        ImMes.append(p)
+
+    outxml = E.SetOfMesureAppuisFlottants(ImMes)
+
+    tree = etree.ElementTree(outxml)
+    tree.write(os.path.join('Ori-InterneScan', 'MeasuresIm-' + fn_img + '.xml'), pretty_print=True,
+               xml_declaration=True, encoding="utf-8")
+
+
 def generate_measures_files(joined=False):
     """
     Create id_fiducial.txt, MeasuresCamera.xml, and Tmp-SL-Glob.xml files for KH-9 Hexagon images.
