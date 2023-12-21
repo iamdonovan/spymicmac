@@ -895,13 +895,14 @@ def _generate_glob(fn_ids):
     tree.write('Tmp-SL-Glob.xml', pretty_print=True, xml_declaration=True, encoding="utf-8")
 
 
-def batch_saisie_fids(imlist, flavor='qt', fn_cam=None):
+def batch_saisie_fids(imlist, flavor='qt', fn_cam=None, clean=True):
     """
     Run SaisieAppuisInit to locate the fiducial markers for a given list of images.
 
     :param list imlist: the list of image filenames.
     :param str flavor: which version of SaisieAppuisInit to run. Must be one of [qt, og] (default: qt)
     :param str fn_cam: the filename for the MeasuresCamera.xml file (default: Ori-InterneScan/MeasuresCamera.xml)
+    :param bool clean: remove any image files in Tmp-SaisieAppuis
     """
     assert flavor in ['qt', 'og'], "flavor must be one of [qt, og]"
 
@@ -931,8 +932,14 @@ def batch_saisie_fids(imlist, flavor='qt', fn_cam=None):
 
     for fn_img in imlist:
         if os.path.exists(os.path.join('Ori-InterneScan', f'MeasuresIm-{fn_img}.xml')):
+            if clean:
+                tmplist = glob('*' + fn_img + '*', root_dir='Tmp-SaisieAppuis')
+                for fn_tmp in tmplist:
+                    os.remove(os.path.join('Tmp-SaisieAppuis', fn_tmp))
+
             shutil.copy(os.path.join('Ori-InterneScan', f'MeasuresIm-{fn_img}.xml'),
                         f'MeasuresIm-{fn_img}-S2D.xml')
+
             shutil.copy('Tmp-SL-Glob.xml',
                         os.path.join('Tmp-SaisieAppuis', f'Tmp-SL-Glob-MeasuresIm-{fn_img}.xml'))
 
