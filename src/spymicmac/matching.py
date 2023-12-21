@@ -27,7 +27,8 @@ from spymicmac import image, micmac, resample, register
 ######################################################################################################################
 # tools for matching fiducial markers (or things like fiducial markers)
 ######################################################################################################################
-def find_fiducials(fn_img, templates, fn_cam=None, thresh_tol=0.9, npeaks=5, min_dist=1, angle=None, use_frame=True):
+def find_fiducials(fn_img, templates, fn_cam=None, thresh_tol=0.9, npeaks=5, min_dist=1, angle=None,
+                   use_frame=True, tsize=None):
     """
     Match the location of fiducial markers for a scanned aerial photo.
 
@@ -40,9 +41,8 @@ def find_fiducials(fn_img, templates, fn_cam=None, thresh_tol=0.9, npeaks=5, min
     :param int min_dist: the minimum distance allowed between potential peaks (default: not set)
     :param int angle: the angle by which to rotate the points in MeasuresCam (default: do not rotate)
     :param bool use_frame: use the rough image frame to try to find fiducial markers (default: True)
+    :param int tsize: target half-size to use for matching (default: calculated based on image size)
     """
-    # assert units in ['microns', 'dpi'], "scale must be one of [microns, dpi]"
-
     img = io.imread(fn_img)
 
     measures_cam = micmac.parse_im_meas(os.path.join('Ori-InterneScan', 'MeasuresCamera.xml'))
@@ -58,7 +58,7 @@ def find_fiducials(fn_img, templates, fn_cam=None, thresh_tol=0.9, npeaks=5, min
 
         measures_cam = measures_cam.join(measures_img)
     else:
-        # now, get the fractional locations (0.05, 0.5, 0.95) in the image of each marker
+        # now, get the fractional locations in the image of each marker
         if not use_frame:
             measures_cam = _get_rough_locs(measures_cam)
             measures_cam['rough_j'] *= img.shape[1]
@@ -67,7 +67,7 @@ def find_fiducials(fn_img, templates, fn_cam=None, thresh_tol=0.9, npeaks=5, min
             measures_cam = _get_rough_locs(measures_cam, img)
 
     # get all potential matches based on our input parameters
-    coords_all = _get_all_fid_matches(img, templates, measures_cam, thresh_tol, min_dist, npeaks)
+    coords_all = _get_all_fid_matches(img, templates, measures_cam, thresh_tol, min_dist, npeaks, use_frame, tsize)
 
     # filter based on the best match
     coords_all = _filter_fid_matches(coords_all, measures_cam)
@@ -93,19 +93,26 @@ def find_fiducials(fn_img, templates, fn_cam=None, thresh_tol=0.9, npeaks=5, min
     return residuals.mean()
 
 
-def _get_all_fid_matches(img, templates, measures_cam, thresh_tol=0.9, min_dist=1, npeaks=5):
+def _get_all_fid_matches(img, templates, measures_cam, thresh_tol=0.9, min_dist=1, npeaks=5,
+                         use_frame=False, tsize=None):
 
     coords_all = []
 
+    if tsize is None:
+        if not use_frame:
+            tsize = int(min(0.075 * np.array([measures_cam.rough_j.max() - measures_cam.rough_j.min(),
+                                              measures_cam.rough_i.max() - measures_cam.rough_i.min()])))
+        else:
+            tsize = int(min(0.04 * np.array([measures_cam.rough_j.max() - measures_cam.rough_j.min(),
+                                             measures_cam.rough_i.max() - measures_cam.rough_i.min()])))
+
+    if int(tsize / 4) & 1:
+        bsize = int(tsize / 4)
+    else:
+        bsize = int(tsize / 4) + 1
+
     for fid, row in measures_cam.iterrows():
         templ = templates[fid]
-        tsize = int(min(0.075 * np.array([measures_cam.rough_j.max() - measures_cam.rough_j.min(),
-                                          measures_cam.rough_i.max() - measures_cam.rough_i.min()])))
-
-        if int(tsize/4) & 1:
-            bsize = int(tsize/4)
-        else:
-            bsize = int(tsize/4) + 1
 
         subimg, isize, jsize = make_template(img, (row['rough_i'], row['rough_j']), half_size=tsize)
         thresh = subimg > filters.threshold_local(subimg, block_size=bsize)
@@ -255,11 +262,7 @@ def _get_rough_locs(meas, img=None):
         rough_pts = [Point(x, y) for x, y in zip(rough_x.flatten(), rough_y.flatten())]
 
     else:
-        left, right, top, bot = image.get_rough_frame(img, fact=1)
-        left = max(0, left)
-        right = min(img.shape[1], right)
-        top = max(0, top)
-        bot = min(img.shape[0], bot)
+        left, right, top, bot = _clean_frame(image.get_rough_frame(img, fact=4), img)
 
         lr = (right - left)
         tb = (bot - top)
@@ -288,8 +291,17 @@ def _get_rough_locs(meas, img=None):
         meas.loc[ind, 'rough_j'] = rough_x.flatten()[nind]
         meas.loc[ind, 'rough_i'] = rough_y.flatten()[nind]
 
-
     return meas
+
+
+def _clean_frame(frame, img):
+    left, right, top, bot = frame
+
+    left = max(0, left)
+    right = min(img.shape[1], right)
+    top = max(0, top)
+    bot = min(img.shape[0], bot)
+    return left, right, top, bot
 
 
 def _corner(size):
