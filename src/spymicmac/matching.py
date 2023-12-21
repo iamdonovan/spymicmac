@@ -99,7 +99,9 @@ def _get_all_fid_matches(img, templates, measures_cam, thresh_tol=0.9, min_dist=
 
     for fid, row in measures_cam.iterrows():
         templ = templates[fid]
-        tsize = int(min(0.05 * np.array(img.shape)))
+        tsize = int(min(0.075 * np.array([measures_cam.rough_j.max() - measures_cam.rough_j.min(),
+                                          measures_cam.rough_i.max() - measures_cam.rough_i.min()])))
+
         if int(tsize/4) & 1:
             bsize = int(tsize/4)
         else:
@@ -253,7 +255,7 @@ def _get_rough_locs(meas, img=None):
         rough_pts = [Point(x, y) for x, y in zip(rough_x.flatten(), rough_y.flatten())]
 
     else:
-        left, right, top, bot = image.get_rough_frame(img)
+        left, right, top, bot = image.get_rough_frame(img, fact=1)
         left = max(0, left)
         right = min(img.shape[1], right)
         top = max(0, top)
@@ -265,10 +267,10 @@ def _get_rough_locs(meas, img=None):
         x_mid = left + lr / 2
         y_mid = top + tb / 2
 
-        left += 0.075 * lr
-        right -= 0.075 * lr
-        top += 0.075 * tb
-        bot -= 0.075 * tb
+        left += 0.025 * lr
+        right -= 0.025 * lr
+        top += 0.025 * tb
+        bot -= 0.025 * tb
 
         scaled['j'] = scaled['j'] * (right - left) + left
         scaled['i'] = scaled['i'] * (bot - top) + top
