@@ -568,17 +568,12 @@ def match_wild_rc(fn_img, size, model, data_strip='left', fn_cam=None, width=3, 
         ctempl = _wild_corner(size, model, circle_size, ring_width, width=width, gap=gap)
         templates = 4 * [ctempl] + 4 * [stempl]
 
-    if data_strip == 'left':
-        angle = None
-    elif data_strip == 'top':
-        angle = np.deg2rad(-90)
-    elif data_strip == 'right':
-        angle = np.deg2rad(180)
-    else:
-        angle = np.deg2rad(90)
+    locs = ['left', 'top', 'right', 'bot']
+    angles = [None, np.deg2rad(-90), np.deg2rad(180), np.deg2rad(90)]
+    ldict = dict(zip(locs, angles))
 
     tdict = dict(zip(fids, templates))
-    return find_fiducials(fn_img, tdict, fn_cam=fn_cam, angle=angle, **kwargs)
+    return find_fiducials(fn_img, tdict, fn_cam=fn_cam, angle=ldict[data_strip], **kwargs)
 
 
 def cross_template(shape, width=3, angle=None, no_border=False):
