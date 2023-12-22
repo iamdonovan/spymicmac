@@ -106,10 +106,7 @@ def _get_all_fid_matches(img, templates, measures_cam, thresh_tol=0.9, min_dist=
             tsize = int(min(0.04 * np.array([measures_cam.rough_j.max() - measures_cam.rough_j.min(),
                                              measures_cam.rough_i.max() - measures_cam.rough_i.min()])))
 
-    if int(tsize / 4) & 1:
-        bsize = int(tsize / 4)
-    else:
-        bsize = int(tsize / 4) + 1
+    bsize = _odd(int(tsize/4))
 
     for fid, row in measures_cam.iterrows():
         templ = templates[fid]
@@ -181,6 +178,12 @@ def _get_scale(scale, units):
         scale = 1 / scale * 1000
 
     return scale
+
+def _odd(num):
+    if num & 1:
+        return num
+    else:
+        return num + 1
 
 
 def _fix_fiducials(coords, measures_cam):
@@ -491,26 +494,26 @@ def match_zeiss_rmk(fn_img, size, dot_size, data_strip='left', fn_cam=None, corn
     return find_fiducials(fn_img, tdict, fn_cam=fn_cam, angle=angle, **kwargs)
 
 
-def _wild_corner(size, model, circle_size, ring_width, width=3):
+def _wild_corner(size, model, circle_size=None, ring_width=7, width=3, gap=9):
 
     target_angle = 45
-    if model.upper() in ['RC5', 'RC8']:
-        if circle_size is not None:
+    if model.upper() in ['RC5']:
+        if circle_size is None:
+            circle_size = _odd(int(1.4 * size))  # approximate but probably good enough
             template = inscribed_cross(circle_size, size, angle=45)
-        else:
-            template = cross_template(size, width=width, angle=45, no_border=True)
+    elif model.upper() in ['RC5A', 'RC8']:
+        template = cross_template(size, width=width, angle=45, no_border=True)
 
-            rows, cols = template.shape
-            _width = 9
+        rows, cols = template.shape
 
-            half_r = int((rows - 1) / 2)
-            half_c = int((rows - 1) / 2)
-            half_w = int((_width - 1) / 2)
+        half_r = int((rows - 1) / 2)
+        half_c = int((rows - 1) / 2)
+        half_w = int((gap - 1) / 2)
 
-            template[half_r - half_w:half_r + half_w + 1, :] = 0
-            template[:, half_c - half_w:half_c + half_w + 1] = 0
+        template[half_r - half_w:half_r + half_w + 1, :] = 0
+        template[:, half_c - half_w:half_c + half_w + 1] = 0
 
-            template[template > 0.8] = 255
+        template[template > 0.8] = 255
     else:
         template = wagon_wheel(size, width=width, circle_size=circle_size, circle_width=ring_width, angle=target_angle)
 
@@ -529,7 +532,7 @@ def _wild_midside(size, model, circle_size, ring_width):
     return template
 
 
-def match_wild_rc(fn_img, size, model, data_strip='left', fn_cam=None, width=3, circle_size=None, ring_width=7,
+def match_wild_rc(fn_img, size, model, data_strip='left', fn_cam=None, width=3, circle_size=None, ring_width=7, gap=9,
                   **kwargs):
     """
     Match the fiducial locations for a Wild RC-style camera (4 cross/bulls-eye markers in the corner, possibly
@@ -546,18 +549,23 @@ def match_wild_rc(fn_img, size, model, data_strip='left', fn_cam=None, width=3, 
     :param int circle_size: the size of the circle in which to inscribe the cross-shaped marker (default: no circle)
     :param int ring_width: the width of the ring if the marker(s) are a cross inscribed with a ring. Only used for RC10
         models.
+    :param int gap: the width, in pixels, of the gap in the middle of the cross (default: 9)
     :param kwargs: additional keyword arguments to pass to matching.find_fiducials()
     :return:
     """
-    assert model.upper() in ['RC5', 'RC8', 'RC10'], "model must be one of [RC5, RC8, RC10]"
+    assert model.upper() in ['RC5', 'RC5A', 'RC8', 'RC10'], "model must be one of [RC5, RC5A, RC8, RC10]"
     assert data_strip in ['left', 'right', 'top', 'bot'], "data_strip must be one of [left, right, top, bot]"
-    if model.upper() in ['RC5', 'RC8']:
+    if model.upper() == 'RC5':
         fids = [f'P{n}' for n in range(1, 5)]
-        templates = 4 * [_wild_corner(size, model, circle_size, ring_width, width=width)]
+        # TODO: replace with dark cross inscribed in circle
+        templates = 4 * [_wild_corner(size, model, circle_size, ring_width, width=width, gap=gap)]
+    elif model.upper() in ['RC5A', 'RC8']:
+        fids = [f'P{n}' for n in range(1, 5)]
+        templates = 4 * [_wild_corner(size, model, circle_size, ring_width, width=width, gap=gap)]
     else:
         fids = [f'P{n}' for n in range(1, 9)]
         stempl = _wild_midside(size, model)
-        ctempl = _wild_corner(size, model, circle_size, ring_width, width=width)
+        ctempl = _wild_corner(size, model, circle_size, ring_width, width=width, gap=gap)
         templates = 4 * [ctempl] + 4 * [stempl]
 
     if data_strip == 'left':
