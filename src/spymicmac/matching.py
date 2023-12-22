@@ -506,12 +506,13 @@ def _wild_corner(size, model, circle_size=None, ring_width=7, width=3, gap=9):
 
         rows, cols = template.shape
 
-        half_r = int((rows - 1) / 2)
-        half_c = int((rows - 1) / 2)
-        half_w = int((gap - 1) / 2)
+        if gap is not None:
+            half_r = int((rows - 1) / 2)
+            half_c = int((rows - 1) / 2)
+            half_w = int((gap - 1) / 2)
 
-        template[half_r - half_w:half_r + half_w + 1, :] = 0
-        template[:, half_c - half_w:half_c + half_w + 1] = 0
+            template[half_r - half_w:half_r + half_w + 1, :] = 0
+            template[:, half_c - half_w:half_c + half_w + 1] = 0
 
         template[template > 0.8] = 255
     else:
