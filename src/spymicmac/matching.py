@@ -28,7 +28,7 @@ from spymicmac import image, micmac, resample, register
 # tools for matching fiducial markers (or things like fiducial markers)
 ######################################################################################################################
 def find_fiducials(fn_img, templates, fn_cam=None, thresh_tol=0.9, npeaks=5, min_dist=1, angle=None,
-                   use_frame=True, tsize=None):
+                   use_frame=True, tsize=None, threshold=True):
     """
     Match the location of fiducial markers for a scanned aerial photo.
 
@@ -42,6 +42,7 @@ def find_fiducials(fn_img, templates, fn_cam=None, thresh_tol=0.9, npeaks=5, min
     :param int angle: the angle by which to rotate the points in MeasuresCam (default: do not rotate)
     :param bool use_frame: use the rough image frame to try to find fiducial markers (default: True)
     :param int tsize: target half-size to use for matching (default: calculated based on image size)
+    :param bool threshold: use a local threshold to help find matches (default: True)
     """
     img = io.imread(fn_img)
 
@@ -67,7 +68,8 @@ def find_fiducials(fn_img, templates, fn_cam=None, thresh_tol=0.9, npeaks=5, min
             measures_cam = _get_rough_locs(measures_cam, img)
 
     # get all potential matches based on our input parameters
-    coords_all = _get_all_fid_matches(img, templates, measures_cam, thresh_tol, min_dist, npeaks, use_frame, tsize)
+    coords_all = _get_all_fid_matches(img, templates, measures_cam, thresh_tol, min_dist,
+                                      npeaks, use_frame, tsize, threshold)
 
     # filter based on the best match
     coords_all = _filter_fid_matches(coords_all, measures_cam)
@@ -94,7 +96,7 @@ def find_fiducials(fn_img, templates, fn_cam=None, thresh_tol=0.9, npeaks=5, min
 
 
 def _get_all_fid_matches(img, templates, measures_cam, thresh_tol=0.9, min_dist=1, npeaks=5,
-                         use_frame=False, tsize=None):
+                         use_frame=False, tsize=None, threshold=True):
 
     coords_all = []
 
@@ -112,8 +114,11 @@ def _get_all_fid_matches(img, templates, measures_cam, thresh_tol=0.9, min_dist=
         templ = templates[fid]
 
         subimg, isize, jsize = make_template(img, (row['rough_i'], row['rough_j']), half_size=tsize)
-        thresh = subimg > filters.threshold_local(subimg, block_size=bsize)
-        res = cv2.matchTemplate(thresh.astype(np.uint8), templ.astype(np.uint8), cv2.TM_CCORR_NORMED)
+        if threshold:
+            thresh = subimg > filters.threshold_local(subimg, block_size=bsize)
+            res = cv2.matchTemplate(thresh.astype(np.uint8), templ.astype(np.uint8), cv2.TM_CCORR_NORMED)
+        else:
+            res = cv2.matchTemplate(subimg.astype(np.uint8), templ.astype(np.uint8), cv2.TM_CCORR_NORMED)
 
         coords = peak_local_max(res, threshold_rel=thresh_tol, min_distance=min_dist, num_peaks=npeaks).astype(float)
 
