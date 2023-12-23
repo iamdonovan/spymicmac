@@ -561,11 +561,8 @@ def match_wild_rc(fn_img, size, model, data_strip='left', fn_cam=None, width=3, 
     """
     assert model.upper() in ['RC5', 'RC5A', 'RC8', 'RC10'], "model must be one of [RC5, RC5A, RC8, RC10]"
     assert data_strip in ['left', 'right', 'top', 'bot'], "data_strip must be one of [left, right, top, bot]"
-    if model.upper() == 'RC5':
-        fids = [f'P{n}' for n in range(1, 5)]
-        # TODO: replace with dark cross inscribed in circle
-        templates = 4 * [_wild_corner(size, model, circle_size, ring_width, width=width, gap=gap)]
-    elif model.upper() in ['RC5A', 'RC8']:
+
+    if model.upper() in ['RC5', 'RC5A', 'RC8']:
         fids = [f'P{n}' for n in range(1, 5)]
         templates = 4 * [_wild_corner(size, model, circle_size, ring_width, width=width, gap=gap)]
     else:
