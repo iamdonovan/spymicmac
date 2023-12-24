@@ -148,6 +148,14 @@ def _get_all_fid_matches(img, templates, measures_cam, thresh_tol=0.9, min_dist=
 
 def _filter_fid_matches(coords_all, measures_cam):
     nfids = len(coords_all.gcp.unique())
+    if nfids < len(measures_cam) - 1:
+        print(f'Unable to find a transformation with only {nfids} points.')
+        inds = []
+        for fid in coords_all.gcp.unique():
+            inds.append((coords_all['gcp'] == fid).argmax())
+
+        return coords_all.loc[inds]
+
     combs = list(itertools.combinations(coords_all.index, nfids))
 
     filtered_combs = [list(c) for c in combs if len(set(coords_all.loc[list(c), 'gcp'].to_list())) == nfids]
