@@ -28,7 +28,7 @@ from spymicmac import image, micmac, resample, register
 # tools for matching fiducial markers (or things like fiducial markers)
 ######################################################################################################################
 def find_fiducials(fn_img, templates, fn_cam=None, thresh_tol=0.9, npeaks=5, min_dist=1, angle=None,
-                   use_frame=True, tsize=None, threshold=True):
+                   use_frame=True, tsize=None, threshold=True, dual=False):
     """
     Match the location of fiducial markers for a scanned aerial photo.
 
@@ -43,6 +43,7 @@ def find_fiducials(fn_img, templates, fn_cam=None, thresh_tol=0.9, npeaks=5, min
     :param bool use_frame: use the rough image frame to try to find fiducial markers (default: True)
     :param int tsize: target half-size to use for matching (default: calculated based on image size)
     :param bool threshold: use a local threshold to help find matches (default: True)
+    :param bool dual: match using both thresholding and not thresholding to help find matches (default: False)
     """
     img = io.imread(fn_img)
 
@@ -70,6 +71,11 @@ def find_fiducials(fn_img, templates, fn_cam=None, thresh_tol=0.9, npeaks=5, min
     # get all potential matches based on our input parameters
     coords_all = _get_all_fid_matches(img, templates, measures_cam, thresh_tol, min_dist,
                                       npeaks, use_frame, tsize, threshold)
+    if dual:
+        coords_all = pd.concat([coords_all,
+                                _get_all_fid_matches(img, templates, measures_cam, thresh_tol, min_dist,
+                                                     npeaks, use_frame, tsize, ~threshold)],
+                               ignore_index=True)
 
     # filter based on the best match
     coords_all = _filter_fid_matches(coords_all, measures_cam)
@@ -80,12 +86,14 @@ def find_fiducials(fn_img, templates, fn_cam=None, thresh_tol=0.9, npeaks=5, min
         print('One or more markers could not be found. \nAttempting to predict location(s) using affine transformation')
         coords_all = _fix_fiducials(coords_all, measures_cam)
 
-    model = AffineTransform()
-    model.estimate(coords_all[['im_col', 'im_row']].values,
-                   measures_cam[['j', 'i']].values)
+    joined = measures_cam.join(coords_all.set_index('gcp'))
 
-    residuals = model.residuals(coords_all[['im_col', 'im_row']].values,
-                                measures_cam[['j', 'i']].values)
+    model = AffineTransform()
+    model.estimate(joined[['im_col', 'im_row']].values,
+                   joined[['j', 'i']].values)
+
+    residuals = model.residuals(joined[['im_col', 'im_row']].values,
+                                joined[['j', 'i']].values)
 
     print('Mean residual: {:.2f} pixels'.format(residuals.mean()))
 
