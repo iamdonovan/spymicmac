@@ -512,8 +512,10 @@ def _wild_corner(size, model, circle_size=None, ring_width=7, width=3, gap=9):
     target_angle = 45
     if model.upper() in ['RC5']:
         if circle_size is None:
-            circle_size = _odd(int(1.4 * size))  # approximate but probably good enough
-            template = inscribed_cross(circle_size, size, angle=45)
+            circle_size = _odd(int(1.2 * size))  # approximate but probably good enough
+        template = inscribed_cross(circle_size, size, angle=45)
+        template = np.pad(template, 20)
+
     elif model.upper() in ['RC5A', 'RC8']:
         template = cross_template(size, width=width, angle=45, no_border=True)
 
