@@ -2,9 +2,11 @@
 spymicmac.resample is a collection of tools for resampling images
 """
 import os
+import multiprocessing as mp
 import PIL.Image
 from osgeo import gdal
 from skimage import io
+from skimage.transform import ProjectiveTransform, warp
 from scipy import ndimage
 import numpy as np
 from spymicmac import image, micmac, matching
@@ -179,6 +181,7 @@ def _border_mask(img, border):
     mask[border:-border, border:-border] = 0
     return mask
 
+
 def align_image_borders(fn_left, fn_right, border):
 
     left = io.imread(fn_left)
@@ -186,3 +189,61 @@ def align_image_borders(fn_left, fn_right, border):
 
     mask_left = _border_mask(left, border)
     mask_right = _border_mask(right, border)
+
+
+def resample_projective(fn_img, scale, fn_cam=None, nproc=1):
+    """
+    Resample image(s) using a projective transform.
+
+    :param str|list fn_img: the filename, or a list of filenames, of the image(s)
+    :param float scale: the image scale (in mm/pixel) to use
+    :param str fn_cam: the filename for the MeasuresCamera.xml file (default: Ori-InterneScan/MeasuresCamera.xml)
+    :param int nproc: the number of processors to use (default: 1)
+    :return:
+    """
+    if type(fn_img) is str:
+        _projective(fn_img=fn_img, scale=scale, fn_cam=fn_cam)
+    else:
+        if nproc > 1:
+            pool = mp.Pool(nproc, maxtasksperchild=1)
+            arg_dict = {'scale': scale, 'fn_cam': fn_cam}
+            pool_args = [{'fn_img': fn} for fn in fn_img]
+            for d in pool_args:
+                d.update(arg_dict)
+
+            pool.map(_projective_wrapper, pool_args, chunksize=1)
+            pool.close()
+            pool.join()
+        else:
+            for fn in fn_img:
+                _projective(fn_img=fn, scale=scale, fn_cam=fn_cam)
+
+
+def _projective_wrapper(args):
+    _projective(**args)
+
+
+def _projective(fn_img=None, scale=None, fn_cam=None):
+    print(fn_img)
+    meas = micmac.parse_im_meas(os.path.join('Ori-InterneScan', f'MeasuresIm-{fn_img}.xml'))
+    if fn_cam is None:
+        measures_cam = micmac.parse_im_meas(os.path.join('Ori-InterneScan', 'MeasuresCamera.xml'))
+    else:
+        measures_cam = micmac.parse_im_meas(fn_cam)
+
+    measures_cam['i'] /= scale
+    measures_cam['j'] /= scale
+
+    joined = meas.set_index('name').join(measures_cam.set_index('name'), lsuffix='_img', rsuffix='_cam')
+
+    model = ProjectiveTransform()
+    model.estimate(joined[['j_img', 'i_img']].values,
+                   joined[['j_cam', 'i_cam']].values)
+
+    outshape = ((joined['i_cam'].max() - joined['i_cam'].min()),
+                (joined['j_cam'].max() - joined['j_cam'].min()))
+
+    img = io.imread(fn_img)
+    img_tfm = warp(img, model.inverse, output_shape=outshape, preserve_range=True, order=5)
+
+    io.imsave('OIS-Reech_' + fn_img, img_tfm.astype(np.uint8))
