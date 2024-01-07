@@ -516,7 +516,7 @@ def match_zeiss_rmk(fn_img, size, dot_size, data_strip='left', fn_cam=None, corn
     return find_fiducials(fn_img, tdict, fn_cam=fn_cam, angle=angle, **kwargs)
 
 
-def _wild_corner(size, model, circle_size=None, ring_width=7, width=3, gap=None, vgap=None):
+def _wild_corner(size, model, circle_size=None, ring_width=7, width=3, gap=None, vgap=None, dot_size=None):
 
     target_angle = 45
     if model.upper() in ['RC5']:
@@ -544,6 +544,9 @@ def _wild_corner(size, model, circle_size=None, ring_width=7, width=3, gap=None,
             template[half_r - half_v:half_r + half_v + 1, :] = 0
             template[:, half_c - half_h:half_c + half_h + 1] = 0
 
+        if dot_size is not None:
+            template += padded_dot(size, dot_size)
+
         template[template > 0.8] = 255
     else:
         template = wagon_wheel(size, width=width, circle_size=circle_size, circle_width=ring_width, angle=target_angle)
@@ -564,7 +567,7 @@ def _wild_midside(size, model, circle_size, ring_width):
 
 
 def match_wild_rc(fn_img, size, model, data_strip='left', fn_cam=None, width=3, circle_size=None, ring_width=7, gap=9,
-                  vgap=None, **kwargs):
+                  vgap=None, dot_size=None, **kwargs):
     """
     Match the fiducial locations for a Wild RC-style camera (4 cross/bulls-eye markers in the corner, possibly
     4 bulls-eye markers along the sides).
@@ -582,6 +585,7 @@ def match_wild_rc(fn_img, size, model, data_strip='left', fn_cam=None, width=3, 
         models.
     :param int gap: the width, in pixels, of the gap in the middle of the cross (default: 9)
     :param int vgap: the height, in pixels, of the gap in the middle of the cross (default: same as gap)
+    :param int dot_size: the half-size, in pixels, of the dot in the middle of the cross (default: no dot)
     :param kwargs: additional keyword arguments to pass to matching.find_fiducials()
     :return:
     """
@@ -590,11 +594,12 @@ def match_wild_rc(fn_img, size, model, data_strip='left', fn_cam=None, width=3, 
 
     if model.upper() in ['RC5', 'RC5A', 'RC8']:
         fids = [f'P{n}' for n in range(1, 5)]
-        templates = 4 * [_wild_corner(size, model, circle_size, ring_width, width=width, gap=gap, vgap=vgap)]
+        templates = 4 * [_wild_corner(size, model, circle_size, ring_width, width=width,
+                                      gap=gap, vgap=vgap, dot_size=dot_size)]
     else:
         fids = [f'P{n}' for n in range(1, 9)]
         stempl = _wild_midside(size, model)
-        ctempl = _wild_corner(size, model, circle_size, ring_width, width=width, gap=gap, vgap=vgap)
+        ctempl = _wild_corner(size, model, circle_size, ring_width, width=width, gap=gap, vgap=vgap, dot_size=dot_size)
         templates = 4 * [ctempl] + 4 * [stempl]
 
     locs = ['left', 'top', 'right', 'bot']
