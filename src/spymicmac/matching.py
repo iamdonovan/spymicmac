@@ -8,13 +8,11 @@ import multiprocessing as mp
 import cv2
 import matplotlib.pyplot as plt
 import pandas as pd
-import lxml.etree as etree
-import lxml.builder as builder
 from skimage import morphology, io, filters
 from skimage.morphology import binary_dilation, disk
 from skimage.measure import ransac
 from skimage.feature import peak_local_max
-from skimage.transform import AffineTransform, EuclideanTransform
+from skimage.transform import EuclideanTransform, SimilarityTransform
 from scipy.interpolate import RectBivariateSpline as RBS
 from scipy import ndimage
 import numpy as np
@@ -86,14 +84,7 @@ def find_fiducials(fn_img, templates, fn_cam=None, thresh_tol=0.9, npeaks=5, min
         print('One or more markers could not be found. \nAttempting to predict location(s) using affine transformation')
         coords_all = _fix_fiducials(coords_all, measures_cam)
 
-    joined = measures_cam.join(coords_all.set_index('gcp'))
-
-    model = AffineTransform()
-    model.estimate(joined[['im_col', 'im_row']].values,
-                   joined[['j', 'i']].values)
-
-    residuals = model.residuals(joined[['im_col', 'im_row']].values,
-                                joined[['j', 'i']].values)
+    _, residuals = _get_residuals(coords_all, measures_cam)
 
     print('Mean residual: {:.2f} pixels'.format(residuals.mean()))
 
@@ -173,21 +164,9 @@ def _filter_fid_matches(coords_all, measures_cam):
         these_meas = coords_all.loc[c].set_index('gcp').join(measures_cam)
 
         model, inliers = ransac((these_meas[['im_col', 'im_row']].values, these_meas[['j', 'i']].values),
-                                AffineTransform, min_samples=nfids-1, residual_threshold=2, max_trials=20)
+                                SimilarityTransform, min_samples=nfids-1, residual_threshold=2, max_trials=20)
         resids.append(model.residuals(these_meas[['im_col', 'im_row']].values,
                                       these_meas[['j', 'i']].values).mean())
-
-    # best = coords_all.loc[filtered_combs[np.argmin(resids)]].set_index('gcp').join(measures_cam)
-
-    # model, inliers = ransac((best[['im_col', 'im_row']].values, best[['j', 'i']].values),
-    #                         AffineTransform, min_samples=nfids - 1, residual_threshold=2, max_trials=20)
-
-    # if np.count_nonzero(inliers) < nfids:
-    #     for fid, row in best.loc[~inliers].iterrows():
-    #         print(f'Replacing {fid} with estimated location.')
-    #         pt = model.inverse(row[['j', 'i']].values)[0]
-    #         best.loc[fid, 'im_col'] = pt[0]
-    #         best.loc[fid, 'im_row'] = pt[1]
 
     return coords_all.loc[filtered_combs[np.argmin(resids)]]
 
@@ -209,11 +188,8 @@ def _odd(num):
 
 
 def _fix_fiducials(coords, measures_cam):
-    joined = coords.merge(measures_cam, left_on='gcp', right_on='name')
 
-    model = AffineTransform()
-    model.estimate(joined[['im_col', 'im_row']].values,
-                   joined[['j', 'i']].values)
+    model, residuals = _get_residuals(coords, measures_cam)
 
     missing = ~measures_cam.index.isin(coords['gcp'])
     coords.set_index('gcp', inplace=True)
@@ -239,7 +215,7 @@ def fix_measures_xml(fn_img):
 
     meas = measures_cam.join(measures_img, lsuffix='_cam', rsuffix='_img').dropna()
 
-    model = AffineTransform()
+    model = SimilarityTransform()
     model.estimate(meas[['j_img', 'i_img']].values,
                    meas[['j_cam', 'i_cam']].values)
 
@@ -255,6 +231,17 @@ def fix_measures_xml(fn_img):
     measures_img.rename(columns={'name': 'gcp', 'j': 'im_col', 'i': 'im_row'}, inplace=True)
 
     micmac.write_measures_im(measures_img, fn_img)
+
+
+def _get_residuals(meas_img, meas_cam):
+    joined = meas_cam.join(meas_img.set_index('gcp'))
+
+    model = SimilarityTransform()
+    est = model.estimate(joined[['im_col', 'im_row']].values, joined[['j', 'i']].values)
+    if est:
+        return model, model.residuals(joined[['im_col', 'im_row']].values, joined[['j', 'i']].values)
+    else:
+        raise RuntimeError("Unable to estimate an affine transformation")
 
 
 def _rotate_meas(meas, angle):
@@ -772,7 +759,7 @@ def match_reseau_grid(img, coords, cross):
         grid_df.loc[ind, 'dist'] = gridpt.distance(matchpt)
 
     model, inliers = ransac((grid_df[['grid_j', 'grid_i']].values, grid_df[['match_j', 'match_i']].values),
-                            AffineTransform, min_samples=10, residual_threshold=grid_df.dist.median(), max_trials=5000)
+                            SimilarityTransform, min_samples=10, residual_threshold=grid_df.dist.median(), max_trials=5000)
     grid_df.loc[~inliers, 'dist'] = np.nan
     grid_df.loc[~inliers, 'match_j'] = np.nan
     grid_df.loc[~inliers, 'match_i'] = np.nan
@@ -923,7 +910,7 @@ def find_reseau_grid(fn_img, csize=361, return_val=False):
     grid_df = find_crosses(img, cross)
 
     model, inliers = ransac((grid_df[['grid_j', 'grid_i']].values, grid_df[['match_j', 'match_i']].values),
-                            AffineTransform, min_samples=10, residual_threshold=10, max_trials=5000)
+                            SimilarityTransform, min_samples=10, residual_threshold=10, max_trials=5000)
     grid_df['resid'] = model.residuals(grid_df.dropna()[['grid_j', 'grid_i']].values,
                                        grid_df.dropna()[['match_j', 'match_i']].values)
 
