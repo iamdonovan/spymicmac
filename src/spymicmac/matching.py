@@ -164,11 +164,14 @@ def _filter_fid_matches(coords_all, measures_cam):
         these_meas = coords_all.loc[c].set_index('gcp').join(measures_cam)
 
         model, inliers = ransac((these_meas[['im_col', 'im_row']].values, these_meas[['j', 'i']].values),
-                                SimilarityTransform, min_samples=nfids-1, residual_threshold=2, max_trials=20)
-        resids.append(model.residuals(these_meas[['im_col', 'im_row']].values,
-                                      these_meas[['j', 'i']].values).mean())
+                                SimilarityTransform, min_samples=nfids-1, residual_threshold=10, max_trials=20)
+        try:
+            resids.append(model.residuals(these_meas[['im_col', 'im_row']].values,
+                                          these_meas[['j', 'i']].values).mean())
+        except AttributeError:
+            resids.append(np.nan)
 
-    return coords_all.loc[filtered_combs[np.argmin(resids)]]
+    return coords_all.loc[filtered_combs[np.nanargmin(resids)]]
 
 
 def _get_scale(scale, units):
