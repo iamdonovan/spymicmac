@@ -82,7 +82,7 @@ def find_fiducials(fn_img, templates, fn_cam=None, thresh_tol=0.9, npeaks=5, min
     # coords_all = coords_all.sort_values('resid').drop_duplicates(subset=['im_col', 'im_row']).sort_values('gcp')
     if len(coords_all) < len(measures_cam):
         print('One or more markers could not be found. \nAttempting to predict location(s) using affine transformation')
-        coords_all = _fix_fiducials(coords_all, measures_cam)
+        # coords_all = _fix_fiducials(coords_all, measures_cam)
 
     _, residuals = _get_residuals(coords_all, measures_cam)
 
@@ -229,6 +229,12 @@ def fix_measures_xml(fn_img):
         x, y = model.inverse(row[['j', 'i']].values).flatten()
         measures_img.loc[ind, 'j'] = x
         measures_img.loc[ind, 'i'] = y
+
+    model.estimate(meas[['j_img', 'i_img']].values,
+                   meas[['j_cam', 'i_cam']].values)
+    residuals = model.residuals(meas[['j_img', 'i_img']].values,
+                                meas[['j_cam', 'i_cam']].values)
+    print('Mean residual: {:.2f} pixels'.format(residuals.mean()))
 
     measures_img.reset_index(inplace=True)
     measures_img.rename(columns={'name': 'gcp', 'j': 'im_col', 'i': 'im_row'}, inplace=True)
@@ -390,10 +396,14 @@ def templates_from_meas(fn_img, half_size=100):
     :param int half_size: the half-size of the template to create, in pixels (default: 100)
     :return: **templates** (*dict*) -- a *dict* of (name, template) pairs for each fiducial marker.
     """
-    fn_meas = os.path.join('Ori-InterneScan', f'MeasuresIm-{fn_img}.xml')
-    meas_im = micmac.parse_im_meas(fn_meas)
+    dir_img = os.path.dirname(fn_img)
+    if dir_img == '':
+        dir_img = '.'
 
-    fn_img = fn_meas.split('MeasuresIm-')[1].split('.xml')[0]
+    bn_img = os.path.basename(fn_img)
+
+    fn_meas = os.path.join(dir_img, 'Ori-InterneScan', f'MeasuresIm-{bn_img}.xml')
+    meas_im = micmac.parse_im_meas(fn_meas)
 
     img = io.imread(fn_img)
 
