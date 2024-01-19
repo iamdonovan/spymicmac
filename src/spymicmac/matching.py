@@ -238,6 +238,7 @@ def fix_measures_xml(fn_img):
 
     measures_img.reset_index(inplace=True)
     measures_img.rename(columns={'name': 'gcp', 'j': 'im_col', 'i': 'im_row'}, inplace=True)
+    measures_img.dropna(subset=['im_col', 'im_row'], inplace=True)
 
     micmac.write_measures_im(measures_img, fn_img)
 
