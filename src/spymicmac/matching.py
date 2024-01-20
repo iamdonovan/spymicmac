@@ -206,14 +206,18 @@ def _fix_fiducials(coords, measures_cam):
     return coords.reset_index()
 
 
-def fix_measures_xml(fn_img):
+def fix_measures_xml(fn_img, fn_cam=None):
     """
     Use an affine transformation to estimate locations of any missing fiducial markers in an image. Output written to
         Ori-InterneScan/MeasuresIm-{fn_img}.xml
 
     :param str fn_img: the filename of the image.
+    :param str fn_cam: the Measures file to use. Defaults to Ori-InterneScan/MeasuresCamera.xml.
     """
-    measures_cam = micmac.parse_im_meas(os.path.join('Ori-InterneScan', 'MeasuresCamera.xml')).set_index('name')
+    if fn_cam is None:
+        fn_cam = os.path.join('Ori-InterneScan', 'MeasuresCamera.xml')
+
+    measures_cam = micmac.parse_im_meas(fn_cam).set_index('name')
     measures_img = micmac.parse_im_meas(os.path.join('Ori-InterneScan', f'MeasuresIm-{fn_img}.xml')).set_index('name')
 
     meas = measures_cam.join(measures_img, lsuffix='_cam', rsuffix='_img').dropna()
@@ -517,7 +521,7 @@ def match_zeiss_rmk(fn_img, size, dot_size, data_strip='left', fn_cam=None, corn
     return find_fiducials(fn_img, tdict, fn_cam=fn_cam, angle=angle, **kwargs)
 
 
-def _wild_corner(size, model, circle_size=None, ring_width=7, width=3, gap=None, vgap=None, dot_size=None):
+def _wild_corner(size, model, circle_size=None, ring_width=7, width=3, gap=None, vgap=None, dot_size=None, pad=10):
 
     target_angle = 45
     if model.upper() in ['RC5']:
@@ -552,7 +556,7 @@ def _wild_corner(size, model, circle_size=None, ring_width=7, width=3, gap=None,
     else:
         template = wagon_wheel(size, width=width, circle_size=circle_size, circle_width=ring_width, angle=target_angle)
 
-    return template
+    return np.pad(template, pad)
 
 
 def _wild_midside(size, model, circle_size, ring_width):
