@@ -572,7 +572,7 @@ def _wild_midside(size, model, circle_size, ring_width):
 
 
 def match_wild_rc(fn_img, size, model, data_strip='left', fn_cam=None, width=3, circle_size=None, ring_width=7, gap=9,
-                  vgap=None, dot_size=None, **kwargs):
+                  vgap=None, dot_size=None, pad=10, **kwargs):
     """
     Match the fiducial locations for a Wild RC-style camera (4 cross/bulls-eye markers in the corner, possibly
     4 bulls-eye markers along the sides).
@@ -591,6 +591,7 @@ def match_wild_rc(fn_img, size, model, data_strip='left', fn_cam=None, width=3, 
     :param int gap: the width, in pixels, of the gap in the middle of the cross (default: 9)
     :param int vgap: the height, in pixels, of the gap in the middle of the cross (default: same as gap)
     :param int dot_size: the half-size, in pixels, of the dot in the middle of the cross (default: no dot)
+    :param int pad: the size of the padding around the outside of the cross to include (default: 10 pixels)
     :param kwargs: additional keyword arguments to pass to matching.find_fiducials()
     :return:
     """
@@ -600,11 +601,12 @@ def match_wild_rc(fn_img, size, model, data_strip='left', fn_cam=None, width=3, 
     if model.upper() in ['RC5', 'RC5A', 'RC8']:
         fids = [f'P{n}' for n in range(1, 5)]
         templates = 4 * [_wild_corner(size, model, circle_size, ring_width, width=width,
-                                      gap=gap, vgap=vgap, dot_size=dot_size)]
+                                      gap=gap, vgap=vgap, dot_size=dot_size, pad=pad)]
     else:
         fids = [f'P{n}' for n in range(1, 9)]
         stempl = _wild_midside(size, model)
-        ctempl = _wild_corner(size, model, circle_size, ring_width, width=width, gap=gap, vgap=vgap, dot_size=dot_size)
+        ctempl = _wild_corner(size, model, circle_size, ring_width, width=width,
+                              gap=gap, vgap=vgap, dot_size=dot_size, pad=pad)
         templates = 4 * [ctempl] + 4 * [stempl]
 
     locs = ['left', 'top', 'right', 'bot']
