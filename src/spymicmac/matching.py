@@ -81,10 +81,11 @@ def find_fiducials(fn_img, templates, fn_cam=None, thresh_tol=0.9, npeaks=5, min
     # now, drop any duplicated values - if we have these, we need to replace/estimate
     # coords_all = coords_all.sort_values('resid').drop_duplicates(subset=['im_col', 'im_row']).sort_values('gcp')
     if len(coords_all) < len(measures_cam):
-        print('One or more markers could not be found. \nAttempting to predict location(s) using affine transformation')
+        print('One or more markers could not be found.')
         # coords_all = _fix_fiducials(coords_all, measures_cam)
-
-    _, residuals = _get_residuals(coords_all, measures_cam)
+        residuals = np.array(len(coords_all) * [np.nan])
+    else:
+        _, residuals = _get_residuals(coords_all, measures_cam)
 
     print('Mean residual: {:.2f} pixels'.format(residuals.mean()))
 
