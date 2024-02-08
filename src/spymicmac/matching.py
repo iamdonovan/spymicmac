@@ -939,24 +939,21 @@ def ocm_show_wagon_wheels(img, size, width=3, img_border=None):
     return np.concatenate((coords_top, coords_bot), axis=0)
 
 
-def find_rail_marks(img):
+def find_rail_marks(img, marker):
     """
     Find all rail marks along the bottom edge of a KH-4 style image.
 
     :param array-like img: the image to find the rail marks in.
-    :return: **coords** (*array-like*) -- an Nx2 array of the location of the detected markers.
+    :param array-like marker: the marker template to use for matching
+    :return: **coords** (*array-like*) -- Nx2 array of the location (row, col) of the detected markers.
     """
     left, right, top, bot = image.get_rough_frame(img)
     img_lowres = resample.downsample(img, fact=10)
 
-    templ = np.zeros((21, 21), dtype=np.uint8)
-    templ[5:-5, 5:-5] = 255 * disk(5)  # rail marks are approximately 100 x 100 pixels, so lowres is 10 x 10
-    res = cv2.matchTemplate(img_lowres.astype(np.uint8), templ.astype(np.uint8), cv2.TM_CCORR_NORMED)
+    res = cv2.matchTemplate(img_lowres.astype(np.uint8), marker.astype(np.uint8), cv2.TM_CCORR_NORMED)
 
-    norm_res = res - res.mean()
-
-    coords = peak_local_max(norm_res, threshold_abs=2.5*norm_res.std(), min_distance=10).astype(np.float64)
-    coords += templ.shape[0] / 2 - 0.5
+    coords = peak_local_max(res, threshold_rel=0.5, min_distance=10).astype(np.float64)
+    coords += marker.shape[0] / 2 - 0.5
     coords *= 10
 
     bottom_rail = np.logical_and.reduce([coords[:, 1] > left,
