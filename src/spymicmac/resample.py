@@ -6,7 +6,7 @@ import multiprocessing as mp
 import PIL.Image
 from osgeo import gdal
 from skimage import io
-from skimage.transform import ProjectiveTransform, warp
+from skimage.transform import SimilarityTransform, warp
 from scipy import ndimage
 import numpy as np
 from spymicmac import image, micmac, matching
@@ -191,9 +191,9 @@ def align_image_borders(fn_left, fn_right, border):
     mask_right = _border_mask(right, border)
 
 
-def resample_projective(fn_img, scale, fn_cam=None, nproc=1):
+def resample_similarity(fn_img, scale, fn_cam=None, nproc=1):
     """
-    Resample image(s) using a projective transform.
+    Resample image(s) using a similarity transform.
 
     :param str|list fn_img: the filename, or a list of filenames, of the image(s)
     :param float scale: the image scale (in mm/pixel) to use
@@ -202,7 +202,7 @@ def resample_projective(fn_img, scale, fn_cam=None, nproc=1):
     :return:
     """
     if type(fn_img) is str:
-        _projective(fn_img=fn_img, scale=scale, fn_cam=fn_cam)
+        _similarity(fn_img=fn_img, scale=scale, fn_cam=fn_cam)
     else:
         if nproc > 1:
             pool = mp.Pool(nproc, maxtasksperchild=1)
@@ -211,19 +211,19 @@ def resample_projective(fn_img, scale, fn_cam=None, nproc=1):
             for d in pool_args:
                 d.update(arg_dict)
 
-            pool.map(_projective_wrapper, pool_args, chunksize=1)
+            pool.map(_similarity_wrapper, pool_args, chunksize=1)
             pool.close()
             pool.join()
         else:
             for fn in fn_img:
-                _projective(fn_img=fn, scale=scale, fn_cam=fn_cam)
+                _similarity(fn_img=fn, scale=scale, fn_cam=fn_cam)
 
 
-def _projective_wrapper(args):
-    _projective(**args)
+def _similarity_wrapper(args):
+    _similarity(**args)
 
 
-def _projective(fn_img=None, scale=None, fn_cam=None):
+def _similarity(fn_img=None, scale=None, fn_cam=None):
     print(fn_img)
     meas = micmac.parse_im_meas(os.path.join('Ori-InterneScan', f'MeasuresIm-{fn_img}.xml'))
     if fn_cam is None:
@@ -236,7 +236,7 @@ def _projective(fn_img=None, scale=None, fn_cam=None):
 
     joined = meas.set_index('name').join(measures_cam.set_index('name'), lsuffix='_img', rsuffix='_cam')
 
-    model = ProjectiveTransform()
+    model = SimilarityTransform()
     model.estimate(joined[['j_img', 'i_img']].values,
                    joined[['j_cam', 'i_cam']].values)
 
