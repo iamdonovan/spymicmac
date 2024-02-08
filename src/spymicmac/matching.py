@@ -952,7 +952,8 @@ def find_rail_marks(img, marker):
 
     res = cv2.matchTemplate(img_lowres.astype(np.uint8), marker.astype(np.uint8), cv2.TM_CCORR_NORMED)
 
-    coords = peak_local_max(res, threshold_rel=0.5, min_distance=10).astype(np.float64)
+    coords = peak_local_max(res, threshold_rel=np.percentile(res, 99.9) / res.max(),
+                            min_distance=10).astype(np.float64)
     coords += marker.shape[0] / 2 - 0.5
     coords *= 10
 
