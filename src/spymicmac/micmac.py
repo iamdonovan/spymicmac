@@ -17,6 +17,7 @@ from glob import glob
 from shapely.strtree import STRtree
 from skimage.io import imread, imsave
 from skimage.transform import AffineTransform, SimilarityTransform
+from skimage.measure import ransac
 import geoutils as gu
 from spymicmac import data, matching, register
 
@@ -352,13 +353,13 @@ def estimate_measures_camera(approx_meas, ori='InterneScan', scan_res=2.5e-5, ho
         meas = parse_im_meas(os.path.join(f'Ori-{ori}', fn_meas))
         joined = meas.set_index('name').join(approx_meas.set_index('name'), lsuffix='_img', rsuffix='_cam')
 
-        model = SimilarityTransform()
-        model.estimate(joined[['j_img', 'i_img']].values,
-                       joined[['j_cam', 'i_cam']].values)
+        model, inliers = ransac((joined[['j_img', 'i_img']].values, joined[['j_cam', 'i_cam']].values),
+                                SimilarityTransform, min_samples=len(meas) - 1, residual_threshold=2,
+                                max_trials=5000)
 
-        rot = matching._rotate_meas(meas, model.rotation)
-        meas['j'] = rot[:, 0] - rot[:, 0].mean()
-        meas['i'] = rot[:, 1] - rot[:, 1].mean()
+        rot = matching._rotate_meas(meas, -model.rotation)
+        meas['j'] = rot['j'] - model.translation[0]
+        meas['i'] = rot['i'] - model.translation[1]
 
         all_meas.append(meas)
 
