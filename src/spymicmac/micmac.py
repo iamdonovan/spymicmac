@@ -2,6 +2,7 @@
 spymicmac.micmac is a collection of tools for interfacing with MicMac
 """
 import os
+import sys
 import re
 import subprocess
 import shutil
