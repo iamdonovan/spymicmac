@@ -368,7 +368,8 @@ def join_hexagon(im_pattern, overlap=2000, block_size=None, blend=True, is_rever
 
     io.imsave('{}.tif'.format(im_pattern), left.astype(np.uint8))
 
-    os.remove('tmp_left.tif') # clean up after we're done
+    if len(parts) > 2:
+        os.remove('tmp_left.tif') # clean up after we're done
 
 
 def _blend(_left, _right, left_shape):
