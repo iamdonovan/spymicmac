@@ -2,6 +2,7 @@ import os
 import argparse
 import shutil
 import tarfile
+import multiprocessing as mp
 import numpy as np
 from glob import glob
 from skimage import io, filters, exposure
@@ -219,12 +220,12 @@ def main():
     if do['resample']:
         os.makedirs('Orig', exist_ok=True)
         # now, resample the images
-        if args.nproc > 1 and len(args.img) > 1:
+        if args.nproc > 1 and len(imlist) > 1:
             batch_resample(imlist, args)
         else:
             for fn_img in imlist:
                 print(f'Resampling {fn_img}')
-                resample_hex(fn_im + '.tif', scale=args.scale)
+                resample_hex(fn_img + '.tif', scale=args.scale)
 
         for fn_img in imlist:
             shutil.move(fn_img + '.tif', 'Orig')
