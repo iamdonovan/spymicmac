@@ -274,10 +274,10 @@ def get_rough_frame(img, fact=10):
     img_lowres = resample.downsample(img, fact=fact)
 
     rowmean = _spike_filter(img_lowres, axis=0)
-    smooth_row = _moving_average(rowmean, n=5)
+    smooth_row = _moving_average(rowmean, n=10)
 
     colmean = _spike_filter(img_lowres, axis=1)
-    smooth_col = _moving_average(colmean, n=5)
+    smooth_col = _moving_average(colmean, n=10)
 
     # xmin = 10 * np.where(rowmean > np.percentile(rowmean, 10))[0][0]
     # xmin = 10 * (np.argmax(np.diff(smooth_row)) + 1)
@@ -367,6 +367,9 @@ def join_hexagon(im_pattern, overlap=2000, block_size=None, blend=True, is_rever
             io.imsave('tmp_left.tif', left.astype(np.uint8))
 
     io.imsave('{}.tif'.format(im_pattern), left.astype(np.uint8))
+
+    if len(parts) > 2:
+        os.remove('tmp_left.tif') # clean up after we're done
 
 
 def _blend(_left, _right, left_shape):
