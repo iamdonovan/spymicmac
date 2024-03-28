@@ -331,7 +331,7 @@ def download_pgc_mosaic(flavor, imlist=None, footprints=None, imgsource='DECLASS
             print('Downloading', row['dem_id'], f'({ind + 1}/{selection.shape[0]})')
             urllib.request.urlretrieve(row['fileurl'], this_path)
 
-        tarlist = []
+        tarlist = glob('*.tar.gz', root_dir=flavor)
         for tarball in tarlist:
             _unpack_pgc(tarball)
 
