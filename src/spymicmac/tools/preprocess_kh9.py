@@ -2,6 +2,7 @@ import os
 import argparse
 import shutil
 import tarfile
+import multiprocessing as mp
 import numpy as np
 from glob import glob
 from skimage import io, filters, exposure
@@ -44,6 +45,25 @@ def check_reseau():
     else:
         # check that each image file has a matching measuresim file
         return all([any([im in meas for meas in measlist]) for im in imlist])
+
+
+def batch_resample(imlist, args):
+    pool = mp.Pool(args.nproc, maxtasksperchild=1)
+
+    arg_dict = {'scale': args.scale}
+    pool_args = [{'fn_img': fn_img + '.tif'} for fn_img in imlist]
+
+    for d in pool_args:
+        d.update(arg_dict)
+
+    pool.map(_wrapper, pool_args, chunksize=1)
+    pool.close()
+    pool.join()
+
+
+def _wrapper(argsin):
+    print(argsin['fn_img'])
+    resample_hex(**argsin)
 
 
 def _argparser():
@@ -200,11 +220,16 @@ def main():
     if do['resample']:
         os.makedirs('Orig', exist_ok=True)
         # now, resample the images
-        # TODO: parallelize/distribute this
+        if args.nproc > 1 and len(imlist) > 1:
+            batch_resample(imlist, args)
+        else:
+            for fn_img in imlist:
+                print(f'Resampling {fn_img}')
+                resample_hex(fn_img + '.tif', scale=args.scale)
+
         for fn_img in imlist:
-            print('Resampling {}'.format(fn_img))
-            resample_hex(fn_img + '.tif', scale=args.scale)
             shutil.move(fn_img + '.tif', 'Orig')
+
 
     if do['balance']:
         print('Using CLAHE to balance image contrast')
