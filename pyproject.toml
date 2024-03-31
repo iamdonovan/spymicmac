@@ -38,8 +38,6 @@ dependencies = [
       'sphinx-argparse',
       'sphinx-rtd-theme',
       'earthengine-api',
-      'imagemagick',
-      'exiftool'
 ]
 dynamic = ["version"]
 
