@@ -984,7 +984,7 @@ def find_reseau_grid(fn_img, csize=361, return_val=False):
     this_out = os.path.splitext(fn_img)[0]
     fig.savefig(os.path.join('match_imgs', this_out + '_matches.png'), bbox_inches='tight', dpi=200)
 
-    micmac.write_auto_gcps(grid_df, fn_img)
+    micmac.write_measures_im(grid_df, fn_img)
 
     if return_val:
         return grid_df
