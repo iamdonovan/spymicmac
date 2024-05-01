@@ -12,7 +12,7 @@ from skimage import morphology, io, filters
 from skimage.morphology import binary_dilation, disk
 from skimage.measure import ransac
 from skimage.feature import peak_local_max
-from skimage.transform import EuclideanTransform, SimilarityTransform
+from skimage.transform import AffineTransform, EuclideanTransform, SimilarityTransform
 from scipy.interpolate import RectBivariateSpline as RBS
 from scipy import ndimage
 import numpy as np
@@ -780,7 +780,7 @@ def match_reseau_grid(img, coords, cross):
         grid_df.loc[ind, 'dist'] = gridpt.distance(matchpt)
 
     model, inliers = ransac((grid_df[['grid_j', 'grid_i']].values, grid_df[['match_j', 'match_i']].values),
-                            SimilarityTransform, min_samples=10, residual_threshold=grid_df.dist.median(), max_trials=5000)
+                            AffineTransform, min_samples=10, residual_threshold=grid_df.dist.median(), max_trials=5000)
     grid_df.loc[~inliers, 'dist'] = np.nan
     grid_df.loc[~inliers, 'match_j'] = np.nan
     grid_df.loc[~inliers, 'match_i'] = np.nan
@@ -931,7 +931,7 @@ def find_reseau_grid(fn_img, csize=361, return_val=False):
     grid_df = find_crosses(img, cross)
 
     model, inliers = ransac((grid_df[['grid_j', 'grid_i']].values, grid_df[['match_j', 'match_i']].values),
-                            SimilarityTransform, min_samples=10, residual_threshold=10, max_trials=5000)
+                            AffineTransform, min_samples=10, residual_threshold=10, max_trials=5000)
     grid_df['resid'] = model.residuals(grid_df.dropna()[['grid_j', 'grid_i']].values,
                                        grid_df.dropna()[['match_j', 'match_i']].values)
 
