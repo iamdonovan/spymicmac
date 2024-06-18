@@ -2,6 +2,7 @@
 spymicmac.micmac is a collection of tools for interfacing with MicMac
 """
 import os
+import sys
 import re
 import subprocess
 import shutil
@@ -1401,6 +1402,15 @@ def arrange_tiles(flist, filename, dirname='.'):
     return img_arr
 
 
+def _gdal_calc():
+    if os.name == 'nt':
+        # if we're on windows, call gdal_calc.py with the currently active python
+        return ['python', os.path.join(sys.prefix, 'Scripts', 'gdal_calc.py')]
+    else:
+        # if we're not on windows, call gdal_calc.py as a shell script
+        return ['gdal_calc.py']
+
+
 def post_process(projstr, out_name, dirmec, do_ortho=True):
     """
     Apply georeferencing and masking to the final DEM and Correlation images (optionally, the orthomosaic as well).
@@ -1443,14 +1453,14 @@ def post_process(projstr, out_name, dirmec, do_ortho=True):
                       os.path.join(dirmec, f'AutoMask_STD-MALT_Num_{level-1}.tif'),
                       'tmp_mask.tif']).wait()
 
-    subprocess.Popen(['gdal_calc.py', '--quiet', '-A', 'tmp_mask.tif', '-B', 'tmp_geo.tif',
+    subprocess.Popen(_gdal_calc() + ['--quiet', '-A', 'tmp_mask.tif', '-B', 'tmp_geo.tif',
                       '--outfile={}'.format(os.path.join('post_processed', f'{out_name}_Z.tif')),
                       '--calc="B*(A>0)"', '--NoDataValue=-9999']).wait()
 
     subprocess.Popen(['gdaldem', 'hillshade', os.path.join('post_processed', f'{out_name}_Z.tif'),
                       os.path.join('post_processed', f'{out_name}_HS.tif')]).wait()
 
-    subprocess.Popen(['gdal_calc.py', '--quiet', '-A', 'tmp_corr.tif',
+    subprocess.Popen(_gdal_calc() + ['--quiet', '-A', 'tmp_corr.tif',
                       '--outfile={}'.format(os.path.join('post_processed', f'{out_name}_CORR.tif')),
                       '--calc="((A.astype(float)-127)/128)*100"', '--NoDataValue=-9999']).wait()
 
@@ -1465,7 +1475,7 @@ def post_process(projstr, out_name, dirmec, do_ortho=True):
         subprocess.Popen(['gdal_translate', '-a_nodata', '0', '-a_srs', projstr, ortho, 'tmp_ortho.tif']).wait()
 
         # TODO: re-size the mask to fit the ortho image, if needed
-        subprocess.Popen(['gdal_calc.py', '--quiet', '-A', 'tmp_mask.tif', '-B', 'tmp_ortho.tif',
+        subprocess.Popen(_gdal_calc() + ['--quiet', '-A', 'tmp_mask.tif', '-B', 'tmp_ortho.tif',
                           '--outfile={}'.format(os.path.join('post_processed', f'{out_name}_Ortho.tif')),
                           '--calc="B*(A>0)"', '--NoDataValue=0']).wait()
         os.remove('tmp_ortho.tif')
