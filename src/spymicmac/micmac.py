@@ -946,16 +946,16 @@ def malt(imlist, ori, zoomf=1, zoomi=None, dirmec='MEC-Malt', seed_img=None, see
     :param str dirmec: the output MEC directory to create (default: MEC-Malt)
     :param str seed_img: a DEM to pass to Malt as DEMInitImg. Note that if seed_img is set, seed_xml
         must also be set. If used, it is recommended to set zoomi to be approximately equal to the DEM resolution -
-        i.e., if the ortho resolution is 5 m and the seed DEM is 10 m, ZoomI should be 4. (default: not used)
+        i.e., if the ortho resolution is 5 m and the seed DEM is 20 m, ZoomI should be 4. (default: not used)
     :param str seed_xml: an XML file corresponding to the seed_img (default: not used)
     :param float resol_terr: the resolution of the output DEM, in ground units (default: computed by mm3d)
     :param float resol_ort: the resolution of the ortho images, relative to the output DEM - e.g., resol_ort=1 means
-        the DEM and Orthoimage have the same resolution (default: 0.5)
+        the DEM and Orthoimage have the same resolution (default: 2.0)
     :param float cost_trans: cost to change from correlation to decorrelation (default: 2.0)
     :param int szw: the half-size of the correlation window to use - e.g., szw=1 means a 3x3 correlation window.
         (default: 2)
-    :param float regul: the regularization factor to use. Lower values mean higher potential variability between adjacent
-        pixels, higher values (up to 1) mean smoother outputs (default: 0.05)
+    :param float regul: the regularization factor to use. Lower values mean higher potential variability between
+        adjacent pixels, higher values (up to 1) mean smoother outputs (default: 0.05)
     """
     if os.name == 'nt':
         echo = subprocess.Popen('echo', stdout=subprocess.PIPE, shell=True)
