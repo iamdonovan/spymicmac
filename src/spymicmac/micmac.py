@@ -17,8 +17,10 @@ import xml.etree.ElementTree as ET
 from glob import glob
 from shapely.strtree import STRtree
 from skimage.io import imread, imsave
+from skimage.transform import AffineTransform, SimilarityTransform
+from skimage.measure import ransac
 import geoutils as gu
-from spymicmac import data, register
+from spymicmac import data, matching, register
 
 
 ######################################################################################################################
@@ -46,6 +48,7 @@ def write_neighbour_images(imlist, fprints=None, nameField='ID', prefix='OIS-Ree
     else:
         fprints = fprints[fprints[nameField].isin(imlist)]
 
+    fprints.reset_index(inplace=True)  # do this to ensure that strtree indices are correct
     s = STRtree([f for f in fprints['geometry'].values])
 
     for i, row in fprints.iterrows():
@@ -207,6 +210,31 @@ def parse_im_meas(fn_meas):
     return meas_df
 
 
+def write_measures_im(meas_df, fn_img):
+    """
+    Create a MeasuresIm xml file for an image.
+
+    :param DataFrame meas_df: a DataFrame of image measures, with [gcp, im_col, im_row] columns
+    :param str fn_img: the filename of the image.
+    :return:
+    """
+    os.makedirs('Ori-InterneScan', exist_ok=True)
+
+    # write the measures
+    E = builder.ElementMaker()
+    ImMes = E.MesureAppuiFlottant1Im(E.NameIm(fn_img))
+
+    pt_els = get_im_meas(meas_df, E)
+    for p in pt_els:
+        ImMes.append(p)
+
+    outxml = E.SetOfMesureAppuisFlottants(ImMes)
+
+    tree = etree.ElementTree(outxml)
+    tree.write(os.path.join('Ori-InterneScan', 'MeasuresIm-' + fn_img + '.xml'), pretty_print=True,
+               xml_declaration=True, encoding="utf-8")
+
+
 def generate_measures_files(joined=False):
     """
     Create id_fiducial.txt, MeasuresCamera.xml, and Tmp-SL-Glob.xml files for KH-9 Hexagon images.
@@ -272,7 +300,7 @@ def create_measurescamera_xml(fn_csv, ori='InterneScan', translate=False, name='
     """
     Create a MeasuresCamera.xml file from a csv of fiducial marker locations.
 
-    :param str fn_csv: the filename of the CSV file.
+    :param str|DataFrame fn_csv: the filename of the CSV file, or a pandas DataFrame.
     :param str ori: the Ori directory to write the MeasuresCamera.xml file to. Defaults to (Ori-)InterneScan.
     :param bool translate: translate coordinates so that the origin is the upper left corner, rather than the principal
         point
@@ -280,7 +308,11 @@ def create_measurescamera_xml(fn_csv, ori='InterneScan', translate=False, name='
     :param str x: the column name in the csv file corresponding to the image x location [im_col]
     :param str y: the column name in the csv file corresponding to the image y location [im_row]
     """
-    fids = pd.read_csv(fn_csv)
+    assert type(fn_csv) in [pd.core.frame.DataFrame, str], "fn_csv must be one of [str, DataFrame]"
+    if isinstance(fn_csv, str):
+        fids = pd.read_csv(fn_csv)
+    else:
+        fids = fn_csv
 
     # if coordinates are relative to the principal point,
     # convert them to be relative to the upper left corner
@@ -303,11 +335,12 @@ def create_measurescamera_xml(fn_csv, ori='InterneScan', translate=False, name='
                xml_declaration=True, encoding="utf-8")
 
 
-def estimate_measures_camera(ori='InterneScan', scan_res=2.5e-5, how='mean'):
+def estimate_measures_camera(approx_meas, ori='InterneScan', scan_res=2.5e-5, how='mean'):
     """
     Use a set of located fiducial markers to create a MeasuresCamera file using the average location of each fiducial
     marker.
 
+    :param DataFrame approx_meas: A DataFrame with the (very approximate) locations of the fiducial markers.
     :param str ori: The Ori- directory containing the MeasuresIm files (default: InterneScan)
     :param float scan_res: the scanning resolution of the images in microns
     :param str how: what average to use for the output locations. Must be one of [mean, median].
@@ -316,27 +349,30 @@ def estimate_measures_camera(ori='InterneScan', scan_res=2.5e-5, how='mean'):
 
     meas_list = sorted(glob('MeasuresIm*.xml', root_dir=f'Ori-{ori}'))
 
-    all_meas = pd.DataFrame()
-
+    all_meas = []
     for fn_meas in meas_list:
-        # TODO: use an affine transformation to align each image to the first one
-        this_meas = parse_im_meas(os.path.join(f'Ori-{ori}', fn_meas))
-        this_meas['j'] -= this_meas['j'].min()
-        this_meas['i'] -= this_meas['i'].min()
-        all_meas = pd.concat([all_meas, this_meas], ignore_index=True)
+        meas = parse_im_meas(os.path.join(f'Ori-{ori}', fn_meas))
+        joined = meas.set_index('name').join(approx_meas.set_index('name'), lsuffix='_img', rsuffix='_cam')
 
-    avg_meas = pd.DataFrame(index=all_meas.name.unique(), columns=['j', 'i'])
+        model, inliers = ransac((joined[['j_img', 'i_img']].values, joined[['j_cam', 'i_cam']].values),
+                                SimilarityTransform, min_samples=len(meas) - 1, residual_threshold=2,
+                                max_trials=5000)
 
-    for fid in all_meas.name.unique():
-        if how == 'median':
-            avg_meas.loc[fid, 'j'] = all_meas.loc[all_meas.name == fid, 'j'].median()
-            avg_meas.loc[fid, 'i'] = all_meas.loc[all_meas.name == fid, 'i'].median()
-        else:
-            avg_meas.loc[fid, 'j'] = all_meas.loc[all_meas.name == fid, 'j'].mean()
-            avg_meas.loc[fid, 'i'] = all_meas.loc[all_meas.name == fid, 'i'].mean()
+        rot = matching._rotate_meas(meas, -model.rotation)
+        meas['j'] = rot['j'] - model.translation[0]
+        meas['i'] = rot['i'] - model.translation[1]
 
-    avg_meas['j'] *= scan_res * 1000 # convert from microns to mm
-    avg_meas['i'] *= scan_res * 1000 # convert from microns to mm
+        all_meas.append(meas)
+
+    all_meas = pd.concat(all_meas, ignore_index=True)
+
+    if how == 'mean':
+        avg_meas = all_meas.groupby('name').mean(numeric_only=True)
+    else:
+        avg_meas = all_meas.groupby('name').median(numeric_only=True)
+
+    avg_meas['j'] *= scan_res * 1000  # convert from microns to mm
+    avg_meas['i'] *= scan_res * 1000  # convert from microns to mm
 
     avg_meas.reset_index(names='name').to_file('AverageMeasures.csv')
     create_measurescamera_xml('AverageMeasures.csv', ori=ori, translate=False, name='name', x='j', y='i')
@@ -748,21 +784,75 @@ def get_tapas_residuals(ori):
     return img_df
 
 
-def find_empty_homol(dir_homol='Homol'):
+def find_empty_homol(imlist=None, dir_homol='Homol', pattern='OIS*.tif'):
     """
     Search through a Homol directory to find images without any matches, then move them to a new directory called
     'EmptyMatch'
 
+    :param list|None imlist: a list of images in the current directory. If None, uses pattern to find images.
     :param str dir_homol: the Homol directory to search in (default: Homol)
+    :param str pattern: the search pattern to use to find images (default: OIS*.tif)
     """
-    pastis = glob('Pastis*', root_dir=dir_homol)
-    empty = [d.split('Pastis')[-1] for d in pastis if len(glob('OIS*.tif.dat', root_dir=os.path.join('Homol', d))) == 0]
+
+    if imlist is None:
+        imlist = glob(pattern)
+
+    empty = [fn_img for fn_img in imlist if len(_get_homol(fn_img, dir_homol)) == 0]
 
     os.makedirs('EmptyMatch', exist_ok=True)
 
     for fn_img in empty:
         print(f'{fn_img} -> EmptyMatch/{fn_img}')
         shutil.move(fn_img, 'EmptyMatch')
+
+
+def _get_homol(fn_img, dir_homol='Homol'):
+    if not os.path.exists(os.path.join(dir_homol, 'Pastis' + fn_img)):
+        return []
+    else:
+        return sorted([h.split('.dat')[0] for h in glob('*.dat', root_dir=os.path.join(dir_homol, 'Pastis' + fn_img))])
+
+
+# adapted from the fantastic answer provided by
+# user matias-thayer and edited by user redbeam_
+# at https://stackoverflow.com/a/50639220
+def _get_connected_block(img, seen, hdict):
+    result = []
+    imgs = set([img])
+    while imgs:
+        img = imgs.pop()
+        seen.add(img)
+        imgs = imgs or set(hdict[img]) - seen
+        result.append(img)
+
+    return result, seen
+
+
+# adapted from the fantastic answer provided by
+# user matias-thayer and edited by user redbeam_
+# at https://stackoverflow.com/a/50639220
+def find_connected_blocks(pattern='OIS*.tif', dir_homol='Homol'):
+    """
+    Find connected blocks of images.
+
+    :param str pattern: the search pattern to use to get image names
+    :param str dir_homol: the Homologue directory to use to determine what images are connected
+    :return: blocks -- a list containing lists of connected blocks of images
+    """
+    imlist = glob(pattern)
+    homols = [_get_homol(fn_img, dir_homol) for fn_img in imlist]
+
+    hdict = dict(zip(imlist, homols))
+
+    seen = set()
+    blocks = []
+
+    for img in hdict:
+        if img not in seen:
+            block, seen = _get_connected_block(img, seen, hdict)
+            blocks.append(sorted(block))
+
+    return blocks
 
 
 def move_bad_tapas(ori):
@@ -812,13 +902,14 @@ def _generate_glob(fn_ids):
     tree.write('Tmp-SL-Glob.xml', pretty_print=True, xml_declaration=True, encoding="utf-8")
 
 
-def batch_saisie_fids(imlist, flavor='qt', fn_cam=None):
+def batch_saisie_fids(imlist, flavor='qt', fn_cam=None, clean=True):
     """
     Run SaisieAppuisInit to locate the fiducial markers for a given list of images.
 
     :param list imlist: the list of image filenames.
     :param str flavor: which version of SaisieAppuisInit to run. Must be one of [qt, og] (default: qt)
     :param str fn_cam: the filename for the MeasuresCamera.xml file (default: Ori-InterneScan/MeasuresCamera.xml)
+    :param bool clean: remove any image files in Tmp-SaisieAppuis
     """
     assert flavor in ['qt', 'og'], "flavor must be one of [qt, og]"
 
@@ -848,8 +939,14 @@ def batch_saisie_fids(imlist, flavor='qt', fn_cam=None):
 
     for fn_img in imlist:
         if os.path.exists(os.path.join('Ori-InterneScan', f'MeasuresIm-{fn_img}.xml')):
+            if clean:
+                tmplist = glob('*' + fn_img + '*', root_dir='Tmp-SaisieAppuis')
+                for fn_tmp in tmplist:
+                    os.remove(os.path.join('Tmp-SaisieAppuis', fn_tmp))
+
             shutil.copy(os.path.join('Ori-InterneScan', f'MeasuresIm-{fn_img}.xml'),
                         f'MeasuresIm-{fn_img}-S2D.xml')
+
             shutil.copy('Tmp-SL-Glob.xml',
                         os.path.join('Tmp-SaisieAppuis', f'Tmp-SL-Glob-MeasuresIm-{fn_img}.xml'))
 

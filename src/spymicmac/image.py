@@ -257,7 +257,8 @@ def _spike_filter(img, axis):
         window = []
         for ind in inds:
             window.extend(list(range(ind-10, ind+11)))
-        _inds = list(set(window))
+        _inds = np.array(list(set(window)))
+        _inds = _inds[np.logical_and(_inds >= 0, _inds < img_mean.size)]
         img_mean[_inds] = np.mean([img_mean[min(_inds)], img_mean[max(_inds)]])
 
     return img_mean
@@ -271,7 +272,12 @@ def get_rough_frame(img, fact=10):
     :param int fact: the scaling factor for the low-resolution image (default: 10)
     :return: **xmin**, **xmax**, **ymin**, **ymax** (*float*) -- the left, right, top, and bottom indices for the rough border.
     """
-    img_lowres = resample.downsample(img, fact=fact)
+    img_lowres = filters.gaussian(resample.downsample(img, fact=fact), 4)
+    aspect = min(img.shape) / max(img.shape)
+    if aspect > 0.75:
+        lower, upper = 0.1, 0.9
+    else:
+        lower, upper = 0.2, 0.8
 
     rowmean = _spike_filter(img_lowres, axis=0)
     smooth_row = _moving_average(rowmean, n=10)
@@ -296,17 +302,21 @@ def get_rough_frame(img, fact=10):
     # of the difference, that's also in the right half of the image
     # min_ind = np.where(sorted_row < 0.2 * sorted_row.size)[0][-1]
     # max_ind = np.where(sorted_row > 0.8 * sorted_row.size)[0][0]
-    col_peaks = peak_local_max(np.diff(smooth_col), min_distance=20, threshold_rel=0.25, num_peaks=2).flatten()
-    col_troughs = peak_local_max(-np.diff(smooth_col), min_distance=20, threshold_rel=0.25, num_peaks=2).flatten()
+    col_peaks = peak_local_max(np.diff(smooth_col), min_distance=int(0.005 * smooth_col.size),
+                               threshold_rel=0.25).flatten()
+    col_troughs = peak_local_max(-np.diff(smooth_col), min_distance=int(0.005 * smooth_col.size),
+                                 threshold_rel=0.25).flatten()
 
-    row_peaks = peak_local_max(np.diff(smooth_row), min_distance=20, threshold_rel=0.25, num_peaks=2).flatten()
-    row_troughs = peak_local_max(-np.diff(smooth_row), min_distance=20, threshold_rel=0.25, num_peaks=2).flatten()
+    row_peaks = peak_local_max(np.diff(smooth_row), min_distance=int(0.005 * smooth_row.size),
+                               threshold_rel=0.25).flatten()
+    row_troughs = peak_local_max(-np.diff(smooth_row), min_distance=int(0.005 * smooth_row.size),
+                                 threshold_rel=0.25).flatten()
 
-    left_ind = np.max(row_peaks[np.where(row_peaks < 0.2 * rowmean.size)[0]], initial=-1e10)
-    right_ind = np.min(row_troughs[np.where(row_troughs > 0.8 * rowmean.size)[0]], initial=1e10)
+    left_ind = np.max(row_peaks[np.where(row_peaks < lower * rowmean.size)[0]], initial=-1e10)
+    right_ind = np.min(row_troughs[np.where(row_troughs > upper * rowmean.size)[0]], initial=1e10)
 
-    top_ind = np.max(col_peaks[np.where(col_peaks < 0.2 * colmean.size)[0]], initial=-1e10)
-    bot_ind = np.min(col_troughs[np.where(col_troughs > 0.8 * colmean.size)[0]], initial=1e10)
+    top_ind = np.max(col_peaks[np.where(col_peaks < lower * colmean.size)[0]], initial=-1e10)
+    bot_ind = np.min(col_troughs[np.where(col_troughs > upper * colmean.size)[0]], initial=1e10)
 
     # xmin = 10 * (sorted_row[min_ind] + 1)
     # xmax = 10 * (sorted_row[max_ind] + 1)
