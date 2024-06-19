@@ -1033,7 +1033,7 @@ def apericloud(ori, img_pattern='OIS.*tif'):
 
 
 def malt(imlist, ori, zoomf=1, zoomi=None, dirmec='MEC-Malt', seed_img=None, seed_xml=None,
-         resol_terr=None, resol_ort=None, cost_trans=None, szw=None, regul=None):
+         resol_terr=None, resol_ort=None, cost_trans=None, szw=None, regul=None, do_ortho=True, do_mec=True):
     """
     Run mm3d Malt Ortho.
 
@@ -1054,6 +1054,8 @@ def malt(imlist, ori, zoomf=1, zoomi=None, dirmec='MEC-Malt', seed_img=None, see
         (default: 2)
     :param float regul: the regularization factor to use. Lower values mean higher potential variability between
         adjacent pixels, higher values (up to 1) mean smoother outputs (default: 0.05)
+    :param bool do_ortho: whether or not to generate the orthoimages (default: True)
+    :param bool do_mec: whether or not to generate an output DEM (default: True)
     """
     if os.name == 'nt':
         echo = subprocess.Popen('echo', stdout=subprocess.PIPE, shell=True)
@@ -1069,7 +1071,8 @@ def malt(imlist, ori, zoomf=1, zoomi=None, dirmec='MEC-Malt', seed_img=None, see
             raise TypeError(f"imlist is not iterable: {imlist}")
 
     args = ['mm3d', 'Malt', 'Ortho', matchstr, ori, f'DirMEC={dirmec}',
-            'NbVI=2', f'ZoomF={zoomf}', 'DefCor=0', 'EZA=1']
+            'NbVI=2', f'ZoomF={zoomf}', 'DefCor=0', 'EZA=1',
+            f'DoOrtho={int(do_ortho)}', f'DoMEC={int(do_mec)}']
 
     if zoomi is not None:
         args.append(f'ZoomI={zoomi}')
