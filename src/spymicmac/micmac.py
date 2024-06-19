@@ -1068,31 +1068,31 @@ def malt(imlist, ori, zoomf=1, zoomi=None, dirmec='MEC-Malt', seed_img=None, see
         except TypeError as te:
             raise TypeError(f"imlist is not iterable: {imlist}")
 
-    args = ['mm3d', 'Malt', 'Ortho', matchstr, ori, 'DirMEC={}'.format(dirmec),
-            'NbVI=2', 'ZoomF={}'.format(zoomf), 'DefCor=0', 'EZA=1']
+    args = ['mm3d', 'Malt', 'Ortho', matchstr, ori, f'DirMEC={dirmec}',
+            'NbVI=2', f'ZoomF={zoomf}', 'DefCor=0', 'EZA=1']
 
     if zoomi is not None:
-        args.append('ZoomI={}'.format(zoomi))
+        args.append(f'ZoomI={zoomi}')
 
     if seed_img is not None:
         assert seed_xml is not None
-        args.append('DEMInitImg=' + seed_img)
-        args.append('DEMInitXML=' + seed_xml)
+        args.append(f'DEMInitImg={seed_img}')
+        args.append(f'DEMInitXML={seed_xml}')
 
     if resol_terr is not None:
-        args.append('ResolTerrain=' + resol_terr)
+        args.append(f'ResolTerrain={resol_terr}')
 
     if resol_ort is not None:
-        args.append('ResolOrtho' + resol_ort)
+        args.append(f'ResolOrtho={resol_ort}')
 
     if cost_trans is not None:
-        args.append('CostTrans=' + cost_trans)
+        args.append(f'CostTrans={cost_trans}')
 
     if szw is not None:
-        args.append('SzW=' + szw)
+        args.append(f'SzW={szw}')
 
     if regul is not None:
-        args.append('Regul=' + regul)
+        args.append(f'Regul={regul}')
 
     p = subprocess.Popen(args, stdin=echo.stdout)
 
