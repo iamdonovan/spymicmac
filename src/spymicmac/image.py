@@ -3,7 +3,7 @@ spymicmac.image is a collection of tools for working with images.
 """
 import os
 from glob import glob
-from itertools import chain
+from itertools import chain, product
 from skimage import exposure, morphology, io, filters
 from skimage.morphology import disk
 from skimage.feature import peak_local_max
@@ -312,11 +312,21 @@ def get_rough_frame(img, fact=10):
     row_troughs = peak_local_max(-np.diff(smooth_row), min_distance=int(0.005 * smooth_row.size),
                                  threshold_rel=0.25).flatten()
 
-    left_ind = np.max(row_peaks[np.where(row_peaks < lower * rowmean.size)[0]], initial=-1e10)
-    right_ind = np.min(row_troughs[np.where(row_troughs > upper * rowmean.size)[0]], initial=1e10)
+    # left_ind = np.max(row_peaks[np.where(row_peaks < lower * rowmean.size)[0]], initial=-1e10)
+    # right_ind = np.min(row_troughs[np.where(row_troughs > upper * rowmean.size)[0]], initial=1e10)
+    left_ind, right_ind = _maximum_sep(row_peaks, row_troughs)
 
-    top_ind = np.max(col_peaks[np.where(col_peaks < lower * colmean.size)[0]], initial=-1e10)
-    bot_ind = np.min(col_troughs[np.where(col_troughs > upper * colmean.size)[0]], initial=1e10)
+    if (right_ind - left_ind) / smooth_row.size < (upper - lower):
+        left_ind = np.max(row_peaks[np.where(row_peaks < lower * rowmean.size)[0]], initial=-1e10)
+        right_ind = np.min(row_troughs[np.where(row_troughs > upper * rowmean.size)[0]], initial=1e10)
+
+    # top_ind = np.max(col_peaks[np.where(col_peaks < lower * colmean.size)[0]], initial=-1e10)
+    # bot_ind = np.min(col_troughs[np.where(col_troughs > upper * colmean.size)[0]], initial=1e10)
+    top_ind, bot_ind = _maximum_sep(col_peaks, col_troughs)
+
+    if (bot_ind - top_ind) / smooth_col.size < (upper - lower):
+        top_ind = np.max(col_peaks[np.where(col_peaks < lower * colmean.size)[0]], initial=-1e10)
+        bot_ind = np.min(col_troughs[np.where(col_troughs > upper * colmean.size)[0]], initial=1e10)
 
     # xmin = 10 * (sorted_row[min_ind] + 1)
     # xmax = 10 * (sorted_row[max_ind] + 1)
@@ -338,6 +348,15 @@ def get_rough_frame(img, fact=10):
     # ymax = 10 * (sorted_col[max_ind] + 1)
 
     return xmin, xmax, ymin, ymax
+
+
+def _maximum_sep(peaks, troughs):
+    combs = list(product(peaks, troughs))
+    dists = [max(pair) - min(pair) for pair in combs]
+
+    best = combs[np.argmax(dists)]
+
+    return min(best), max(best)
 
 
 def get_parts_list(im_pattern):
