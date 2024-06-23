@@ -280,10 +280,10 @@ def get_rough_frame(img, fact=10):
         lower, upper = 0.2, 0.8
 
     rowmean = _spike_filter(img_lowres, axis=0)
-    smooth_row = _moving_average(rowmean, n=10)
+    smooth_row = _moving_average(rowmean, n=20)
 
     colmean = _spike_filter(img_lowres, axis=1)
-    smooth_col = _moving_average(colmean, n=10)
+    smooth_col = _moving_average(colmean, n=20)
 
     # xmin = 10 * np.where(rowmean > np.percentile(rowmean, 10))[0][0]
     # xmin = 10 * (np.argmax(np.diff(smooth_row)) + 1)
