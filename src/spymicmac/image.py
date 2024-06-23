@@ -314,7 +314,9 @@ def get_rough_frame(img, fact=10):
 
     # left_ind = np.max(row_peaks[np.where(row_peaks < lower * rowmean.size)[0]], initial=-1e10)
     # right_ind = np.min(row_troughs[np.where(row_troughs > upper * rowmean.size)[0]], initial=1e10)
-    left_ind, right_ind = _maximum_sep(row_peaks, row_troughs)
+    # left_ind, right_ind = _maximum_sep(row_peaks, row_troughs)
+    left_ind = _best_sep(row_peaks, smooth_row, False)
+    right_ind = _best_sep(row_troughs, smooth_row, True)
 
     if (right_ind - left_ind) / smooth_row.size < (upper - lower):
         left_ind = np.max(row_peaks[np.where(row_peaks < lower * rowmean.size)[0]], initial=-1e10)
@@ -322,7 +324,9 @@ def get_rough_frame(img, fact=10):
 
     # top_ind = np.max(col_peaks[np.where(col_peaks < lower * colmean.size)[0]], initial=-1e10)
     # bot_ind = np.min(col_troughs[np.where(col_troughs > upper * colmean.size)[0]], initial=1e10)
-    top_ind, bot_ind = _maximum_sep(col_peaks, col_troughs)
+    # top_ind, bot_ind = _maximum_sep(col_peaks, col_troughs)
+    top_ind = _best_sep(col_peaks, smooth_col, False)
+    bot_ind = _best_sep(col_troughs, smooth_col, True)
 
     if (bot_ind - top_ind) / smooth_col.size < (upper - lower):
         top_ind = np.max(col_peaks[np.where(col_peaks < lower * colmean.size)[0]], initial=-1e10)
@@ -348,6 +352,15 @@ def get_rough_frame(img, fact=10):
     # ymax = 10 * (sorted_col[max_ind] + 1)
 
     return xmin, xmax, ymin, ymax
+
+
+def _best_sep(pks, means, trough):
+    davg = min([min(pks), 100, means.size - max(pks)])
+    seps = [means[pk-davg:pk].mean() - means[pk:pk+davg].mean() for pk in pks]
+    if trough:
+        return pks[np.argmax(seps)]
+    else:
+        return pks[np.argmin(seps)]
 
 
 def _maximum_sep(peaks, troughs):
