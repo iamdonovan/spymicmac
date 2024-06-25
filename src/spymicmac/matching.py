@@ -684,7 +684,7 @@ def find_crosses(img, cross):
         res = cv2.matchTemplate(img_inv.astype(np.uint8), cross.astype(np.uint8), cv2.TM_CCORR_NORMED)
 
         these_coords = peak_local_max(res, min_distance=int(1.5*cross.shape[0]),
-                                      threshold_abs=np.median(res)).astype(np.float64)
+                                      threshold_abs=np.quantile(res, 0.6)).astype(np.float64)
 
         these_coords += cross.shape[0] / 2 - 0.5
 
