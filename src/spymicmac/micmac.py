@@ -561,7 +561,7 @@ def get_valid_image_points(shape, pts, pts_nodist):
     return np.logical_and(in_im, in_nd)
 
 
-def write_image_mesures(imlist, gcps, outdir='.', sub='', ort_dir='Ortho-MEC-Relative'):
+def write_image_mesures(imlist, gcps, outdir='.', sub='', ort_dir='Ortho-MEC-Relative', outname='AutoMeasures'):
     """
     Create a Measures-S2D.xml file (row, pixel) for each GCP in each image from a list of image names.
 
@@ -569,7 +569,8 @@ def write_image_mesures(imlist, gcps, outdir='.', sub='', ort_dir='Ortho-MEC-Rel
     :param pandas.DataFrame gcps: a DataFrame of GCPs.
     :param str outdir: the output directory to save the files to.
     :param str sub: the name of the block, if multiple blocks are being used (e.g., '_block1').
-    :param str ort_dir: the Ortho-MEC directory where the images are located.
+    :param str ort_dir: the Ortho-MEC directory where the images are located (default: Ortho-MEC-Relative)
+    :param str outname: the base name of the file to write (default: AutoMeasures)
     """
     E = builder.ElementMaker()
     MesureSet = E.SetOfMesureAppuisFlottants()
@@ -601,7 +602,7 @@ def write_image_mesures(imlist, gcps, outdir='.', sub='', ort_dir='Ortho-MEC-Rel
         MesureSet.append(this_im_mes)
 
     tree = etree.ElementTree(MesureSet)
-    tree.write(os.path.join(outdir, 'AutoMeasures{}-S2D.xml'.format(sub)),
+    tree.write(os.path.join(outdir, '{}{}-S2D.xml'.format(outname, sub)),
                pretty_print=True, xml_declaration=True, encoding="utf-8")
 
 
@@ -1218,7 +1219,7 @@ def campari(in_gcps, outdir, img_pattern, sub, dx, ortho_res, allfree=True,
                           inori + sub,
                           outori + sub,
                           'GCP=[{},{},{},{}]'.format(os.path.join(outdir, fn_gcp),
-                                                     np.abs(dx) / 4,  # should be correct within 1/4 pixel
+                                                     np.abs(dx) / 4,  # should be correct within 0.25 pixel
                                                      os.path.join(outdir, fn_meas),
                                                      1),  # best balance for distortion
                           'SH={}'.format(homol),
@@ -1228,6 +1229,29 @@ def campari(in_gcps, outdir, img_pattern, sub, dx, ortho_res, allfree=True,
     out_gcps = get_campari_residuals('Ori-{}/Residus.xml'.format(outori + sub), in_gcps)
     # out_gcps.dropna(inplace=True)  # sometimes, campari can return no information for a gcp
     return out_gcps
+
+
+def checkpoints(img_pattern, ori, fn_cp, fn_meas, fn_resids=None, ret_df=True):
+    """
+    Interface to run GCPCtrl to calculate checkpoint residuals for a given Orientation.
+
+    :param str img_pattern: the match pattern for the images being input to Campari (e.g., "OIS.*tif")
+    :param str ori: the full name of the orientation directory to use (e.g., Ori-TerrainFinal)
+    :param str fn_cp: the filename of the CPs.xml file to use
+    :param str fn_meas: the filename of the CP Measures.xml file to use
+    :param str fn_resids: the (optional) filename to write the residuals for each checkpoint to
+    :param bool ret_df: return a DataFrame with the residuals for each checkpoint
+    :return:
+    """
+    args = ['mm3d', 'GCPCtrl', img_pattern, ori, fn_cp, fn_meas]
+    if fn_resids is not None:
+        args += [f'OutTxt={fn_resids}']
+
+    p = subprocess.Popen(args)
+    p.wait()
+
+    if fn_resids is not None and ret_df:
+        return pd.read_csv(str(fn_resids) + '_RollCtrl.txt', delimiter='\s+', names=['id', 'xres', 'yres', 'zres'])
 
 
 def banana(fn_dem, fn_ref, deg=2, dZthresh=200., fn_mask=None, spacing=100):
