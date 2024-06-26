@@ -48,7 +48,7 @@ def resample_hex(fn_img, scale, ori='InterneScan'):
 
     out_ds = gdal.Warp('tmp_{}'.format(fn_img), fn_img, xRes=1, yRes=1,
                        outputBounds=[0, 0, all_meas.j_cam.max(), all_meas.i_cam.max()],
-                       resampleAlg=gdal.GRA_Lanczos)
+                       resampleAlg=gdal.GRA_NearestNeighbour)
     meta_shp = '{"shape": ' + '[{}, {}]'.format(out_ds.RasterYSize, out_ds.RasterXSize) + '}'
     out_ds.SetMetadata({'TIFFTAG_IMAGEDESCRIPTION': meta_shp})
     out_ds.FlushCache()
