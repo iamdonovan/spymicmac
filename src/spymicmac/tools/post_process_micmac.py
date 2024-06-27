@@ -17,6 +17,8 @@ def _argparser():
     parser.add_argument('--do_ortho', action='store_true',
                         help='Post-process the orthomosaic in Ortho-{dirmec}, as well. Assumes that you have run'
                              'mm3d Tawny with Out=Orthophotomosaic first.')
+    parser.add_argument('--ind_ortho', action='store_true',
+                        help='Post-process the individual orthophotos in  in Ortho-{dirmec}, as well.')
     return parser
 
 

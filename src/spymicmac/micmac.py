@@ -6,6 +6,7 @@ import sys
 import re
 import subprocess
 import shutil
+import PIL
 import numpy as np
 from osgeo import gdal
 import pandas as pd
@@ -1560,7 +1561,7 @@ def _gdal_calc():
         return ['gdal_calc.py']
 
 
-def post_process(projstr, out_name, dirmec, do_ortho=True):
+def post_process(projstr, out_name, dirmec, do_ortho=True, ind_ortho=False):
     """
     Apply georeferencing and masking to the final DEM and Correlation images (optionally, the orthomosaic as well).
 
@@ -1575,6 +1576,7 @@ def post_process(projstr, out_name, dirmec, do_ortho=True):
     :param str dirmec: The MEC directory to process files from (e.g., MEC-Malt)
     :param bool do_ortho: Post-process the orthomosaic in Ortho-{dirmec}, as well. Assumes that you have run
         mm3d Tawny with Out=Orthophotomosaic first.
+    :param bool ind_ortho: apply a mask to each individual ortho image (default: false)
     """
     # TODO: re-implement this with geoutils/xdem instead of subprocess calls
     os.makedirs('post_processed', exist_ok=True)
@@ -1630,6 +1632,36 @@ def post_process(projstr, out_name, dirmec, do_ortho=True):
         os.remove('tmp_ortho.tif')
 
     os.remove('tmp_mask.tif')
+
+    if ind_ortho:
+        imlist = sorted(glob('OIS*.tif'))
+        for fn_img in imlist:
+            _mask_ortho(fn_img, out_name, dirmec, projstr)
+
+
+def _mask_ortho(fn_img, out_name, dirmec, projstr):
+    fn_ortho = os.path.join('-'.join(['Ortho', dirmec]), '_'.join(['Ort', fn_img]))
+    fn_incid = os.path.join('-'.join(['Ortho', dirmec]), '_'.join(['Incid', fn_img]))
+    fn_mask = os.path.join('-'.join(['Ortho', dirmec]), '_'.join(['Mask', fn_img]))
+
+    shutil.copy(fn_ortho.replace('tif', 'tfw'), fn_mask.replace('tif', 'tfw'))
+
+    mask = imread(fn_incid) < 1
+    oy, ox = imread(fn_ortho).shape
+
+    _mask = PIL.Image.fromarray(mask)
+    mask = np.array(_mask.resize((ox, oy)))
+    imsave(fn_mask, 255 * mask.astype(np.uint8))
+
+    subprocess.Popen(['gdal_translate', '-a_srs', projstr, fn_ortho, 'tmp_ortho.tif']).wait()
+    subprocess.Popen(['gdal_translate', '-a_srs', projstr, fn_mask, 'tmp_mask.tif']).wait()
+
+    subprocess.Popen(_gdal_calc() + ['--quiet', '-A', 'tmp_ortho.tif', '-B', 'tmp_mask.tif',
+                     '--outfile={}'.format(os.path.join('post_processed', f'{out_name}_{fn_img}')),
+                     '--calc="A*(B>0)"', '--NoDataValue=0', '--type', 'Byte']).wait()
+
+    os.remove('tmp_mask.tif')
+    os.remove('tmp_ortho.tif')
 
 
 # converted from bash script
