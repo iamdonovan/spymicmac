@@ -302,14 +302,14 @@ def get_rough_frame(img, fact=10):
     # of the difference, that's also in the right half of the image
     # min_ind = np.where(sorted_row < 0.2 * sorted_row.size)[0][-1]
     # max_ind = np.where(sorted_row > 0.8 * sorted_row.size)[0][0]
-    col_peaks = peak_local_max(np.diff(smooth_col), min_distance=int(0.005 * smooth_col.size),
+    col_peaks = peak_local_max(np.diff(smooth_col), min_distance=int(0.001 * smooth_col.size),
                                threshold_rel=0.25).flatten()
-    col_troughs = peak_local_max(-np.diff(smooth_col), min_distance=int(0.005 * smooth_col.size),
+    col_troughs = peak_local_max(-np.diff(smooth_col), min_distance=int(0.001 * smooth_col.size),
                                  threshold_rel=0.25).flatten()
 
-    row_peaks = peak_local_max(np.diff(smooth_row), min_distance=int(0.005 * smooth_row.size),
+    row_peaks = peak_local_max(np.diff(smooth_row), min_distance=int(0.001 * smooth_row.size),
                                threshold_rel=0.25).flatten()
-    row_troughs = peak_local_max(-np.diff(smooth_row), min_distance=int(0.005 * smooth_row.size),
+    row_troughs = peak_local_max(-np.diff(smooth_row), min_distance=int(0.001 * smooth_row.size),
                                  threshold_rel=0.25).flatten()
 
     # left_ind = np.max(row_peaks[np.where(row_peaks < lower * rowmean.size)[0]], initial=-1e10)
