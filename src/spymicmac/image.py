@@ -277,7 +277,7 @@ def get_rough_frame(img, fact=10):
     if aspect > 0.75:
         lower, upper = 0.1, 0.9
     else:
-        lower, upper = 0.2, 0.8
+        lower, upper = 0.15, 0.85
 
     rowmean = _spike_filter(img_lowres, axis=0)
     smooth_row = _moving_average(rowmean, n=20)
@@ -285,6 +285,11 @@ def get_rough_frame(img, fact=10):
     colmean = _spike_filter(img_lowres, axis=1)
     smooth_col = _moving_average(colmean, n=20)
 
+    lr = int(lower * smooth_row.size)
+    ur = int(upper * smooth_row.size)
+
+    lc = int(lower * smooth_col.size)
+    uc = int(upper * smooth_col.size)
     # xmin = 10 * np.where(rowmean > np.percentile(rowmean, 10))[0][0]
     # xmin = 10 * (np.argmax(np.diff(smooth_row)) + 1)
 
@@ -302,15 +307,15 @@ def get_rough_frame(img, fact=10):
     # of the difference, that's also in the right half of the image
     # min_ind = np.where(sorted_row < 0.2 * sorted_row.size)[0][-1]
     # max_ind = np.where(sorted_row > 0.8 * sorted_row.size)[0][0]
-    col_peaks = peak_local_max(np.diff(smooth_col), min_distance=int(0.001 * smooth_col.size),
+    col_peaks = peak_local_max(np.diff(smooth_col[:lc]), min_distance=int(0.001 * smooth_col.size),
                                threshold_rel=0.25).flatten()
-    col_troughs = peak_local_max(-np.diff(smooth_col), min_distance=int(0.001 * smooth_col.size),
-                                 threshold_rel=0.25).flatten()
+    col_troughs = peak_local_max(-np.diff(smooth_col[uc:]), min_distance=int(0.001 * smooth_col.size),
+                                 threshold_rel=0.25).flatten() + uc
 
-    row_peaks = peak_local_max(np.diff(smooth_row), min_distance=int(0.001 * smooth_row.size),
+    row_peaks = peak_local_max(np.diff(smooth_row[:lr]), min_distance=int(0.001 * smooth_row.size),
                                threshold_rel=0.25).flatten()
-    row_troughs = peak_local_max(-np.diff(smooth_row), min_distance=int(0.001 * smooth_row.size),
-                                 threshold_rel=0.25).flatten()
+    row_troughs = peak_local_max(-np.diff(smooth_row[ur:]), min_distance=int(0.001 * smooth_row.size),
+                                 threshold_rel=0.25).flatten() + ur
 
     # left_ind = np.max(row_peaks[np.where(row_peaks < lower * rowmean.size)[0]], initial=-1e10)
     # right_ind = np.min(row_troughs[np.where(row_troughs > upper * rowmean.size)[0]], initial=1e10)
