@@ -50,7 +50,7 @@ def resample_hex(fn_img, scale, ori='InterneScan', alg=gdal.GRA_Bilinear, tps=Tr
     ds = None
 
     options = {'xRes': 1, 'yRes': 1,
-               'outputBounds': [-500, -500, all_meas.j_cam.max() + 500, all_meas.i_cam.max() + 500],
+               'outputBounds': [0, 0, all_meas.j_cam.max(), all_meas.i_cam.max()],
                'resampleAlg': alg,
                'tps': tps}
 
