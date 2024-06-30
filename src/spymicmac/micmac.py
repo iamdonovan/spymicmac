@@ -1081,7 +1081,7 @@ def malt(imlist, ori, zoomf=1, zoomi=None, dirmec='MEC-Malt', seed_img=None, see
 
     if seed_img is not None:
         assert seed_xml is not None
-        args.append(f'DEMInitImg={seed_img}')
+        args.append(f'DEMInitIMG={seed_img}')
         args.append(f'DEMInitXML={seed_xml}')
 
     if resol_terr is not None:
