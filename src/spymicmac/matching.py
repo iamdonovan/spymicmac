@@ -1537,7 +1537,7 @@ def match_halves(left, right, overlap, block_size=None):
             continue
 
     model, inliers = ransac((np.array(src_pts), np.array(dst_pts)), EuclideanTransform,
-                        min_samples=10, residual_threshold=2, max_trials=25000)
+                        min_samples=10, residual_threshold=0.2, max_trials=25000)
 
     print('{} tie points found'.format(np.count_nonzero(inliers)))
     return model, np.count_nonzero(inliers)
