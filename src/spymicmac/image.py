@@ -95,9 +95,9 @@ def splitter(img, nblocks, overlap=0):
         this_left = []
 
         for j in range(nblocks[1]):
-            lind = max(0, j*new_width-overlap)
+            lind = max(0, j*new_width - overlap - 1)
             rind = min(img.shape[1], (j+1)*new_width + overlap)
-            tind = max(0, i*new_height - overlap)
+            tind = max(0, i*new_height - overlap - 1)
             bind = min(img.shape[0], (i+1)*new_height + overlap)
             this_col.append(img[tind:bind, lind:rind].copy())
             this_top.append(tind)
@@ -455,6 +455,8 @@ def join_halves(left, right, overlap, block_size=None, blend=True, trim=None):
     out_shape = (left.shape[0], left.shape[1] + right.shape[1])
 
     combined_right = warp(right, M, output_shape=out_shape, preserve_range=True, order=3)
+
+    # io.imsave('tmp_right.tif', combined_right.astype(np.uint8))
 
     combined_left = np.zeros(out_shape, dtype=np.uint8)
     combined_left[:, :left.shape[1]] = left
