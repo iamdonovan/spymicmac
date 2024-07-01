@@ -1056,8 +1056,8 @@ def malt(imlist, ori, zoomf=1, zoomi=None, dirmec='MEC-Malt', seed_img=None, see
         (default: 2)
     :param float regul: the regularization factor to use. Lower values mean higher potential variability between
         adjacent pixels, higher values (up to 1) mean smoother outputs (default: 0.05)
-    :param bool do_ortho: whether or not to generate the orthoimages (default: True)
-    :param bool do_mec: whether or not to generate an output DEM (default: True)
+    :param bool do_ortho: whether to generate the orthoimages (default: True)
+    :param bool do_mec: whether to generate an output DEM (default: True)
     """
     if os.name == 'nt':
         echo = subprocess.Popen('echo', stdout=subprocess.PIPE, shell=True)
@@ -1222,7 +1222,7 @@ def campari(in_gcps, outdir, img_pattern, sub, dx, ortho_res, allfree=True,
                           'GCP=[{},{},{},{}]'.format(os.path.join(outdir, fn_gcp),
                                                      np.abs(dx) / 4,  # should be correct within 0.25 pixel
                                                      os.path.join(outdir, fn_meas),
-                                                     1),  # best balance for distortion
+                                                     0.5),  # best balance for distortion
                           'SH={}'.format(homol),
                           'AllFree={}'.format(int(allfree))], stdin=echo.stdout)
     p.wait()
@@ -1362,10 +1362,10 @@ def iterate_campari(gcps, out_dir, match_pattern, subscript, dx, ortho_res, fn_g
 
     gcps['camp_xy'] = np.sqrt(gcps.camp_xres ** 2 + gcps.camp_yres ** 2)
 
-    while any([np.any(np.abs(gcps.camp_res - gcps.camp_res.median()) > 3 * register.nmad(gcps.camp_res)),
-               np.any(np.abs(gcps.camp_dist - gcps.camp_dist.median()) > 3 * register.nmad(gcps.camp_dist)),
+    while any([np.any(np.abs(gcps.camp_res - gcps.camp_res.median()) > 2 * register.nmad(gcps.camp_res)),
+               np.any(np.abs(gcps.camp_dist - gcps.camp_dist.median()) > 2 * register.nmad(gcps.camp_dist)),
                gcps.camp_res.max() > 2]) and niter <= max_iter:
-        valid_inds = np.logical_and.reduce((np.abs(gcps.camp_dist - gcps.camp_dist.median()) < 3 * register.nmad(gcps.camp_dist),
+        valid_inds = np.logical_and.reduce((np.abs(gcps.camp_dist - gcps.camp_dist.median()) < 2 * register.nmad(gcps.camp_dist),
                                             gcps.camp_res < gcps.camp_res.max()))
         if np.count_nonzero(valid_inds) < 10:
             break
