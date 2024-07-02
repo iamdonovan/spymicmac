@@ -3,7 +3,7 @@ spymicmac.image is a collection of tools for working with images.
 """
 import os
 from glob import glob
-from itertools import chain
+from itertools import chain, product
 from skimage import exposure, morphology, io, filters
 from skimage.morphology import disk
 from skimage.feature import peak_local_max
@@ -95,9 +95,9 @@ def splitter(img, nblocks, overlap=0):
         this_left = []
 
         for j in range(nblocks[1]):
-            lind = max(0, j*new_width-overlap)
+            lind = max(0, j*new_width - overlap - 1)
             rind = min(img.shape[1], (j+1)*new_width + overlap)
-            tind = max(0, i*new_height - overlap)
+            tind = max(0, i*new_height - overlap - 1)
             bind = min(img.shape[0], (i+1)*new_height + overlap)
             this_col.append(img[tind:bind, lind:rind].copy())
             this_top.append(tind)
@@ -277,14 +277,19 @@ def get_rough_frame(img, fact=10):
     if aspect > 0.75:
         lower, upper = 0.1, 0.9
     else:
-        lower, upper = 0.2, 0.8
+        lower, upper = 0.15, 0.85
 
     rowmean = _spike_filter(img_lowres, axis=0)
-    smooth_row = _moving_average(rowmean, n=10)
+    smooth_row = _moving_average(rowmean, n=20)
 
     colmean = _spike_filter(img_lowres, axis=1)
-    smooth_col = _moving_average(colmean, n=10)
+    smooth_col = _moving_average(colmean, n=20)
 
+    lr = int(lower * smooth_row.size)
+    ur = int(upper * smooth_row.size)
+
+    lc = int(lower * smooth_col.size)
+    uc = int(upper * smooth_col.size)
     # xmin = 10 * np.where(rowmean > np.percentile(rowmean, 10))[0][0]
     # xmin = 10 * (np.argmax(np.diff(smooth_row)) + 1)
 
@@ -302,21 +307,35 @@ def get_rough_frame(img, fact=10):
     # of the difference, that's also in the right half of the image
     # min_ind = np.where(sorted_row < 0.2 * sorted_row.size)[0][-1]
     # max_ind = np.where(sorted_row > 0.8 * sorted_row.size)[0][0]
-    col_peaks = peak_local_max(np.diff(smooth_col), min_distance=int(0.005 * smooth_col.size),
+    col_peaks = peak_local_max(np.diff(smooth_col[:lc]), min_distance=int(0.001 * smooth_col.size),
                                threshold_rel=0.25).flatten()
-    col_troughs = peak_local_max(-np.diff(smooth_col), min_distance=int(0.005 * smooth_col.size),
-                                 threshold_rel=0.25).flatten()
+    col_troughs = peak_local_max(-np.diff(smooth_col[uc:]), min_distance=int(0.001 * smooth_col.size),
+                                 threshold_rel=0.25).flatten() + uc
 
-    row_peaks = peak_local_max(np.diff(smooth_row), min_distance=int(0.005 * smooth_row.size),
+    row_peaks = peak_local_max(np.diff(smooth_row[:lr]), min_distance=int(0.001 * smooth_row.size),
                                threshold_rel=0.25).flatten()
-    row_troughs = peak_local_max(-np.diff(smooth_row), min_distance=int(0.005 * smooth_row.size),
-                                 threshold_rel=0.25).flatten()
+    row_troughs = peak_local_max(-np.diff(smooth_row[ur:]), min_distance=int(0.001 * smooth_row.size),
+                                 threshold_rel=0.25).flatten() + ur
 
-    left_ind = np.max(row_peaks[np.where(row_peaks < lower * rowmean.size)[0]], initial=-1e10)
-    right_ind = np.min(row_troughs[np.where(row_troughs > upper * rowmean.size)[0]], initial=1e10)
+    # left_ind = np.max(row_peaks[np.where(row_peaks < lower * rowmean.size)[0]], initial=-1e10)
+    # right_ind = np.min(row_troughs[np.where(row_troughs > upper * rowmean.size)[0]], initial=1e10)
+    # left_ind, right_ind = _maximum_sep(row_peaks, row_troughs)
+    left_ind = _best_sep(row_peaks, smooth_row, False)
+    right_ind = _best_sep(row_troughs, smooth_row, True)
 
-    top_ind = np.max(col_peaks[np.where(col_peaks < lower * colmean.size)[0]], initial=-1e10)
-    bot_ind = np.min(col_troughs[np.where(col_troughs > upper * colmean.size)[0]], initial=1e10)
+    if (right_ind - left_ind) / smooth_row.size < (upper - lower):
+        left_ind = np.max(row_peaks[np.where(row_peaks < lower * rowmean.size)[0]], initial=-1e10)
+        right_ind = np.min(row_troughs[np.where(row_troughs > upper * rowmean.size)[0]], initial=1e10)
+
+    # top_ind = np.max(col_peaks[np.where(col_peaks < lower * colmean.size)[0]], initial=-1e10)
+    # bot_ind = np.min(col_troughs[np.where(col_troughs > upper * colmean.size)[0]], initial=1e10)
+    # top_ind, bot_ind = _maximum_sep(col_peaks, col_troughs)
+    top_ind = _best_sep(col_peaks, smooth_col, False)
+    bot_ind = _best_sep(col_troughs, smooth_col, True)
+
+    if (bot_ind - top_ind) / smooth_col.size < (upper - lower):
+        top_ind = np.max(col_peaks[np.where(col_peaks < lower * colmean.size)[0]], initial=-1e10)
+        bot_ind = np.min(col_troughs[np.where(col_troughs > upper * colmean.size)[0]], initial=1e10)
 
     # xmin = 10 * (sorted_row[min_ind] + 1)
     # xmax = 10 * (sorted_row[max_ind] + 1)
@@ -338,6 +357,24 @@ def get_rough_frame(img, fact=10):
     # ymax = 10 * (sorted_col[max_ind] + 1)
 
     return xmin, xmax, ymin, ymax
+
+
+def _best_sep(pks, means, trough):
+    davg = min([min(pks), 100, means.size - max(pks)])
+    seps = [means[pk-davg:pk].mean() - means[pk:pk+davg].mean() for pk in pks]
+    if trough:
+        return pks[np.argmax(seps)]
+    else:
+        return pks[np.argmin(seps)]
+
+
+def _maximum_sep(peaks, troughs):
+    combs = list(product(peaks, troughs))
+    dists = [max(pair) - min(pair) for pair in combs]
+
+    best = combs[np.argmax(dists)]
+
+    return min(best), max(best)
 
 
 def get_parts_list(im_pattern):
@@ -418,6 +455,8 @@ def join_halves(left, right, overlap, block_size=None, blend=True, trim=None):
     out_shape = (left.shape[0], left.shape[1] + right.shape[1])
 
     combined_right = warp(right, M, output_shape=out_shape, preserve_range=True, order=3)
+
+    # io.imsave('tmp_right.tif', combined_right.astype(np.uint8))
 
     combined_left = np.zeros(out_shape, dtype=np.uint8)
     combined_left[:, :left.shape[1]] = left

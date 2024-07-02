@@ -230,7 +230,6 @@ def main():
         for fn_img in imlist:
             shutil.move(fn_img + '.tif', 'Orig')
 
-
     if do['balance']:
         print('Using CLAHE to balance image contrast')
         for fn_img in imlist:
@@ -261,4 +260,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
