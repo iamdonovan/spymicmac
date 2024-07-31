@@ -2,6 +2,7 @@
 spymicmac.register is a collection of tools for registering images and finding GCPs.
 """
 import os
+from pathlib import Path
 import re
 import subprocess
 import shutil
@@ -133,6 +134,12 @@ def _get_utm_str(epsg):
         return epsg_str[-2:] + hemi_dict[epsg_str[2]]
     else:
         return 'not utm'
+
+
+def _split_cps_gcps(gcps, frac):
+    cps = gcps.sample(frac=frac)
+    gcps.drop(cps.index, inplace=True)
+    return gcps.sort_index(), cps.sort_index()
 
 
 def warp_image(model, ref, img):
@@ -286,7 +293,8 @@ def _get_last_malt(dirmec):
 
 def register_relative(dirmec, fn_dem, fn_ref=None, fn_ortho=None, glacmask=None, landmask=None, footprints=None,
                       im_subset=None, block_num=None, subscript=None, ori='Relative', ortho_res=8.,
-                      imgsource='DECLASSII', density=200, out_dir=None, allfree=True, useortho=False, max_iter=5):
+                      imgsource='DECLASSII', density=200, out_dir=None, allfree=True, useortho=False, max_iter=5,
+                      use_cps=False, cp_frac=0.2):
     """
     Register a relative DEM or orthoimage to a reference DEM and/or orthorectified image.
 
@@ -309,6 +317,8 @@ def register_relative(dirmec, fn_dem, fn_ref=None, fn_ortho=None, glacmask=None,
     :param bool useortho: use the orthomosaic in Ortho-{dirmec} rather than the DEM (default: False). If fn_ortho is
         set, uses that file instead.
     :param int max_iter: the maximum number of Campari iterations to run. (default: 5)
+    :param bool use_cps: split the GCPs into GCPs and CPs, to quantify the uncertainty of the camera model (default: False)
+    :param float cp_frac: the fraction of GCPs to use when splitting into GCPs and CPs (default: 0.2)
     """
     print('start.')
 
@@ -490,9 +500,38 @@ def register_relative(dirmec, fn_dem, fn_ref=None, fn_ortho=None, glacmask=None,
 
     micmac.save_gcps(gcps, out_dir, utm_str, subscript)
 
+    # if we're getting cps, split them now
+    if use_cps:
+        gcps, cps = _split_cps_gcps(gcps, cp_frac)
+
+        micmac.save_gcps(gcps, out_dir, utm_str, subscript)
+
+        micmac.write_auto_gcps(cps, subscript, out_dir, utm_str, outname='AutoCPs')
+        subprocess.Popen(['mm3d', 'GCPConvert', 'AppInFile',
+                          Path(out_dir, 'AutoCPs{}.txt'.format(subscript))]).wait()
+
+        micmac.write_auto_mesures(cps, subscript, out_dir, outname='AutoCPMeasures')
+        micmac.get_autogcp_locations(f'Ori-{ori}', Path(out_dir, f'AutoCPMeasures{subscript}.txt'), imlist)
+        micmac.write_image_mesures(imlist, cps, out_dir, subscript, ort_dir=ort_dir, outname='AutoCPMeasures')
+
     # now, iterate campari to refine the orientation
     gcps = micmac.iterate_campari(gcps, out_dir, match_pattern, subscript, ref_img.res[0], ortho_res,
                                   rel_ori=ori, allfree=allfree, max_iter=max_iter)
+
+    if use_cps:
+        cp_resids = micmac.checkpoints(match_pattern, 'Ori-TerrainFinal{}'.format(subscript),
+                                       fn_cp=Path(out_dir, f'AutoCPs{subscript}.xml'),
+                                       fn_meas=Path(out_dir, f'AutoCPMeasures{subscript}-S2D.xml'),
+                                       fn_resids=Path(out_dir, f'AutoCPs{subscript}', ret_df=True))
+
+        # merge cps and cp_resids
+        cps.drop(['xres', 'yres', 'zres', 'residual', 'res_dist'], axis=1, inplace=True)
+
+        cps = cps.merge(cp_resids, left_on='id', right_on='id')
+        cps['res_dist'] = np.sqrt(cps.xres ** 2 + cps.yres ** 2)
+        cps['residual'] = np.sqrt(cps.xres ** 2 + cps.yres ** 2 + cps.zres ** 2)
+
+        cps.to_file(Path(out_dir, f'AutoCPs{subscript}.shp'))
 
     # final write of gcps to disk.
     gcps.to_file(os.path.join(out_dir, 'AutoGCPs{}.shp'.format(subscript)))
@@ -501,6 +540,9 @@ def register_relative(dirmec, fn_dem, fn_ref=None, fn_ortho=None, glacmask=None,
     plt.imshow(reg_img[::5, ::5], cmap='gray', extent=[0, reg_img.shape[1], reg_img.shape[0], 0])
     plt.plot(gcps.orig_j, gcps.orig_i, 'r+')
     plt.quiver(gcps.orig_j, gcps.orig_i, gcps.camp_xres, gcps.camp_yres, color='r')
+    if use_cps:
+        plt.plot(cps.orig_j, cps.orig_i, 'bs')
+        plt.quiver(cps.orig_j, cps.orig_i, cps.xres, cps.yres, color='b')
 
     plt.savefig(os.path.join(out_dir, 'relative_gcps{}.png'.format(subscript)), bbox_inches='tight', dpi=200)
     plt.close(fig1)
@@ -509,6 +551,9 @@ def register_relative(dirmec, fn_dem, fn_ref=None, fn_ortho=None, glacmask=None,
     xmin, ymin, xmax, ymax = ref_img.bounds
     plt.imshow(ref_img.data[::10, ::10], cmap='gray', extent=[xmin, xmax, ymin, ymax])
     plt.plot(gcps.geometry.x, gcps.geometry.y, 'r+')
+    if use_cps:
+        plt.plot(cps.geometry.x, cps.geometry.y, 'bs')
+
     plt.savefig(os.path.join(out_dir, 'world_gcps{}.png'.format(subscript)), bbox_inches='tight', dpi=200)
     plt.close(fig2)
 

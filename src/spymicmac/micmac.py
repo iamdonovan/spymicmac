@@ -6,6 +6,7 @@ import sys
 import re
 import subprocess
 import shutil
+import PIL
 import numpy as np
 from osgeo import gdal
 import pandas as pd
@@ -561,7 +562,7 @@ def get_valid_image_points(shape, pts, pts_nodist):
     return np.logical_and(in_im, in_nd)
 
 
-def write_image_mesures(imlist, gcps, outdir='.', sub='', ort_dir='Ortho-MEC-Relative'):
+def write_image_mesures(imlist, gcps, outdir='.', sub='', ort_dir='Ortho-MEC-Relative', outname='AutoMeasures'):
     """
     Create a Measures-S2D.xml file (row, pixel) for each GCP in each image from a list of image names.
 
@@ -569,7 +570,8 @@ def write_image_mesures(imlist, gcps, outdir='.', sub='', ort_dir='Ortho-MEC-Rel
     :param pandas.DataFrame gcps: a DataFrame of GCPs.
     :param str outdir: the output directory to save the files to.
     :param str sub: the name of the block, if multiple blocks are being used (e.g., '_block1').
-    :param str ort_dir: the Ortho-MEC directory where the images are located.
+    :param str ort_dir: the Ortho-MEC directory where the images are located (default: Ortho-MEC-Relative)
+    :param str outname: the base name of the file to write (default: AutoMeasures)
     """
     E = builder.ElementMaker()
     MesureSet = E.SetOfMesureAppuisFlottants()
@@ -601,7 +603,7 @@ def write_image_mesures(imlist, gcps, outdir='.', sub='', ort_dir='Ortho-MEC-Rel
         MesureSet.append(this_im_mes)
 
     tree = etree.ElementTree(MesureSet)
-    tree.write(os.path.join(outdir, 'AutoMeasures{}-S2D.xml'.format(sub)),
+    tree.write(os.path.join(outdir, '{}{}-S2D.xml'.format(outname, sub)),
                pretty_print=True, xml_declaration=True, encoding="utf-8")
 
 
@@ -1033,7 +1035,7 @@ def apericloud(ori, img_pattern='OIS.*tif'):
 
 
 def malt(imlist, ori, zoomf=1, zoomi=None, dirmec='MEC-Malt', seed_img=None, seed_xml=None,
-         resol_terr=None, resol_ort=None, cost_trans=None, szw=None, regul=None):
+         resol_terr=None, resol_ort=None, cost_trans=None, szw=None, regul=None, do_ortho=True, do_mec=True):
     """
     Run mm3d Malt Ortho.
 
@@ -1054,6 +1056,8 @@ def malt(imlist, ori, zoomf=1, zoomi=None, dirmec='MEC-Malt', seed_img=None, see
         (default: 2)
     :param float regul: the regularization factor to use. Lower values mean higher potential variability between
         adjacent pixels, higher values (up to 1) mean smoother outputs (default: 0.05)
+    :param bool do_ortho: whether to generate the orthoimages (default: True)
+    :param bool do_mec: whether to generate an output DEM (default: True)
     """
     if os.name == 'nt':
         echo = subprocess.Popen('echo', stdout=subprocess.PIPE, shell=True)
@@ -1068,31 +1072,32 @@ def malt(imlist, ori, zoomf=1, zoomi=None, dirmec='MEC-Malt', seed_img=None, see
         except TypeError as te:
             raise TypeError(f"imlist is not iterable: {imlist}")
 
-    args = ['mm3d', 'Malt', 'Ortho', matchstr, ori, 'DirMEC={}'.format(dirmec),
-            'NbVI=2', 'ZoomF={}'.format(zoomf), 'DefCor=0', 'EZA=1']
+    args = ['mm3d', 'Malt', 'Ortho', matchstr, ori, f'DirMEC={dirmec}',
+            'NbVI=2', f'ZoomF={zoomf}', 'DefCor=0', 'EZA=1',
+            f'DoOrtho={int(do_ortho)}', f'DoMEC={int(do_mec)}']
 
     if zoomi is not None:
-        args.append('ZoomI={}'.format(zoomi))
+        args.append(f'ZoomI={zoomi}')
 
     if seed_img is not None:
         assert seed_xml is not None
-        args.append('DEMInitImg=' + seed_img)
-        args.append('DEMInitXML=' + seed_xml)
+        args.append(f'DEMInitIMG={seed_img}')
+        args.append(f'DEMInitXML={seed_xml}')
 
     if resol_terr is not None:
-        args.append('ResolTerrain=' + resol_terr)
+        args.append(f'ResolTerrain={resol_terr}')
 
     if resol_ort is not None:
-        args.append('ResolOrtho' + resol_ort)
+        args.append(f'ResolOrtho={resol_ort}')
 
     if cost_trans is not None:
-        args.append('CostTrans=' + cost_trans)
+        args.append(f'CostTrans={cost_trans}')
 
     if szw is not None:
-        args.append('SzW=' + szw)
+        args.append(f'SzW={szw}')
 
     if regul is not None:
-        args.append('Regul=' + regul)
+        args.append(f'Regul={regul}')
 
     p = subprocess.Popen(args, stdin=echo.stdout)
 
@@ -1215,9 +1220,9 @@ def campari(in_gcps, outdir, img_pattern, sub, dx, ortho_res, allfree=True,
                           inori + sub,
                           outori + sub,
                           'GCP=[{},{},{},{}]'.format(os.path.join(outdir, fn_gcp),
-                                                     np.abs(dx) / 4,  # should be correct within 1/4 pixel
+                                                     np.abs(dx) / 4,  # should be correct within 0.25 pixel
                                                      os.path.join(outdir, fn_meas),
-                                                     1),  # best balance for distortion
+                                                     0.5),  # best balance for distortion
                           'SH={}'.format(homol),
                           'AllFree={}'.format(int(allfree))], stdin=echo.stdout)
     p.wait()
@@ -1225,6 +1230,29 @@ def campari(in_gcps, outdir, img_pattern, sub, dx, ortho_res, allfree=True,
     out_gcps = get_campari_residuals('Ori-{}/Residus.xml'.format(outori + sub), in_gcps)
     # out_gcps.dropna(inplace=True)  # sometimes, campari can return no information for a gcp
     return out_gcps
+
+
+def checkpoints(img_pattern, ori, fn_cp, fn_meas, fn_resids=None, ret_df=True):
+    """
+    Interface to run GCPCtrl to calculate checkpoint residuals for a given Orientation.
+
+    :param str img_pattern: the match pattern for the images being input to Campari (e.g., "OIS.*tif")
+    :param str ori: the full name of the orientation directory to use (e.g., Ori-TerrainFinal)
+    :param str fn_cp: the filename of the CPs.xml file to use
+    :param str fn_meas: the filename of the CP Measures.xml file to use
+    :param str fn_resids: the (optional) filename to write the residuals for each checkpoint to
+    :param bool ret_df: return a DataFrame with the residuals for each checkpoint
+    :return:
+    """
+    args = ['mm3d', 'GCPCtrl', img_pattern, ori, fn_cp, fn_meas]
+    if fn_resids is not None:
+        args += [f'OutTxt={fn_resids}']
+
+    p = subprocess.Popen(args)
+    p.wait()
+
+    if fn_resids is not None and ret_df:
+        return pd.read_csv(str(fn_resids) + '_RollCtrl.txt', delimiter='\s+', names=['id', 'xres', 'yres', 'zres'])
 
 
 def banana(fn_dem, fn_ref, deg=2, dZthresh=200., fn_mask=None, spacing=100):
@@ -1334,10 +1362,10 @@ def iterate_campari(gcps, out_dir, match_pattern, subscript, dx, ortho_res, fn_g
 
     gcps['camp_xy'] = np.sqrt(gcps.camp_xres ** 2 + gcps.camp_yres ** 2)
 
-    while any([np.any(np.abs(gcps.camp_res - gcps.camp_res.median()) > 3 * register.nmad(gcps.camp_res)),
-               np.any(np.abs(gcps.camp_dist - gcps.camp_dist.median()) > 3 * register.nmad(gcps.camp_dist)),
+    while any([np.any(np.abs(gcps.camp_res - gcps.camp_res.median()) > 2 * register.nmad(gcps.camp_res)),
+               np.any(np.abs(gcps.camp_dist - gcps.camp_dist.median()) > 2 * register.nmad(gcps.camp_dist)),
                gcps.camp_res.max() > 2]) and niter <= max_iter:
-        valid_inds = np.logical_and.reduce((np.abs(gcps.camp_dist - gcps.camp_dist.median()) < 3 * register.nmad(gcps.camp_dist),
+        valid_inds = np.logical_and.reduce((np.abs(gcps.camp_dist - gcps.camp_dist.median()) < 2 * register.nmad(gcps.camp_dist),
                                             gcps.camp_res < gcps.camp_res.max()))
         if np.count_nonzero(valid_inds) < 10:
             break
@@ -1533,7 +1561,7 @@ def _gdal_calc():
         return ['gdal_calc.py']
 
 
-def post_process(projstr, out_name, dirmec, do_ortho=True):
+def post_process(projstr, out_name, dirmec, do_ortho=True, ind_ortho=False):
     """
     Apply georeferencing and masking to the final DEM and Correlation images (optionally, the orthomosaic as well).
 
@@ -1548,6 +1576,7 @@ def post_process(projstr, out_name, dirmec, do_ortho=True):
     :param str dirmec: The MEC directory to process files from (e.g., MEC-Malt)
     :param bool do_ortho: Post-process the orthomosaic in Ortho-{dirmec}, as well. Assumes that you have run
         mm3d Tawny with Out=Orthophotomosaic first.
+    :param bool ind_ortho: apply a mask to each individual ortho image (default: false)
     """
     # TODO: re-implement this with geoutils/xdem instead of subprocess calls
     os.makedirs('post_processed', exist_ok=True)
@@ -1603,6 +1632,36 @@ def post_process(projstr, out_name, dirmec, do_ortho=True):
         os.remove('tmp_ortho.tif')
 
     os.remove('tmp_mask.tif')
+
+    if ind_ortho:
+        imlist = sorted(glob('OIS*.tif'))
+        for fn_img in imlist:
+            _mask_ortho(fn_img, out_name, dirmec, projstr)
+
+
+def _mask_ortho(fn_img, out_name, dirmec, projstr):
+    fn_ortho = os.path.join('-'.join(['Ortho', dirmec]), '_'.join(['Ort', fn_img]))
+    fn_incid = os.path.join('-'.join(['Ortho', dirmec]), '_'.join(['Incid', fn_img]))
+    fn_mask = os.path.join('-'.join(['Ortho', dirmec]), '_'.join(['Mask', fn_img]))
+
+    shutil.copy(fn_ortho.replace('tif', 'tfw'), fn_mask.replace('tif', 'tfw'))
+
+    mask = imread(fn_incid) < 1
+    oy, ox = imread(fn_ortho).shape
+
+    _mask = PIL.Image.fromarray(mask)
+    mask = np.array(_mask.resize((ox, oy)))
+    imsave(fn_mask, 255 * mask.astype(np.uint8))
+
+    subprocess.Popen(['gdal_translate', '-a_srs', projstr, fn_ortho, 'tmp_ortho.tif']).wait()
+    subprocess.Popen(['gdal_translate', '-a_srs', projstr, fn_mask, 'tmp_mask.tif']).wait()
+
+    subprocess.Popen(_gdal_calc() + ['--quiet', '-A', 'tmp_ortho.tif', '-B', 'tmp_mask.tif',
+                     '--outfile={}'.format(os.path.join('post_processed', f'{out_name}_{fn_img}')),
+                     '--calc="A*(B>0)"', '--NoDataValue=0', '--type', 'Byte']).wait()
+
+    os.remove('tmp_mask.tif')
+    os.remove('tmp_ortho.tif')
 
 
 # converted from bash script

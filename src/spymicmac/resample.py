@@ -24,13 +24,16 @@ def downsample(img, fact=4):
     return np.array(_img.resize((np.array(_img.size) / fact).astype(int), PIL.Image.Resampling.LANCZOS))
 
 
-def resample_hex(fn_img, scale, ori='InterneScan'):
+def resample_hex(fn_img, scale, ori='InterneScan', alg=gdal.GRA_Bilinear, tps=True, order=None):
     """
     Resample a KH-9 Mapping Camera image based on the reseau grid, using gdal.Warp
 
     :param str fn_img: the filename of the image to resample
     :param int scale: the number of pixels per mm of the scanned image
     :param str ori: the Ori directory that contains both MeasuresCamera.xml and MeasuresIm (default: InterneScan)
+    :param alg: the gdal resampling algorithm to use (default: gdal.GRA_Bilinear)
+    :param bool tps: use a thin plate spline transformer to transform based on reseau grid (default: False)
+    :param int order: the order (1-3) of polynomial GCP interpolation (default: not used)
     """
     cam_meas = micmac.parse_im_meas(os.path.join('Ori-{}'.format(ori), 'MeasuresCamera.xml'))
     img_meas = micmac.parse_im_meas(os.path.join('Ori-{}'.format(ori), 'MeasuresIm-{}.xml'.format(fn_img)))
@@ -46,9 +49,16 @@ def resample_hex(fn_img, scale, ori='InterneScan'):
     ds.FlushCache()
     ds = None
 
-    out_ds = gdal.Warp('tmp_{}'.format(fn_img), fn_img, xRes=1, yRes=1,
-                       outputBounds=[0, 0, all_meas.j_cam.max(), all_meas.i_cam.max()],
-                       resampleAlg=gdal.GRA_Lanczos)
+    options = {'xRes': 1, 'yRes': 1,
+               'outputBounds': [0, 0, all_meas.j_cam.max(), all_meas.i_cam.max()],
+               'resampleAlg': alg,
+               'tps': tps}
+
+    if order is not None:
+        options['polynomialOrder'] = order
+
+    out_ds = gdal.Warp('tmp_{}'.format(fn_img), fn_img, **options)
+
     meta_shp = '{"shape": ' + '[{}, {}]'.format(out_ds.RasterYSize, out_ds.RasterXSize) + '}'
     out_ds.SetMetadata({'TIFFTAG_IMAGEDESCRIPTION': meta_shp})
     out_ds.FlushCache()
