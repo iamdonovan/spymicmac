@@ -379,8 +379,43 @@ def estimate_measures_camera(approx_meas, ori='InterneScan', scan_res=2.5e-5, ho
     create_measurescamera_xml('AverageMeasures.csv', ori=ori, translate=False, name='name', x='j', y='i')
 
 
+def generate_multicam_csv(patterns=None, prefix='OIS-Reech_', fn_out='camera_defs.csv',
+                          name='', short_name='', film_size='', focal=''):
+    """
+
+    :param patterns:
+    :param prefix:
+    :param fn_out:
+    :param name:
+    :param short_name:
+    :param film_size:
+    :param focal:
+    :return:
+    """
+    cameras = pd.DataFrame()
+
+    if patterns is None:
+        cameras['pattern'] = ''
+    else:
+        patterns = [p + '.*' for p in patterns if '.*' not in p]
+        patterns = [prefix + p for p in patterns if prefix not in p]
+
+        cameras['pattern'] = patterns
+
+    cameras['name'] = name
+    cameras['short_name'] = short_name
+
+    if not isinstance(film_size, str):
+        film_size = [','.join([str(p) for p in pp]) for pp in film_size]
+
+    cameras['film_size'] = film_size
+    cameras['focal'] = focal
+
+    cameras.to_csv(fn_out, index=False)
+
+
 def create_localchantier_xml(name='KH9MC', short_name='KH-9 Hexagon Mapping Camera', film_size=(460, 220),
-                             pattern='.*', focal=304.8, add_sfs=False):
+                             pattern='.*', focal=304.8, add_sfs=False, cam_csv=None):
     """
     Create a MicMac-LocalChantierDescripteur.xml file for a given camera. Default is the KH-9 Hexagon Mapping Camera.
 
@@ -390,38 +425,88 @@ def create_localchantier_xml(name='KH9MC', short_name='KH-9 Hexagon Mapping Came
     :param str pattern: the matching pattern to use for the images [.*]
     :param float focal: the nominal focal length, in mm [304.8]
     :param bool add_sfs: use SFS to help find tie points in low-contrast images [False]
+    :param str cam_csv: the CSV file containing parameters for multiple cameras [None]
     """
     E = builder.ElementMaker()
 
-    chantier = E.ChantierDescripteur(
-        E.LocCamDataBase(
+    chantier = E.ChantierDescripteur()
+    cam_db = E.LocCamDataBase()
+    cam_assocs = E.KeyedNamesAssociations()
+    foc_assocs = E.KeyedNamesAssociations()
+
+    if cam_csv is not None:
+        cameras = pd.read_csv(cam_csv)
+        for ind, cam in cameras.iterrows():
+            width, height = [p.strip() for p in cam['film_size'].split(',')]
+
+            cam_db.append(
+                E.CameraEntry(
+                    E.Name(cam['name']),
+                    E.SzCaptMm(f"{width} {height}"),
+                    E.ShortName(cam['short_name'])
+                )
+            )
+
+            cam_assocs.append(
+                E.Calcs(
+                    E.Arrite('1 1'),
+                    E.Direct(
+                        E.PatternTransform(cam['pattern']),
+                        E.CalcName(cam['name'])
+                    )
+                )
+            )
+
+            foc_assocs.append(
+                E.Calcs(
+                    E.Arrite('1 1'),
+                    E.Direct(
+                        E.PatternTransform(cam['pattern']),
+                        E.CalcName(f"{cam['focal']}")
+                    )
+                )
+            )
+
+    else:
+        width, height = film_size
+        cam_db.append(
             E.CameraEntry(
                 E.Name(name),
-                E.SzCaptMm('{} {}'.format(film_size[0], film_size[1])),
+                E.SzCaptMm(f"{width} {height}"),
                 E.ShortName(short_name)
             )
-        ),
-        E.KeyedNamesAssociations(
+        )
+
+        cam_assocs.append(
             E.Calcs(
                 E.Arrite('1 1'),
                 E.Direct(
                     E.PatternTransform(pattern),
                     E.CalcName(name)
                 )
-            ),
-            E.Key('NKS-Assoc-STD-CAM')
-        ),
-        E.KeyedNamesAssociations(
+            )
+        )
+
+        foc_assocs.append(
             E.Calcs(
                 E.Arrite('1 1'),
                 E.Direct(
-                    E.PatternTransform('OIS.*'),
-                    E.CalcName('{}'.format(focal))
+                    E.PatternTransform(pattern),
+                    E.CalcName(focal)
                 )
-            ),
-            E.Key('NKS-Assoc-STD-FOC')
+            )
         )
+
+    cam_assocs.append(
+        E.Key('NKS-Assoc-STD-CAM')
     )
+
+    foc_assocs.append(
+        E.Key('NKS-Assoc-STD-FOC')
+    )
+
+    for item in [cam_db, cam_assocs, foc_assocs]:
+        chantier.append(item)
 
     if add_sfs:
         chantier.append(
