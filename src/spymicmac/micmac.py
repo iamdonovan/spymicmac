@@ -17,6 +17,7 @@ import difflib
 import xml.etree.ElementTree as ET
 from glob import glob
 from shapely.strtree import STRtree
+from shapely.geometry import LineString
 from skimage.io import imread, imsave
 from skimage.transform import AffineTransform, SimilarityTransform
 from skimage.measure import ransac
@@ -336,14 +337,14 @@ def create_measurescamera_xml(fn_csv, ori='InterneScan', translate=False, name='
                xml_declaration=True, encoding="utf-8")
 
 
-def estimate_measures_camera(approx_meas, ori='InterneScan', scan_res=2.5e-5, how='mean'):
+def estimate_measures_camera(pairs, ori='InterneScan', scan_res=2.5e-5, how='mean'):
     """
     Use a set of located fiducial markers to create a MeasuresCamera file using the average location of each fiducial
     marker.
 
-    :param DataFrame approx_meas: A DataFrame with the (very approximate) locations of the fiducial markers.
+    :param pairs: a list of pairs of co-linear fiducial markers
     :param str ori: The Ori- directory containing the MeasuresIm files (default: InterneScan)
-    :param float scan_res: the scanning resolution of the images in microns
+    :param float scan_res: the scanning resolution of the images in m (default: 2.5e-5; 25 µm)
     :param str how: what average to use for the output locations. Must be one of [mean, median].
     """
     assert how in ['mean', 'median'], "how must be one of [mean, median]"
@@ -351,19 +352,24 @@ def estimate_measures_camera(approx_meas, ori='InterneScan', scan_res=2.5e-5, ho
     meas_list = sorted(glob('MeasuresIm*.xml', root_dir=f'Ori-{ori}'))
 
     all_meas = []
+
     for fn_meas in meas_list:
-        meas = parse_im_meas(os.path.join(f'Ori-{ori}', fn_meas))
-        joined = meas.set_index('name').join(approx_meas.set_index('name'), lsuffix='_img', rsuffix='_cam')
+        meas = parse_im_meas(os.path.join(f'Ori-{ori}', fn_meas)).set_index('name')
+        ppx, ppy = _meas_center(meas, pairs)
+        meas['j'] -= ppx
+        meas['i'] -= ppy
 
-        model, inliers = ransac((joined[['j_img', 'i_img']].values, joined[['j_cam', 'i_cam']].values),
-                                SimilarityTransform, min_samples=len(meas) - 1, residual_threshold=2,
-                                max_trials=5000)
+        collinear = [LineString(meas.loc[p, ['j', 'i']].values) for p in pairs]
 
-        rot = matching._rotate_meas(meas, -model.rotation)
-        meas['j'] = rot['j'] - model.translation[0]
-        meas['i'] = rot['i'] - model.translation[1]
+        meas.loc[pairs[0], ['collim_dist']] = collinear[0].length
+        meas.loc[pairs[1], ['collim_dist']] = collinear[1].length
 
-        all_meas.append(meas)
+        scale = np.mean([c.length for c in collinear])
+
+        meas['j'] = meas['j'] / scale
+        meas['i'] = meas['i'] / scale
+
+        all_meas.append(meas.reset_index())
 
     all_meas = pd.concat(all_meas, ignore_index=True)
 
@@ -372,11 +378,23 @@ def estimate_measures_camera(approx_meas, ori='InterneScan', scan_res=2.5e-5, ho
     else:
         avg_meas = all_meas.groupby('name').median(numeric_only=True)
 
-    avg_meas['j'] *= scan_res * 1000  # convert from microns to mm
-    avg_meas['i'] *= scan_res * 1000  # convert from microns to mm
+    avg_meas['j'] -= avg_meas['j'].min()
+    avg_meas['i'] -= avg_meas['i'].min()
 
-    avg_meas.reset_index(names='name').to_file('AverageMeasures.csv')
+    scale = avg_meas['collim_dist'].mean()
+
+    avg_meas['j'] *= scale * scan_res * 1000  # convert from m to mm
+    avg_meas['i'] *= scale * scan_res * 1000  # convert from m to mm
+
+    avg_meas.to_csv('AverageMeasures.csv')
     create_measurescamera_xml('AverageMeasures.csv', ori=ori, translate=False, name='name', x='j', y='i')
+
+
+def _meas_center(meas, pairs):
+    # TODO: generalize this based on multiple collinear pairs
+    collims = [LineString(meas.loc[p, ['j', 'i']].values) for p in pairs]
+    pp = collims[0].intersection(collims[1])
+    return pp.x, pp.y
 
 
 def generate_multicam_csv(patterns=None, prefix='OIS-Reech_', fn_out='camera_defs.csv',
