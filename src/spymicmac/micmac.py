@@ -514,7 +514,7 @@ def create_localchantier_xml(name='KH9MC', short_name='KH-9 Hexagon Mapping Came
                 E.Arrite('1 1'),
                 E.Direct(
                     E.PatternTransform(pattern),
-                    E.CalcName(focal)
+                    E.CalcName(f"{focal}")
                 )
             )
         )
