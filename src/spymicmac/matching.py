@@ -259,21 +259,23 @@ def _get_residuals(meas_img, meas_cam):
         raise RuntimeError("Unable to estimate an affine transformation")
 
 
-def _rotate_meas(meas, angle):
+def _rotate_meas(meas, angle, pp=None):
     M = np.array([[np.cos(angle), -np.sin(angle)], [np.sin(angle), np.cos(angle)]])
 
     rot = meas.copy()
 
-    mean_j = meas.j.mean()
-    mean_i = meas.i.mean()
+    if pp is not None:
+        shift_j, shift_i = pp.x, pp.y
+    else:
+        shift_j, shift_i = meas.j.mean(), meas.i.mean()
 
-    rot.j -= mean_j
-    rot.i -= mean_i
+    rot.j -= shift_j
+    rot.i -= shift_i
 
     rot[['j', 'i']] = rot[['j', 'i']].values.dot(M)
 
-    rot.j += mean_j
-    rot.i += mean_i
+    rot.j += shift_j
+    rot.i += shift_j
 
     return rot
 
