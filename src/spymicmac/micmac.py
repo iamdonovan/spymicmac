@@ -7,6 +7,7 @@ import re
 import subprocess
 import shutil
 import PIL
+from itertools import combinations
 import numpy as np
 from osgeo import gdal
 import pandas as pd
@@ -17,7 +18,7 @@ import difflib
 import xml.etree.ElementTree as ET
 from glob import glob
 from shapely.strtree import STRtree
-from shapely.geometry import LineString
+from shapely.geometry import LineString, MultiPoint
 from skimage.io import imread, imsave
 from skimage.transform import AffineTransform, SimilarityTransform
 from skimage.measure import ransac
@@ -337,11 +338,12 @@ def create_measurescamera_xml(fn_csv, ori='InterneScan', translate=False, name='
                xml_declaration=True, encoding="utf-8")
 
 
-def estimate_measures_camera(pairs, ori='InterneScan', scan_res=2.5e-5, how='mean'):
+def estimate_measures_camera(approx, pairs, ori='InterneScan', scan_res=2.5e-5, how='mean'):
     """
     Use a set of located fiducial markers to create a MeasuresCamera file using the average location of each fiducial
     marker.
 
+    :param approx: a dataframe of approximate fiducial marker locations.
     :param pairs: a list of pairs of co-linear fiducial markers
     :param str ori: The Ori- directory containing the MeasuresIm files (default: InterneScan)
     :param float scan_res: the scanning resolution of the images in m (default: 2.5e-5; 25 µm)
@@ -369,6 +371,16 @@ def estimate_measures_camera(pairs, ori='InterneScan', scan_res=2.5e-5, how='mea
         meas['j'] = meas['j'] / scale
         meas['i'] = meas['i'] / scale
 
+        model = AffineTransform()
+        joined = meas.join(approx.set_index('name'), lsuffix='_img', rsuffix='_cam')
+        model.estimate(joined[['j_img', 'i_img']].values, joined[['j_cam', 'i_cam']].values)
+
+        noscale = AffineTransform(translation=model.translation, rotation=model.rotation)
+        rot = noscale(meas[['j', 'i']].values)
+
+        meas['j'] = rot[:, 0]
+        meas['i'] = rot[:, 1]
+
         all_meas.append(meas.reset_index())
 
     all_meas = pd.concat(all_meas, ignore_index=True)
@@ -377,6 +389,18 @@ def estimate_measures_camera(pairs, ori='InterneScan', scan_res=2.5e-5, how='mea
         avg_meas = all_meas.groupby('name').mean(numeric_only=True)
     else:
         avg_meas = all_meas.groupby('name').median(numeric_only=True)
+
+    joined = avg_meas.join(approx.set_index('name'), lsuffix='_img', rsuffix='_cam')
+    model = AffineTransform()
+    model.estimate(joined[['j_img', 'i_img']].values, joined[['j_cam', 'i_cam']].values)
+
+    noscale = AffineTransform(translation=model.translation, rotation=model.rotation)
+    noscale(avg_meas[['j', 'i']].values)
+
+    rot = noscale(meas[['j', 'i']].values)
+
+    avg_meas['j'] = rot[:, 0]
+    avg_meas['i'] = rot[:, 1]
 
     avg_meas['j'] -= avg_meas['j'].min()
     avg_meas['i'] -= avg_meas['i'].min()
@@ -391,9 +415,9 @@ def estimate_measures_camera(pairs, ori='InterneScan', scan_res=2.5e-5, how='mea
 
 
 def _meas_center(meas, pairs):
-    # TODO: generalize this based on multiple collinear pairs
     collims = [LineString(meas.loc[p, ['j', 'i']].values) for p in pairs]
-    pp = collims[0].intersection(collims[1])
+    pp = MultiPoint([a.intersection(b) for a, b in list(combinations(collims, 2))]).centroid
+
     return pp.x, pp.y
 
 
