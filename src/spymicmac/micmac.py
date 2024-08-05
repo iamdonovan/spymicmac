@@ -357,9 +357,6 @@ def estimate_measures_camera(approx, pairs, ori='InterneScan', scan_res=2.5e-5, 
 
     for fn_meas in meas_list:
         meas = parse_im_meas(os.path.join(f'Ori-{ori}', fn_meas)).set_index('name')
-        ppx, ppy = _meas_center(meas, pairs)
-        meas['j'] -= ppx
-        meas['i'] -= ppy
 
         collinear = [LineString(meas.loc[p, ['j', 'i']].values) for p in pairs]
 
@@ -371,9 +368,15 @@ def estimate_measures_camera(approx, pairs, ori='InterneScan', scan_res=2.5e-5, 
         meas['j'] = meas['j'] / scale
         meas['i'] = meas['i'] / scale
 
+        ppx, ppy = _meas_center(meas, pairs)
+        meas['j'] -= ppx
+        meas['i'] -= ppy
+
         model = AffineTransform()
         joined = meas.join(approx.set_index('name'), lsuffix='_img', rsuffix='_cam')
         model.estimate(joined[['j_img', 'i_img']].values, joined[['j_cam', 'i_cam']].values)
+
+        meas['resid'] = model.residuals(joined[['j_img', 'i_img']].values, joined[['j_cam', 'i_cam']].values)
 
         noscale = AffineTransform(translation=model.translation, rotation=model.rotation)
         rot = noscale(meas[['j', 'i']].values)
@@ -395,7 +398,6 @@ def estimate_measures_camera(approx, pairs, ori='InterneScan', scan_res=2.5e-5, 
     model.estimate(joined[['j_img', 'i_img']].values, joined[['j_cam', 'i_cam']].values)
 
     noscale = AffineTransform(translation=model.translation, rotation=model.rotation)
-    noscale(avg_meas[['j', 'i']].values)
 
     rot = noscale(meas[['j', 'i']].values)
 
@@ -410,6 +412,7 @@ def estimate_measures_camera(approx, pairs, ori='InterneScan', scan_res=2.5e-5, 
     avg_meas['j'] *= scale * scan_res * 1000  # convert from m to mm
     avg_meas['i'] *= scale * scan_res * 1000  # convert from m to mm
 
+    all_meas.to_csv('AllMeasures.csv', index=False)
     avg_meas.to_csv('AverageMeasures.csv')
     create_measurescamera_xml('AverageMeasures.csv', ori=ori, translate=False, name='name', x='j', y='i')
 
