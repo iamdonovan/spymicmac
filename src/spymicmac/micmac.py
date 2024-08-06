@@ -1041,7 +1041,7 @@ def _generate_glob(fn_ids):
     tree.write('Tmp-SL-Glob.xml', pretty_print=True, xml_declaration=True, encoding="utf-8")
 
 
-def batch_saisie_fids(imlist, flavor='qt', fn_cam=None, clean=True):
+def batch_saisie_fids(imlist, flavor='qt', fn_cam=None, clean=True, gamma=None):
     """
     Run SaisieAppuisInit to locate the fiducial markers for a given list of images.
 
@@ -1049,6 +1049,7 @@ def batch_saisie_fids(imlist, flavor='qt', fn_cam=None, clean=True):
     :param str flavor: which version of SaisieAppuisInit to run. Must be one of [qt, og] (default: qt)
     :param str fn_cam: the filename for the MeasuresCamera.xml file (default: Ori-InterneScan/MeasuresCamera.xml)
     :param bool clean: remove any image files in Tmp-SaisieAppuis
+    :param float gamma: Gamma adjustment value for Saisie (default: 1.0)
     """
     assert flavor in ['qt', 'og'], "flavor must be one of [qt, og]"
 
@@ -1089,7 +1090,12 @@ def batch_saisie_fids(imlist, flavor='qt', fn_cam=None, clean=True):
             shutil.copy('Tmp-SL-Glob.xml',
                         os.path.join('Tmp-SaisieAppuis', f'Tmp-SL-Glob-MeasuresIm-{fn_img}.xml'))
 
-        p = subprocess.Popen(['mm3d', saisie, fn_img, 'NONE', 'id_fiducials.txt', f'MeasuresIm-{fn_img}.xml'])
+        saisie_args = ['mm3d', saisie, fn_img, 'NONE', 'id_fiducials.txt', f'MeasuresIm-{fn_img}.xml']
+
+        if gamma is not None:
+            saisie_args.append(f"Gama={gamma}")
+
+        p = subprocess.Popen(saisie_args)
         p.wait()
 
         shutil.move(f'MeasuresIm-{fn_img}-S2D.xml', os.path.join('Ori-InterneScan', f'MeasuresIm-{fn_img}.xml'))
