@@ -338,7 +338,7 @@ def create_measurescamera_xml(fn_csv, ori='InterneScan', translate=False, name='
                xml_declaration=True, encoding="utf-8")
 
 
-def estimate_measures_camera(approx, pairs, ori='InterneScan', scan_res=2.5e-5, how='mean'):
+def estimate_measures_camera(approx, pairs, ori='InterneScan', scan_res=2.5e-5, how='mean', write_xml=True):
     """
     Use a set of located fiducial markers to create a MeasuresCamera file using the average location of each fiducial
     marker.
@@ -348,6 +348,7 @@ def estimate_measures_camera(approx, pairs, ori='InterneScan', scan_res=2.5e-5, 
     :param str ori: The Ori- directory containing the MeasuresIm files (default: InterneScan)
     :param float scan_res: the scanning resolution of the images in m (default: 2.5e-5; 25 µm)
     :param str how: what average to use for the output locations. Must be one of [mean, median].
+    :param bool write_xml: write the MeasuresCamera.xml file in addition to a CSV (default: True)
     """
     assert how in ['mean', 'median'], "how must be one of [mean, median]"
 
@@ -414,7 +415,9 @@ def estimate_measures_camera(approx, pairs, ori='InterneScan', scan_res=2.5e-5, 
 
     all_meas.to_csv('AllMeasures.csv', index=False)
     avg_meas.to_csv('AverageMeasures.csv')
-    create_measurescamera_xml('AverageMeasures.csv', ori=ori, translate=False, name='name', x='j', y='i')
+
+    if write_xml:
+        create_measurescamera_xml('AverageMeasures.csv', ori=ori, translate=False, name='name', x='j', y='i')
 
 
 def _meas_center(meas, pairs):
