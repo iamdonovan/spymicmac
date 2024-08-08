@@ -379,8 +379,9 @@ def estimate_measures_camera(approx, pairs, ori='InterneScan', scan_res=2.5e-5, 
 
         meas['resid'] = model.residuals(joined[['j_img', 'i_img']].values, joined[['j_cam', 'i_cam']].values)
 
-        noscale = AffineTransform(translation=model.translation, rotation=model.rotation)
+        noscale = AffineTransform(translation=model.translation, rotation=model.rotation, shear=model.shear)
         rot = noscale(meas[['j', 'i']].values)
+        # rot = model(meas[['j', 'i']].values)
 
         meas['j'] = rot[:, 0]
         meas['i'] = rot[:, 1]
