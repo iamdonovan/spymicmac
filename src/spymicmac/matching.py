@@ -395,13 +395,14 @@ def inscribed_cross(size, cross_size, width=3, angle=45):
     return circle - padded
 
 
-def templates_from_meas(fn_img, half_size=100):
+def templates_from_meas(fn_img, half_size=100, threshold=False):
     """
     Create fiducial templates from points in a MeasuresIm file.
 
     :param str fn_img: the filename of the image to use. Points for templates will be taken from
         Ori-InterneScan-Measuresim{fn-img}.xml.
     :param int half_size: the half-size of the template to create, in pixels (default: 100)
+    :param bool threshold: return binary templates based on otsu thresholding (default: False)
     :return: **templates** (*dict*) -- a *dict* of (name, template) pairs for each fiducial marker.
     """
     dir_img = os.path.dirname(fn_img)
@@ -418,6 +419,9 @@ def templates_from_meas(fn_img, half_size=100):
     templates = []
     for ind, row in meas_im.iterrows():
         subimg, _, _ = make_template(img, (row.i, row.j), half_size=half_size)
+        if threshold:
+            subimg = (subimg > filters.threshold_otsu(subimg)).astype(np.uint8)
+
         templates.append(subimg)
 
     return dict(zip(meas_im.name.values, templates))
