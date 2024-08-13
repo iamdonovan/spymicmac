@@ -250,8 +250,8 @@ def _fiducials(fn_img=None, scale=None, fn_cam=None, transform=AffineTransform):
     transform.estimate(joined[['j_img', 'i_img']].values,
                        joined[['j_cam', 'i_cam']].values)
 
-    outshape = ((joined['i_cam'].max() - joined['i_cam'].min()),
-                (joined['j_cam'].max() - joined['j_cam'].min()))
+    outshape = (int(joined['i_cam'].max() - joined['i_cam'].min()),
+                int(joined['j_cam'].max() - joined['j_cam'].min()))
 
     img = io.imread(fn_img)
     img_tfm = warp(img, transform.inverse, output_shape=outshape, preserve_range=True, order=5)
