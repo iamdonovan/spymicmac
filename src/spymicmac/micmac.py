@@ -2,6 +2,7 @@
 spymicmac.micmac is a collection of tools for interfacing with MicMac
 """
 import os
+from pathlib import Path
 import sys
 import re
 import subprocess
@@ -29,8 +30,45 @@ from spymicmac import data, matching, register
 ######################################################################################################################
 # MicMac interfaces - write xml files for MicMac to read
 ######################################################################################################################
-def write_neighbour_images(imlist, fprints=None, nameField='ID', prefix='OIS-Reech_', fileExt='.tif',
-                           dataset='AERIAL_COMBIN'):
+def write_neighbour_images(imlist=None, fprints=None, name_field='ID', prefix='OIS-Reech_', file_ext='.tif',
+                           dataset='AERIAL_COMBIN', from_homol=False, img_pattern='OIS*.tif', dir_homol='Homol'):
+    """
+    Write an xml file containing image pairs for processing with Tapioca, using either image footprints or a homologue
+    directory.
+
+    :param list imlist: a list of (original) image names to use (e.g., without 'OIS-Reech\_')
+    :param GeoDataFrame fprints: a vector dataset of footprint polygons. If not provided, will attempt to download
+        metadata from USGS for the images.
+    :param str name_field: the field in fprints table that contains the image name
+    :param str prefix: the prefix attached to the image name read by Tapioca (default: 'OIS-Reech\_')
+    :param str file_ext: the file extension for the images read by Tapioca (default: .tif)
+    :param str dataset: the USGS dataset name to search if no footprints are provided (default: AERIAL_COMBIN)
+    :param bool from_homol: get a list of pairs based on homologue files (default: False)
+    :param str img_pattern: the image pattern to pass to glob to get a list of filenames (default: OIS*.tif)
+    :param str dir_homol: the directory where the homologue files are (default: Homol)
+    """
+    E = builder.ElementMaker()
+    NamedRel = E.SauvegardeNamedRel()
+
+    if from_homol:
+        pairs = pairs_from_homol(img_pattern, dir_homol)
+    else:
+        if imlist is None:
+            imlist = sorted([fn.strip(prefix).strip(file_ext) for fn in glob(img_pattern)])
+
+        pairs = pairs_from_footprints(imlist=imlist, fprints=fprints, name_field=name_field, prefix=prefix,
+                                      file_ext=file_ext, dataset=dataset)
+
+    for pair in pairs:
+        this_pair = E.Cple(' '.join(pair))
+        NamedRel.append(this_pair)
+
+    tree = etree.ElementTree(NamedRel)
+    tree.write('FileImagesNeighbour.xml', pretty_print=True, xml_declaration=True, encoding="utf-8")
+
+
+def pairs_from_footprints(imlist, fprints=None, name_field='ID', prefix='OIS-Reech_', file_ext='.tif',
+                          dataset='AERIAL_COMBIN'):
     """
     Using a list of images and a collection of image footprints, return a list of potential image pairs for processing
     with Tapioca.
@@ -38,43 +76,99 @@ def write_neighbour_images(imlist, fprints=None, nameField='ID', prefix='OIS-Ree
     :param list imlist: a list of (original) image names to use (e.g., without 'OIS-Reech\_')
     :param GeoDataFrame fprints: a vector dataset of footprint polygons. If not provided, will attempt to download
         metadata from USGS for the images.
-    :param str nameField: the field in fprints table that contains the image name
+    :param str name_field: the field in fprints table that contains the image name
     :param str prefix: the prefix attached to the image name read by Tapioca (default: 'OIS-Reech\_')
-    :param str fileExt: the file extension for the images read by Tapioca (default: .tif)
-    :param dataset: the USGS dataset name to search if no footprints are provided (default: AERIAL_COMBIN)
+    :param str file_ext: the file extension for the images read by Tapioca (default: .tif)
+    :param str dataset: the USGS dataset name to search if no footprints are provided (default: AERIAL_COMBIN)
+    :return: **pairs** (*list*) -- a list of tuples representing image pairs
     """
-    E = builder.ElementMaker()
-    NamedRel = E.SauvegardeNamedRel()
 
     if fprints is None:
         fprints = data.get_usgs_footprints(imlist, dataset=dataset)
     else:
-        fprints = fprints[fprints[nameField].isin(imlist)]
+        fprints = fprints[fprints[name_field].isin(imlist)]
 
     fprints.reset_index(inplace=True)  # do this to ensure that strtree indices are correct
     s = STRtree([f for f in fprints['geometry'].values])
 
-    for i, row in fprints.iterrows():
-        fn = row[nameField]
+    all_pairs = []
+
+    for ind, row in fprints.iterrows():
+        fn = row[name_field]
         fp = row['geometry']
 
         print(fn)
 
         res = s.query(fp)
         intersects = [fprints.loc[c, 'geometry'] for c in res if fp.intersection(fprints.loc[c, 'geometry']).area > 0]
-        fnames = [fprints[nameField][fprints['geometry'] == c].values[0] for c in intersects]
+        fnames = [fprints[name_field][fprints['geometry'] == c].values[0] for c in intersects]
         try:
             fnames.remove(fn)
         except ValueError:
             pass
 
-        for f in fnames:
-            this_pair = E.Cple(' '.join([prefix + fn + fileExt,
-                                         prefix + f + fileExt]))
-            NamedRel.append(this_pair)
+        all_pairs += [(prefix + fn + file_ext, prefix + fn_match + file_ext) for fn_match in fnames]
 
-    tree = etree.ElementTree(NamedRel)
-    tree.write('FileImagesNeighbour.xml', pretty_print=True, xml_declaration=True, encoding="utf-8")
+    return all_pairs
+
+
+def _get_pairs(fn_img, dir_homol):
+    datlist = sorted(glob('*.dat', root_dir=Path(dir_homol, f"Pastis{fn_img}")))
+    return sorted([fn.strip('.dat') for fn in datlist])
+
+
+def pairs_from_homol(img_pattern='OIS*.tif', dir_homol='Homol'):
+    """
+    Get a list of image pairs based on homologue files.
+
+    :param str img_pattern: the image pattern to pass to glob to get a list of filenames (default: OIS*.tif)
+    :param str dir_homol: the directory where the homologue files are (default: Homol)
+    :return: **pairs** (*list*) -- a list of tuples representing image pairs
+    """
+    imlist = sorted(glob(img_pattern))
+
+    all_pairs = []
+
+    for fn_img in imlist:
+        pairs = _get_pairs(fn_img, dir_homol)
+        all_pairs += zip(len(pairs) * [fn_img], pairs)
+
+    return all_pairs
+
+
+def _get_dat_sizes(fn_img, dir_homol):
+    datlist = sorted(glob('*.dat', root_dir=Path(dir_homol, f"Pastis{fn_img}")))
+    sizes = np.array([os.stat(Path(dir_homol, f"Pastis{fn_img}", fn)).st_size for fn in datlist])
+    percs = sizes / sizes.sum()
+
+    size_df = pd.DataFrame({'image': fn_img, 'filename': datlist, 'size': sizes, 'percentage': percs})
+
+    size_df['cumulative'] = size_df.sort_values('percentage', ascending=False)['percentage'].cumsum()
+
+    return size_df
+
+
+def clean_homol(img_pattern='OIS*.tif', dir_homol='Homol', min_size=None):
+    """
+    Remove spurious homologue files based on a threshold file size.
+
+    :param str img_pattern: the image pattern to pass to glob to get a list of filenames (default: OIS*.tif)
+    :param str dir_homol: the directory where the homologue files are (default: Homol)
+    :param int min_size: the size, in bytes, to use as a threshold for removing file (default: calculated from all files)
+    """
+    imlist = sorted(glob(img_pattern))
+
+    dat_sizes = pd.concat([_get_dat_sizes(fn, dir_homol) for fn in imlist], ignore_index=True)
+
+    for fn_img, sizes in dat_sizes.groupby('image'):
+        if min_size is None:
+            ind = (sizes.sort_values('cumulative')['cumulative'] > 0.95).idxmax()
+            this_cutoff = min(250, sizes.loc[ind, 'size'] + 1)
+        else:
+            this_cutoff = min_size
+
+        for fn in sizes.loc[sizes['size'] < this_cutoff, 'filename']:
+            os.remove(Path(dir_homol, f"Pastis{fn_img}", fn))
 
 
 def write_xml(fn_img, fn_mask='./MEC-Malt/Masq_STD-MALT_DeZoom1.tif', fn_xml=None, geomname='eGeomMNTEuclid'):
