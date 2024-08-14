@@ -1199,20 +1199,26 @@ def batch_saisie_fids(imlist, flavor='qt', fn_cam=None, clean=True, gamma=None):
     os.remove('Tmp-SL-Glob.xml')
 
 
-def tapioca(img_pattern='OIS.*tif', res_low=400, res_high=1200):
+def tapioca(img_pattern='OIS.*tif', res_low=400, res_high=1200, fn_neighbours=None):
     """
-    Run mm3d Tapioca MulScale
+    Run mm3d Tapioca
 
     :param str img_pattern: The image pattern to pass to Tapioca (default: OIS.*tif)
     :param int res_low: the size of the largest image axis, in pixels, for low-resolution matching (default: 400)
     :param int res_high: the size of the largest image axis, in pixels, for high-resolution matching (default: 1200)
+    :param str fn_neighbours:
     """
     if os.name == 'nt':
         echo = subprocess.Popen('echo', stdout=subprocess.PIPE, shell=True)
     else:
         echo = subprocess.Popen('echo', stdout=subprocess.PIPE)
-    p = subprocess.Popen(['mm3d', 'Tapioca', 'MulScale', img_pattern,
-                          str(res_low), str(res_high)], stdin=echo.stdout)
+
+    if fn_neighbours is None:
+        args = ['mm3d', 'Tapioca', 'MulScale', img_pattern, str(res_low), str(res_high)]
+    else:
+        args = ['mm3d', 'Tapioca', 'File', fn_neighbours, str(res_high)]
+
+    p = subprocess.Popen(args, stdin=echo.stdout)
 
     return p.wait()
 
