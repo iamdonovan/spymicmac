@@ -1044,7 +1044,11 @@ def _get_homol(fn_img, dir_homol='Homol'):
     if not os.path.exists(os.path.join(dir_homol, 'Pastis' + fn_img)):
         return []
     else:
-        return sorted([h.split('.dat')[0] for h in glob('*.dat', root_dir=os.path.join(dir_homol, 'Pastis' + fn_img))])
+        sees = sorted([h.split('.dat')[0] for h in glob('*.dat', root_dir=os.path.join(dir_homol, 'Pastis' + fn_img))])
+        seen = sorted([os.path.split(fn)[0].replace('Pastis', '') for fn in
+                       glob(f"**/{fn_img}.dat", recursive=True, root_dir='Homol')])
+
+        return list(set(sees + seen))
 
 
 # adapted from the fantastic answer provided by
@@ -1053,10 +1057,11 @@ def _get_homol(fn_img, dir_homol='Homol'):
 def _get_connected_block(img, seen, hdict):
     result = []
     imgs = set([img])
+
     while imgs:
         img = imgs.pop()
         seen.add(img)
-        imgs = imgs or set(hdict[img]) - seen
+        imgs.update(set(hdict[img]) - seen)
         result.append(img)
 
     return result, seen
