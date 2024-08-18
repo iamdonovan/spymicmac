@@ -1094,6 +1094,51 @@ def find_connected_blocks(pattern='OIS*.tif', dir_homol='Homol'):
     return blocks
 
 
+def separate_blocks(pattern='OIS*.tif', dir_homol='Homol'):
+    """
+    Based on homologous points, find connected blocks of images and then separate the files into sub-folders.
+    Moves files from {dir_homol} and Pastis, along with the image files.
+
+    :param str pattern: the search pattern to use to get image names
+    :param str dir_homol: the Homologue directory to use to determine what images are connected
+    """
+    # get connected blocks
+    blocks = find_connected_blocks(pattern, dir_homol)
+
+    # find single unconnected images
+    blocks = [b for b in blocks if len(b) > 1]
+    singles = sorted([im for imgs in blocks for im in imgs if len(imgs) == 1])
+
+    # make directory
+    os.makedirs('singles', exist_ok=True)
+
+    for fn_sin in singles:
+        shutil.move(fn_sin, 'singles')
+
+    for num, block in enumerate(blocks):
+
+        os.makedirs(f"Block{num}", exist_ok=True)
+        os.makedirs(Path(f"Block{num}", dir_homol), exist_ok=True)
+        os.makedirs(Path(f"Block{num}", 'Pastis'), exist_ok=True)
+
+        for fn_img in block:
+            # move homol files
+            if os.path.exists(Path(dir_homol, f"Pastis{fn_img}")):
+                shutil.move(Path(dir_homol, f"Pastis{fn_img}"), Path(f"Block{num}", dir_homol, f"Pastis{fn_img}"))
+
+            # move pastis files
+            for fn_pas in glob(f"*{fn_img}*", root_dir='Pastis'):
+                shutil.move(Path('Pastis', fn_pas), Path(f"Block{num}", 'Pastis', fn_pas))
+
+            # move image
+            if os.path.exists(fn_img):
+                shutil.move(fn_img, f"Block{num}")
+
+        # copy xml files if they exist
+        if os.path.exists('MicMac-LocalChantierDescripteur.xml'):
+            shutil.copy('MicMac-LocalChantierDescripteur.xml', f"Block{num}")
+
+
 def move_bad_tapas(ori):
     """
     Read residual files output from Tapas (or Campari, GCPBascule), and move images with a NaN residual.
