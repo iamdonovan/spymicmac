@@ -235,7 +235,7 @@ def load_all_orientation(ori, imlist=None):
         df.loc[i, 'altisol'] = altisol
 
     df['geometry'] = points
-    return df
+    return gpd.GeoDataFrame(df)
 
 
 def extend_line(df, first, last):
