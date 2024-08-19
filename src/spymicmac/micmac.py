@@ -1044,11 +1044,7 @@ def _get_homol(fn_img, dir_homol='Homol'):
     if not os.path.exists(os.path.join(dir_homol, 'Pastis' + fn_img)):
         return []
     else:
-        sees = sorted([h.split('.dat')[0] for h in glob('*.dat', root_dir=os.path.join(dir_homol, 'Pastis' + fn_img))])
-        seen = sorted([os.path.split(fn)[0].replace('Pastis', '') for fn in
-                       glob(f"**/{fn_img}.dat", recursive=True, root_dir='Homol')])
-
-        return list(set(sees + seen))
+        return sorted([h.split('.dat')[0] for h in glob('*.dat', root_dir=os.path.join(dir_homol, 'Pastis' + fn_img))])
 
 
 # adapted from the fantastic answer provided by
@@ -1106,8 +1102,8 @@ def separate_blocks(pattern='OIS*.tif', dir_homol='Homol'):
     blocks = find_connected_blocks(pattern, dir_homol)
 
     # find single unconnected images
-    blocks = [b for b in blocks if len(b) > 1]
     singles = sorted([im for imgs in blocks for im in imgs if len(imgs) == 1])
+    blocks = [b for b in blocks if len(b) > 1]
 
     # make directory
     os.makedirs('singles', exist_ok=True)
