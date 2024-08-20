@@ -1269,12 +1269,13 @@ def tapioca(img_pattern='OIS.*tif', res_low=400, res_high=1200, fn_neighbours=No
     return p.wait()
 
 
-def martini(img_pattern='OIS.*tif', in_ori=None):
+def martini(img_pattern='OIS.*tif', in_ori=None, ori_out=None):
     """
     Run mm3d Martini, which provides a quick way to orient images without solving for camera parameters.
 
     :param str img_pattern: The image pattern to pass to Martini (default: OIS.*tif)
     :param str in_ori: the orientation directory to use to initialize the calibration (default: None)
+    :param str ori_out: the name of the output orientation directory (default: Martini)
     """
     if os.name == 'nt':
         echo = subprocess.Popen('echo', stdout=subprocess.PIPE, shell=True)
@@ -1285,6 +1286,9 @@ def martini(img_pattern='OIS.*tif', in_ori=None):
 
     if in_ori is not None:
         args.append(f"InOri={in_ori}")
+
+    if ori_out is not None:
+        args.append(f"OriOut={ori_out}")
 
     p = subprocess.Popen(args, stdin=echo.stdout)
 
