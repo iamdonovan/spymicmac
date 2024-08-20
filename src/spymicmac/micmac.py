@@ -1287,7 +1287,8 @@ def martini(img_pattern='OIS.*tif'):
     return p.wait()
 
 
-def tapas(cam_model, ori_out, img_pattern='OIS.*tif', in_cal=None, lib_foc=True, lib_pp=True, lib_cd=True):
+def tapas(cam_model, ori_out=None, img_pattern='OIS.*tif', in_cal=None, in_ori=None,
+          lib_foc=True, lib_pp=True, lib_cd=True):
     """
     Run mm3d Tapas with a given camera calibration model.
 
@@ -1304,6 +1305,7 @@ def tapas(cam_model, ori_out, img_pattern='OIS.*tif', in_cal=None, lib_foc=True,
     :param str ori_out: the output orientation. Will create a directory, Ori-{ori_out}, with camera parameter files.
     :param str img_pattern: the image pattern to pass to Tapas (default: OIS.*tif)
     :param str in_cal: an input calibration model to refine (default: None)
+    :param str in_ori: a set of orientations to initialize the calibration (default: None)
     :param bool lib_foc: allow the focal length to be calibrated (default: True)
     :param bool lib_pp: allow the principal point to be calibrated (default: True)
     :param bool lib_cd: allow the center of distortion to be calibrated (default: True)
@@ -1313,14 +1315,20 @@ def tapas(cam_model, ori_out, img_pattern='OIS.*tif', in_cal=None, lib_foc=True,
     else:
         echo = subprocess.Popen('echo', stdout=subprocess.PIPE)
 
+    args = ['mm3d', 'Tapas', cam_model, img_pattern,
+            'LibFoc={}'.format(int(lib_foc)), 'LibPP={}'.format(int(lib_pp)),
+            'LibCD={}'.format(int(lib_cd))]
+
+    if ori_out is not None:
+        args.append('Out=' + ori_out)
+
     if in_cal is not None:
-        p = subprocess.Popen(['mm3d', 'Tapas', cam_model, img_pattern, 'InCal=' + in_cal,
-                              'LibFoc={}'.format(int(lib_foc)), 'LibPP={}'.format(int(lib_pp)),
-                              'LibCD={}'.format(int(lib_cd)), 'Out=' + ori_out], stdin=echo.stdout)
-    else:
-        p = subprocess.Popen(['mm3d', 'Tapas', cam_model, img_pattern,
-                              'LibFoc={}'.format(int(lib_foc)), 'LibPP={}'.format(int(lib_pp)),
-                              'LibCD={}'.format(int(lib_cd)), 'Out=' + ori_out], stdin=echo.stdout)
+        args.append('InCal=' + in_cal)
+
+    if in_ori is not None:
+        args.append('InOri=' + in_ori)
+
+    p = subprocess.Popen(args, stdin=echo.stdout)
 
     return p.wait()
 
