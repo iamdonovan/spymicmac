@@ -2,6 +2,7 @@
 spymicmac.orientation is a collection of tools for working with image orientation using micmac.
 """
 import os
+from pathlib import Path
 import subprocess
 from collections import defaultdict
 import numpy as np
@@ -349,6 +350,80 @@ def update_params(fn_img, ori, profondeur, altisol):
     tree = ET.ElementTree(ori_root)
     tree.write(os.path.join(ori, 'Orientation-{}.xml'.format(fn_img)),
                encoding="utf-8", xml_declaration=True)
+
+
+def write_orientation(ori_df, dir_ori, calfile, known_conv='eConvApero_DistM2C'):
+    """
+    Write orientation xml files for a set of images
+
+    :param pd.DataFrame ori_df: a pandas DataFrame like the kind output by load_all_orientation()
+    :param str dir_ori: the name of the output orientation directory (e.g., Ori-Relative)
+    :param str calfile: the path to the calibration file for this orientation
+    :param str known_conv: the name of a conversion used by MicMac (default: eConvApero_DistM2C)
+    """
+
+    os.makedirs(dir_ori, exist_ok=True)
+
+    for _, row in ori_df.iterrows():
+        # TODO: allow for multiple cameras by finding the "right" calibration file
+        write_ind_ori(fn_img=row['name'],
+                      center=list(row[['x', 'y', 'z']]),
+                      codage_mat=np.array([row[['l11', 'l12', 'l13']].values,
+                                           row[['l21', 'l22', 'l23']].values,
+                                           row[['l31', 'l32', 'l33']].values]),
+                      profondeur=row['profondeur'],
+                      altisol=row['altisol'],
+                      dir_ori=dir_ori,
+                      calfile=calfile,
+                      known_conv=known_conv
+                      )
+
+
+def write_ind_ori(fn_img, center, codage_mat, profondeur, altisol, dir_ori,
+                  calfile, known_conv='eConvApero_DistM2C'):
+    """
+    Write an orientation xml file for an individual image.
+
+    :param str fn_img: the name of the image
+    :param list center: the camera center position (x, y, z)
+    :param array-like codage_mat: the rotation matrix for the image
+    :param float profondeur: the camera depth parameter
+    :param float altisol: the camera altisol parameter
+    :param str dir_ori: the name of the output orientation directory (e.g., Ori-Relative)
+    :param str calfile: the filename of the camera calibration file for this image
+    :param str known_conv: the name of a conversion used by MicMac (default: eConvApero_DistM2C)
+    """
+    fn_out = Path(dir_ori, f"Orientation-{fn_img}.xml")
+
+    E = builder.ElementMaker()
+
+    OrientationConique = E.OrientationConique(
+        E.OrIntImaM2C(E.I00('0 0'), E.V10('1 0'), E.V01('0 1')),
+        E.TypeProj('eProjStenope'),
+        E.ZoneUtileInPixel('true'),
+        E.FileInterne('/'.join(['.', calfile])),
+
+        E.Externe(
+            E.AltiSol(altisol),
+            E.Profondeur(profondeur),
+            E.Time('-1e+30'),
+            E.KnownConv(known_conv),
+            E.Centre(' '.join([str(p) for p in center])),
+            E.IncCentre('1 1 1'),
+
+            E.ParamRotation(
+                E.CodageMatr(
+                    E.L1(' '.join([str(r) for r in codage_mat[0]])),
+                    E.L2(' '.join([str(r) for r in codage_mat[1]])),
+                    E.L3(' '.join([str(r) for r in codage_mat[2]])),
+                )
+            )
+        ),
+        E.ConvOri(E.KnownConv(known_conv))
+    )
+
+    tree = etree.ElementTree(OrientationConique)
+    tree.write(fn_out, pretty_print=True, xml_declaration=True, encoding="utf-8")
 
 
 def fix_orientation(cameras, ori_df, ori, nsig=4):
