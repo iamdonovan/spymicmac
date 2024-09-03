@@ -148,17 +148,28 @@ def _get_dat_sizes(fn_img, dir_homol):
     return size_df
 
 
-def clean_homol(img_pattern='OIS*.tif', dir_homol='Homol', min_size=None):
+def clean_homol(img_pattern='OIS*.tif', dir_homol='Homol', min_size=None, remove_asymmetric=False, return_df=False):
     """
     Remove spurious homologue files based on a threshold file size.
 
     :param str img_pattern: the image pattern to pass to glob to get a list of filenames (default: OIS*.tif)
     :param str dir_homol: the directory where the homologue files are (default: Homol)
     :param int min_size: the size, in bytes, to use as a threshold for removing file (default: calculated from all files)
+    :param bool remove_asymmetric: remove asymmetric homologue files (pairs where only one image in the pair "sees" the
+        other one) (default: False)
+    :param bool return_df: return a DataFrame of all homologue files, rather than removing them (default: False)
     """
     imlist = sorted(glob(img_pattern))
 
     dat_sizes = pd.concat([_get_dat_sizes(fn, dir_homol) for fn in imlist], ignore_index=True)
+    dat_sizes['symmetric'] = True
+
+    for ind, row in dat_sizes.iterrows():
+        dat_sizes.loc[ind, 'symmetric'] = row['image'] + '.dat' in dat_sizes.loc[
+            dat_sizes['image'] == row['filename'].split('.dat')[0], 'filename'].to_list()
+
+    if return_df:
+        return dat_sizes
 
     for fn_img, sizes in dat_sizes.groupby('image'):
         if min_size is None:
@@ -169,6 +180,10 @@ def clean_homol(img_pattern='OIS*.tif', dir_homol='Homol', min_size=None):
 
         for fn in sizes.loc[sizes['size'] < this_cutoff, 'filename']:
             os.remove(Path(dir_homol, f"Pastis{fn_img}", fn))
+
+        if remove_asymmetric:
+            for fn in sizes.loc[(~sizes['symmetric']) & (sizes['size'] > this_cutoff), 'filename']:
+                os.remove(Path(dir_homol, f"Pastis{fn_img}", fn))
 
 
 def write_xml(fn_img, fn_mask='./MEC-Malt/Masq_STD-MALT_DeZoom1.tif', fn_xml=None, geomname='eGeomMNTEuclid'):
