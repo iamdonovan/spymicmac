@@ -1075,7 +1075,7 @@ def find_connected_blocks(pattern='OIS*.tif', dir_homol='Homol'):
     :return: blocks -- a list containing lists of connected blocks of images
     """
     imlist = glob(pattern)
-    homols = [_get_homol(fn_img, dir_homol) for fn_img in imlist]
+    homols = [[fn for fn in _get_homol(fn_img, dir_homol) if fn in imlist] for fn_img in imlist]
 
     hdict = dict(zip(imlist, homols))
 
