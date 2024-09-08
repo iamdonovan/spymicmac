@@ -1105,20 +1105,21 @@ def find_connected_blocks(pattern='OIS*.tif', dir_homol='Homol'):
     return blocks
 
 
-def separate_blocks(pattern='OIS*.tif', dir_homol='Homol'):
+def separate_blocks(pattern='OIS*.tif', dir_homol='Homol', min_size=2):
     """
     Based on homologous points, find connected blocks of images and then separate the files into sub-folders.
     Moves files from {dir_homol} and Pastis, along with the image files.
 
-    :param str pattern: the search pattern to use to get image names
-    :param str dir_homol: the Homologue directory to use to determine what images are connected
+    :param str pattern: the search pattern to use to get image names (default: OIS*.tif)
+    :param str dir_homol: the Homologue directory to use to determine what images are connected (default: Homol)
+    :param int min_size: the minimum number of images to be considered a block (default: 2)
     """
     # get connected blocks
     blocks = find_connected_blocks(pattern, dir_homol)
 
     # find single unconnected images
-    singles = sorted([im for imgs in blocks for im in imgs if len(imgs) == 1])
-    blocks = [b for b in blocks if len(b) > 1]
+    singles = sorted([im for imgs in blocks for im in imgs if len(imgs) < min_size])
+    blocks = [b for b in blocks if len(b) >= min_size]
 
     # make directory
     os.makedirs('singles', exist_ok=True)
