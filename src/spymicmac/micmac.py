@@ -470,8 +470,8 @@ def estimate_measures_camera(approx, pairs, ori='InterneScan', scan_res=2.5e-5, 
 
         collinear = [LineString(meas.loc[p, ['j', 'i']].values) for p in pairs]
 
-        meas.loc[pairs[0], ['collim_dist']] = collinear[0].length
-        meas.loc[pairs[1], ['collim_dist']] = collinear[1].length
+        for ind, pair in enumerate(pairs):
+            meas.loc[pair, ['collim_dist']] = collinear[ind].length
 
         scale = np.mean([c.length for c in collinear])
 
