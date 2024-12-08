@@ -15,11 +15,13 @@ from . import resample
 __version__ = version(__name__)
 
 __all__ = [
+    'asp',
     'data',
     'image',
-    'micmac',
     'matching',
+    'micmac',
     'orientation',
+    'preprocessing',
     'register',
     'resample',
     '__version__'

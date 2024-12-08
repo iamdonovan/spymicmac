@@ -43,14 +43,15 @@ def _argparser():
     parser.add_argument('-s', '--factor', action='store', type=int, default=None,
                         help='The number by which to divide the image width and height to scale the image '
                              '(default: do not scale)')
-    parser.add_argument('-o', '--overlap', action='store', type=int, default=8000,
-                        help='overlap search width between two images [8000]')
+    parser.add_argument('-o', '--overlap', action='store', type=int, default=None,
+                        help='The amount of overlap between image parts to use to search for matches. Default depends'
+                             'on flavor: KH4 -> 8000, KH9 -> 1000')
     parser.add_argument('-k', '--block_size', action='store', type=int, default=2000,
-                        help='the number of rows each search sub-block should cover [2000].')
+                    help='the number of rows each search sub-block should cover [2000].')
     parser.add_argument('-b', '--blend', action='store_true',
                         help='Blend across image halves to prevent a sharp line at edge.')
     parser.add_argument('-r', '--reversed', action='store_true',
-                        help='parts are in reversed order (i.e., part b is the left part, part a is the right part)')
+                        help='Order of image parts is reversed (a is the right side of the image). (default: False)')
     parser.add_argument('--clip_limit', action='store', type=float, default=0.005,
                         help='Clipping limit, for contrast-limited adaptive histogram equalization. (default: 0.005)')
     return parser
@@ -106,8 +107,16 @@ def main():
             if len(parts_list) < 2:
                 continue
 
-            join_args = {'overlap': args.overlap, 'block_size': args.block_size,
-                         'blend': args.blend, 'is_reversed': args.reversed}
+            join_args = {'overlap': args.overlap,
+                         'block_size': args.block_size,
+                         'blend': args.blend,
+                         'is_reversed': args.reversed}
+
+            if args.flavor == 'KH4' and args.overlap is None:
+                join_args.update({'overlap': 8000})
+            elif args.flavor == 'KH9' and args.overlap is None:
+                join_args.update({'overlap': 1000})
+
             join_hexagon(fn_img, **join_args)
 
             for fn in parts_list:
