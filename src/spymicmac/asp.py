@@ -162,6 +162,15 @@ def cam_from_footprint(fn_img, flavor, scan_res, fn_dem, north_up=True, footprin
     os.remove(fn_samp)
 
 
+# helper functions to help sort polygons from north to south and east to west
+def _cenlat(poly):
+    return poly.centroid.y
+
+
+def _cenlon(poly):
+    return poly.centroid.x
+
+
 # return the upper left, upper right, lower right, lower left coordinates for an image
 def _stanrogers(fprint, north_up):
 
@@ -182,14 +191,11 @@ def _stanrogers(fprint, north_up):
     vertical = LineString([top.centroid, bot.centroid])
 
     # split the envelope into upper and lower halves
-    if north_up:
-        lower, upper = split(inner, horizontal).geoms
-    else:
-        # check this with an actual south up image!
-        upper, lower = split(inner, horizontal).geoms
+    # split the geometry, sort by centroid latitude, in descending order if the top of the image is north
+    lower, upper = sorted(split(inner, horizontal).geoms, key=_cenlat, reverse=(not north_up))
 
-    upper_left, upper_right = split(upper, vertical).geoms
-    lower_right, lower_left = split(lower, vertical).geoms
+    upper_left, upper_right = sorted(split(upper, vertical).geoms, key=_cenlon, reverse=(not north_up))
+    lower_left, lower_right = sorted(split(lower, vertical).geoms, key=_cenlon, reverse=(not north_up))
 
     fx, fy = fprint.exterior.xy
     vertices = np.array([Point(x, y) for x, y in zip(fx[:-1], fy[:-1])])
