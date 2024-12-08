@@ -28,16 +28,16 @@ dependencies = [
       'matplotlib',
       'usgs',
       'gdal',
+      'geoutils',
       'opencv-python',
       'lxml',
       'scikit-image>=0.19',
       'pillow>9.1.0',
-      'pybob>=0.25.1',
       'pyasn1',
       'sphinx',
       'sphinx-argparse',
       'sphinx-rtd-theme',
-      'earthengine-api'
+      'earthengine-api',
 ]
 dynamic = ["version"]
 

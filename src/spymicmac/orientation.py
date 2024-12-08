@@ -17,7 +17,6 @@ from shapely.geometry.point import Point
 from shapely.geometry import LineString, MultiPoint
 from skimage.transform import AffineTransform
 from skimage.measure import ransac
-from pybob.ddem_tools import nmad
 from . import register, micmac
 
 
@@ -371,13 +370,20 @@ def fix_orientation(cameras, ori_df, ori, nsig=4):
         a camera an outlier (default: 4)
     """
     join = cameras.set_index('name').join(ori_df.set_index('name'), lsuffix='abs', rsuffix='rel')
+    join.dropna(subset=['xabs', 'yabs', 'zabs', 'xrel', 'yrel', 'zrel'], inplace=True)
 
     model = AffineTransform()
-    model.estimate(join.dropna()[['xabs', 'yabs']].values, join.dropna()[['xrel', 'yrel']].values)
+    est = model.estimate(join[['xabs', 'yabs']].values, join[['xrel', 'yrel']].values)
+
+    if not est:
+        print('Unable to estimate transformation. Trying with RANSAC.')
+        model, inliers = ransac((join[['xabs', 'yabs']].values, join[['xrel', 'yrel']].values), AffineTransform,
+                                min_samples=10, residual_threshold=10, max_trials=10000)
+        print('transformation found with {} inliers'.format(np.count_nonzero(inliers)))
 
     res = model.residuals(join[['xabs', 'yabs']].values, join[['xrel', 'yrel']].values)
+    outliers = np.abs(res - np.nanmedian(res)) > nsig * register.nmad(res)
 
-    outliers = res - np.nanmedian(res) > nsig * nmad(res)
     if np.count_nonzero(outliers) > 0:
         interp = LinearNDInterpolator(join.loc[~outliers, ['xrel', 'yrel']].values, join.loc[~outliers, 'zrel'])
         print('found {} outliers using nsig={}'.format(np.count_nonzero(outliers), nsig))
@@ -396,7 +402,7 @@ def transform_centers(img_gt, ref, imlist, footprints, ori, imgeom=True):
     footprints, to estimate a transformation between the relative coordinate system and the absolute coordinate system.
 
     :param array-like img_gt: the image GeoTransform (as read from a TFW file)
-    :param GeoImg ref: the reference image to use to determine the output image shape
+    :param Raster ref: the reference image to use to determine the output image shape
     :param list imlist: a list of the images that were used for the relative orthophoto
     :param GeoDataFrame footprints: the (approximate) image footprints or camera centers. If geom_type is Polygon, the
         centroid will be used for the absolute camera positions.
@@ -410,7 +416,7 @@ def transform_centers(img_gt, ref, imlist, footprints, ori, imgeom=True):
 
     rel_ori = load_all_orientation(ori, imlist=imlist)
 
-    footprints = footprints.to_crs(epsg=ref.epsg).copy()
+    footprints = footprints.to_crs(crs=ref.crs).copy()
     if all(footprints.geom_type == 'Polygon'):
         footprints['x'] = footprints.geometry.centroid.x
         footprints['y'] = footprints.geometry.centroid.y
@@ -461,7 +467,7 @@ def transform_points(ref, ref_pts, rel_gt, rel_pts):
     """
     Given x,y points and two "geo"-referenced images, finds an affine transformation between the two images.
 
-    :param GeoImg ref: the reference image
+    :param Raster ref: the reference image
     :param np.array ref_pts: an Mx2 array of the x,y points in the reference image
     :param array-like rel_gt: the "geo" transform for the second image, as read from a .tfw file.
     :param np.array rel_pts: an Mx2 array of the x,y points in the second image.
@@ -469,7 +475,8 @@ def transform_points(ref, ref_pts, rel_gt, rel_pts):
         - **model** (*AffineTransform*) -- the estimated Affine Transformation between relative and absolute space
         - **inliers** (*array-like*) -- a list of the inliers returned by skimage.measure.ransac
     """
-    ref_ij = np.array([ref.xy2ij(pt) for pt in ref_pts])
+    ref_ij = np.array(ref.xy2ij(ref_pts[:, 0], ref_pts[:, 1])).T
+
     rel_ij = np.array([((pt[0] - rel_gt[4]) / rel_gt[0],
                         (pt[1] - rel_gt[5]) / rel_gt[3]) for pt in rel_pts])
 

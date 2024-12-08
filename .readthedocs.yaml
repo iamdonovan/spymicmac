@@ -25,7 +25,7 @@ formats:
 
 # use environment.yml to set up python using conda
 conda:
-  environment: rtd-environment.yml
+  environment: environment.yml
 
 # Optionally set the version of Python and requirements required to build your docs
 # python:

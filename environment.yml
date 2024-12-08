@@ -4,20 +4,22 @@ channels:
   - defaults
 dependencies:
   - python>=3.10
-  - scikit-image>=0.19,<0.20.0
+  - scikit-image
   - geopandas
+  - geoutils
   - matplotlib
   - sphinx
-  - opencv
+  - opencv<4.9.0
   - lxml
   - gdal
   - pyasn1
   - numba
   - earthengine-api
+  - imagemagick
+  - exiftool
   - pillow>9.1.0
   - pip
   - pip:
-      - pybob>=0.25.1
       - sphinx-argparse
       - sphinx-rtd-theme
       - usgs

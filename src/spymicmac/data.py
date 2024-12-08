@@ -15,7 +15,7 @@ import pyproj
 from osgeo import gdal
 from shapely.geometry.polygon import Polygon
 from usgs import api, USGSAuthExpiredError
-from pybob.GeoImg import GeoImg
+import geoutils as gu
 
 
 def _check_data_dir():
@@ -153,8 +153,8 @@ def download_cop30_vrt(imlist=None, footprints=None, imgsource='DECLASSII', glob
     downloaded to cop30_dem/ within the current directory.
 
     :param list imlist: a list of image filenames. If None, uses globstr to search for images in the current directory.
-    :param GeoDataFrame footprints: a GeoDataFrame of image footprints. If None, uses spymicmac.usgs.get_usgs_footprints
-        to download footprints based on imlist.
+    :param GeoDataFrame|Polygon footprints: a GeoDataFrame of image footprints, or a Polygon of an image footprint in
+        WGS84 lat/lon. If None, uses spymicmac.usgs.get_usgs_footprints to download footprints based on imlist.
     :param str imgsource: the EE Dataset name for the images (default: DECLASSII)
     :param str globstr: the search string to use to find images in the current directory.
     """
@@ -163,9 +163,14 @@ def download_cop30_vrt(imlist=None, footprints=None, imgsource='DECLASSII', glob
 
     if footprints is None:
         footprints = get_usgs_footprints(clean_imlist, dataset=imgsource)
+        fprint = footprints.unary_union
+    elif isinstance(footprints, Polygon):
+        fprint = footprints
+    elif isinstance(footprints, gpd.GeoDataFrame):
+        fprint = footprints.to_crs(crs='epsg:4326').unary_union
 
     # now, get the envelope
-    xmin, ymin, xmax, ymax = footprints.unary_union.bounds
+    xmin, ymin, xmax, ymax = fprint.bounds
 
     lat_min = int(np.floor(ymin))
     lat_max = int(np.ceil(ymax))
@@ -231,11 +236,11 @@ def to_wgs84_ellipsoid(fn_dem):
         this_url = 'https://download.osgeo.org/proj/vdatum/egm08_25/egm08_25.gtx'
         urllib.request.urlretrieve(this_url, Path(proj_data, 'egm08_25.gtx'))
 
-    dem = GeoImg(fn_dem)
-    geoid = GeoImg(str(Path(proj_data, 'egm08_25.gtx'))).reproject(dem)
+    dem = gu.Raster(fn_dem)
+    geoid = gu.Raster(str(Path(proj_data, 'egm08_25.gtx'))).reproject(dem)
 
-    ell = dem.copy(new_raster=(dem.img + geoid.img))
-    ell.write(os.path.splitext(fn_dem)[0] + '_ell.tif')
+    ell = dem + geoid
+    ell.save(os.path.splitext(fn_dem)[0] + '_ell.tif')
 
 
 def _pgc_url(flavor):
@@ -326,7 +331,7 @@ def download_pgc_mosaic(flavor, imlist=None, footprints=None, imgsource='DECLASS
             print('Downloading', row['dem_id'], f'({ind + 1}/{selection.shape[0]})')
             urllib.request.urlretrieve(row['fileurl'], this_path)
 
-        tarlist = []
+        tarlist = glob('*.tar.gz', root_dir=flavor)
         for tarball in tarlist:
             _unpack_pgc(tarball)
 

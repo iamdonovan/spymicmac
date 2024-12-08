@@ -36,7 +36,7 @@ def extract(tar_ext='.tgz'):
     else:
         print('No tar files found, skipping.')
         # we still want to make sure that we have a list of images to work with.
-        tarlist = list(set([os.path.splitext(fn)[0].split('_')[0] for fn in glob('DZB*.tif')]))
+        tarlist = list(set([os.path.splitext(fn)[0].split('_')[0] for fn in glob('D*.tif')]))
         tarlist.sort()
 
     return tarlist

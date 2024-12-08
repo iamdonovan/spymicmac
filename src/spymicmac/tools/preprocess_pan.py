@@ -46,6 +46,8 @@ def _argparser():
     parser.add_argument('-o', '--overlap', action='store', type=int, default=None,
                         help='The amount of overlap between image parts to use to search for matches. Default depends'
                              'on flavor: KH4 -> 8000, KH9 -> 1000')
+    parser.add_argument('-k', '--block_size', action='store', type=int, default=2000,
+                    help='the number of rows each search sub-block should cover [2000].')
     parser.add_argument('-b', '--blend', action='store_true',
                         help='Blend across image halves to prevent a sharp line at edge.')
     parser.add_argument('-r', '--reversed', action='store_true',
@@ -81,9 +83,14 @@ def main():
     if do['extract']:
         imlist = extract(args.tar_ext)
         imlist = [tfile.split(args.tar_ext)[0] for tfile in imlist]
+        if len(imlist) == 0:
+            imlist = list(set([os.path.splitext(fn)[0].split('_')[0] for fn in glob(f'{patt}*.tif')]))
+            imlist.sort()
+
     elif any([do['join'], do['filter'], do['crop']]):
         imlist = list(set([os.path.splitext(fn)[0].split('_')[0] for fn in glob(f'{patt}*.tif')]))
         imlist.sort()
+
     else:
         imlist = [os.path.splitext(fn.split('OIS-Reech_')[1])[0] for fn in glob('OIS*.tif')]
         imlist.sort()
@@ -100,12 +107,18 @@ def main():
             if len(parts_list) < 2:
                 continue
 
+            join_args = {'overlap': args.overlap,
+                         'block_size': args.block_size,
+                         'blend': args.blend,
+                         'is_reversed': args.reversed}
+
             if args.flavor == 'KH4' and args.overlap is None:
-                join_hexagon(fn_img, overlap=8000, block_size=2000, blend=args.blend, is_reversed=args.reversed)
+                join_args.update({'overlap': 8000})
             elif args.flavor == 'KH9' and args.overlap is None:
-                join_hexagon(fn_img, overlap=1000, block_size=600, blend=args.blend, is_reversed=args.reversed)
-            else:
-                join_hexagon(fn_img, overlap=args.overlap, blend=args.blend)
+                join_args.update({'overlap': 1000})
+
+            join_hexagon(fn_img, **join_args)
+
             for fn in parts_list:
                 shutil.move(f'{fn_img}_{fn}.tif', 'parts')
 
