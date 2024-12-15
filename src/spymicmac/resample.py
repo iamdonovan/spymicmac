@@ -7,6 +7,7 @@ import PIL.Image
 from osgeo import gdal
 from skimage import io
 from skimage.transform import SimilarityTransform, warp
+from skimage.morphology import disk
 from scipy import ndimage
 import numpy as np
 from spymicmac import image, micmac, matching
@@ -107,7 +108,7 @@ def crop_panoramic(fn_img, flavor, marker_size=31, fact=None, return_vals=False)
 
     img = io.imread(fn_img)
     if flavor == 'KH4':
-        rails = matching.find_rail_marks(img)
+        rails = matching.find_rail_marks(img, marker=disk(marker_size))
         rotated, angle = rotate_from_rails(img, rails)
 
         # crop the lower part of the image to avoid introducing a bright line at the bottom
