@@ -259,11 +259,10 @@ def _get_mask(footprints, img, imlist, landmask=None, glacmask=None):
     fmask, fprint = _get_footprint_mask(footprints, img, imlist, fprint_out=True)
 
     img.crop(fprint.buffer(img.res[0] * 10).bounds, mode='match_pixel', inplace=True)
-
     fmask.crop(fprint.buffer(img.res[0]*10).bounds, mode='match_pixel', inplace=True)
 
     mask = img.copy(new_array=np.zeros(img.shape))
-    mask[~img.data.mask] = 255
+    mask.data[~img.data.mask] = 255
 
     if landmask is not None:
         lmask = gu.Vector(landmask).create_mask(img)
@@ -415,7 +414,7 @@ def register_relative(dirmec, fn_dem, fn_ref=None, fn_ortho=None, glacmask=None,
                                       spacing=density, dstwin=_search_size(rough_tfm.shape))
 
     x, y = ref_img.ij2xy(gcps['search_i'], gcps['search_j'])
-    gcps['geometry'] = gpd.points_from_xy(x, y, crs=ref_img.crs)
+    gcps = gpd.GeoDataFrame(gcps, geometry=gpd.points_from_xy(x, y, crs=ref_img.crs))
 
     gcps = gcps.loc[mask_full.data.data[gcps.search_i, gcps.search_j] == 255]
 
@@ -435,8 +434,8 @@ def register_relative(dirmec, fn_dem, fn_ref=None, fn_ortho=None, glacmask=None,
         dem = ref_img
 
     # gcps.crs = {'init': 'epsg:{}'.format(ref_img.epsg)}
-    gcps['elevation'] = dem.interp_points(zip(gcps.geometry.x, gcps.geometry.y))
-    gcps['el_rel'] = rel_dem.interp_points(gcps[['rel_x', 'rel_y']].values)
+    gcps['elevation'] = dem.interp_points((gcps.geometry.x, gcps.geometry.y))
+    gcps['el_rel'] = rel_dem.interp_points((gcps.rel_x, gcps.rel_y))
 
     # drop any gcps where we don't have a DEM value or a valid match
     if dem.nodata is not None:
