@@ -1360,7 +1360,9 @@ def do_match(dest_img, ref_img, mask, pt, srcwin, dstwin):
     _i, _j = pt
     submask, _, _ = make_template(mask, pt, srcwin)
 
-    if np.count_nonzero(submask) / submask.size < 0.05:
+    if submask.size == 0:
+        return (np.nan, np.nan), np.nan, np.nan
+    elif np.count_nonzero(submask) / submask.size < 0.05:
         return (np.nan, np.nan), np.nan, np.nan
 
     try:
