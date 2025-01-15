@@ -5,10 +5,11 @@ import os
 import subprocess
 import numpy as np
 import pyproj
+import geoutils as gu
 from osgeo import gdal
 from shapely.ops import split, orient
 from shapely.geometry import LineString, Point, Polygon
-from spymicmac import data
+from spymicmac import data, declass
 
 
 sample_params = {
@@ -64,7 +65,18 @@ def _init_center(fprint):
     return x, y, z
 
 
-def optical_bar_cam(fn_img, flavor, out_name, fprint=None, scan_res=7e-6):
+def add_motion_comp(cam, params):
+    """
+    Add a default motion compensation factor value to write to an ASP camera.
+    """
+    # values based on reported results from Ghuffar et al. 2022
+    imc_params = {'KH4': 0.014, 'KH4A': 0.014, 'KH4B': 1e-4}
+
+    params['motion_comp'] = imc_params[cam]
+    return params
+
+
+def optical_bar_cam(fn_img, flavor, out_name, fprint=None, scan_res=7e-6, mean_el=1000):
     """
     Generate a sample ASP camera file for a KH-4 Optical Bar camera.
 
@@ -74,6 +86,7 @@ def optical_bar_cam(fn_img, flavor, out_name, fprint=None, scan_res=7e-6):
     :param str out_name: the filename to write the camera file to.
     :param Polygon fprint: an optional image, footprint used to estimate the initial camera position
     :param float scan_res: the image scanning resolution, in m per pixel (e.g., 7 microns -> 7.0e-6)
+    :param float mean_el: the mean elevation covered by the image
     """
     assert flavor in sample_params.keys(), "flavor must be one of {}".format(list(sample_params.keys()))
     ds = gdal.Open(fn_img)
@@ -83,6 +96,12 @@ def optical_bar_cam(fn_img, flavor, out_name, fprint=None, scan_res=7e-6):
     ds = None  # close the image
 
     params = sample_params[flavor]
+
+    if flavor == 'KH4':
+        cam = declass.get_declass_camera(fn_img)
+        params = add_motion_comp(cam, params)
+    else:
+        params['motion_comp'] = 1
 
     with open(out_name, 'w') as f:
         print('VERSION_4', file=f)
@@ -110,8 +129,8 @@ def optical_bar_cam(fn_img, flavor, out_name, fprint=None, scan_res=7e-6):
         print(f'speed = {params["speed"]}', file=f)
         print('mean_earth_radius = 6371000', file=f)
         # need a better value than this
-        print('mean_surface_elevation = 4000', file=f)
-        print('motion_compensation_factor = 1.0', file=f)
+        print(f"mean_surface_elevation = {mean_el}", file=f)
+        print(f"motion_compensation_factor = {params['motion_comp']}", file=f)
 
         if _isaft(fn_img):
             print('scan_dir = left', file=f)
@@ -119,7 +138,7 @@ def optical_bar_cam(fn_img, flavor, out_name, fprint=None, scan_res=7e-6):
             print('scan_dir = right', file=f)
 
 
-def cam_from_footprint(fn_img, flavor, scan_res, fn_dem, north_up=True, footprints=None):
+def cam_from_footprint(fn_img, flavor, scan_res, fn_dem, north_up=True, footprints=None, mean_el=1000):
     """
     Generate a camera (.tsai) file from an image footprint.
 
@@ -130,6 +149,8 @@ def cam_from_footprint(fn_img, flavor, scan_res, fn_dem, north_up=True, footprin
     :param bool north_up: whether the top of the image corresponds to North or not (default: True)
     :param GeoDataFrame footprints: a GeoDataFrame containing image footprints and an ID field with image names. If not
         provided, will attempt to download from USGS.
+    :param float|str mean_el: the mean surface elevation covered by the image. If None, uses DEM and footprint to
+        calculate the value.
     :return:
     """
     clean_name = fn_img.split('OIS-Reech_')[-1].split('.tif')[0]
@@ -141,11 +162,16 @@ def cam_from_footprint(fn_img, flavor, scan_res, fn_dem, north_up=True, footprin
     else:
         fprint = footprints.loc[footprints['ID'] == clean_name, 'geometry'].values[0]
 
+    if mean_el is None:
+        dem = gu.Raster(fn_dem)
+        mask = gu.Vector(footprints.loc[footprints['ID'] == clean_name])
+        mean_el = dem[mask].mean()
+
     if _isaft(fn_img):
-        optical_bar_cam(fn_img, flavor, 'samp_aft.tsai', fprint, scan_res=scan_res)
+        optical_bar_cam(fn_img, flavor, 'samp_aft.tsai', fprint, scan_res=scan_res, mean_el=mean_el)
         fn_samp = 'samp_aft.tsai'
     else:
-        optical_bar_cam(fn_img, flavor, 'samp_for.tsai', fprint, scan_res=scan_res)
+        optical_bar_cam(fn_img, flavor, 'samp_for.tsai', fprint, scan_res=scan_res, mean_el=mean_el)
         fn_samp = 'samp_for.tsai'
 
     coords = _stanrogers(fprint, north_up)
