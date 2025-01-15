@@ -17,12 +17,6 @@ sample_params = {
     'KH9': {'f': 1.5, 'tilt': np.deg2rad(10), 'scan_time': 0.7, 'speed': 8000}
 }
 
-usgs_datasets = {
-    'KH4': 'corona2',
-    'KH9': 'declassiii'
-}
-
-
 def _isaft(fn_img):
     return os.path.splitext(fn_img)[0][-4] == 'A'
 
@@ -157,7 +151,7 @@ def cam_from_footprint(fn_img, flavor, scan_res, fn_dem, north_up=True, footprin
 
     # now, get the image footprint, and use ul_corner to get the ul, ur, lr, ll coordinates
     if footprints is None:
-        footprints = data.get_usgs_footprints([clean_name], dataset=usgs_datasets[flavor])
+        footprints = data.get_usgs_footprints([clean_name], dataset=declass.usgs_datasets[flavor])
         fprint = footprints.loc[0, 'geometry']
     else:
         fprint = footprints.loc[footprints['ID'] == clean_name, 'geometry'].values[0]
