@@ -11,12 +11,17 @@ import matplotlib.pyplot as plt
 import geopandas as gpd
 import geoutils as gu
 from glob import glob
+
+import pandas as pd
+from pyogrio.errors import DataSourceError
 from rtree import index
 from shapely.ops import unary_union
 from shapely.geometry.point import Point
 from skimage.io import imread
 from skimage.measure import ransac
 from skimage.transform import AffineTransform, warp
+from tifffile.geodb import Datum
+
 from spymicmac import data, image, matching, micmac, orientation
 
 
@@ -263,7 +268,7 @@ def _get_mask(footprints, img, imlist, landmask=None, glacmask=None):
     fmask.crop(fprint.buffer(img.res[0]*10).bounds, mode='match_pixel', inplace=True)
 
     mask = img.copy(new_array=np.zeros(img.shape))
-    mask[~img.data.mask] = 255
+    mask.data[~img.data.mask] = 255
 
     if landmask is not None:
         lmask = gu.Vector(landmask).create_mask(img)
@@ -291,10 +296,24 @@ def _get_last_malt(dirmec):
     return f'Z_Num{level}_DeZoom{zoomf}_STD-MALT.tif'
 
 
+def _read_gcps(fn_gcp, ref_img):
+    gcps = gpd.read_file(fn_gcp)
+    gcps = gcps.rename(columns={'z': 'elevation', 'name': 'id'})
+
+    if isinstance(gcps, pd.DataFrame):
+        gcps = gpd.GeoDataFrame(gcps, geometry=gpd.points_from_xy(gcps.x, gcps.y, crs=ref_img.crs))
+    else:
+        gcps = gcps.to_crs(ref_img.crs)
+
+    gcps['search_i'], gcps['search_j'] = ref_img.xy2ij(gcps.geometry.x, gcps.geometry.y)
+
+    return gcps
+
+
 def register_relative(dirmec, fn_dem, fn_ref=None, fn_ortho=None, glacmask=None, landmask=None, footprints=None,
                       im_subset=None, block_num=None, subscript=None, ori='Relative', ortho_res=8.,
                       imgsource='DECLASSII', density=200, out_dir=None, allfree=True, useortho=False, max_iter=5,
-                      use_cps=False, cp_frac=0.2):
+                      use_cps=False, cp_frac=0.2, fn_gcps=None):
     """
     Register a relative DEM or orthoimage to a reference DEM and/or orthorectified image.
 
@@ -319,6 +338,8 @@ def register_relative(dirmec, fn_dem, fn_ref=None, fn_ortho=None, glacmask=None,
     :param int max_iter: the maximum number of Campari iterations to run. (default: 5)
     :param bool use_cps: split the GCPs into GCPs and CPs, to quantify the uncertainty of the camera model (default: False)
     :param float cp_frac: the fraction of GCPs to use when splitting into GCPs and CPs (default: 0.2)
+    :param str fn_gcps: (optional) shapefile or CSV of GCP coordinates to use. Column names should be [(name | id),
+        (z | elevation), x, y]. If CSV is used, x,y should have the same CRS as the reference image.
     """
     print('start.')
 
@@ -388,8 +409,8 @@ def register_relative(dirmec, fn_dem, fn_ref=None, fn_ortho=None, glacmask=None,
 
     rough_spacing = max(1000, np.round(max(ref_img.shape) / 20 / 1000) * 1000)
 
-    rough_gcps = matching.find_grid_matches(rough_tfm, ref_img, mask_full.data.data, Minit,
-                                            spacing=int(rough_spacing), dstwin=int(rough_spacing))
+    rough_gcps = matching.find_matches(rough_tfm, ref_img, mask_full.data.data, initM=Minit,
+                                       spacing=int(rough_spacing), dstwin=int(rough_spacing))
 
     try:
         model, inliers = ransac((rough_gcps[['search_j', 'search_i']].values,
@@ -410,14 +431,19 @@ def register_relative(dirmec, fn_dem, fn_ref=None, fn_ortho=None, glacmask=None,
     fig.savefig('initial_transformation{}.png'.format(subscript), dpi=200, bbox_inches='tight')
     plt.close(fig)
 
-    # for each of these pairs (src, dst), find the precise subpixel match (or not...)
-    gcps = matching.find_grid_matches(rough_tfm, ref_img, mask_full.data.data, model,
-                                      spacing=density, dstwin=_search_size(rough_tfm.shape))
+    if fn_gcps is not None:
+        gcps = _read_gcps(fn_gcps, ref_img)
+        gcps = matching.find_matches(rough_tfm, ref_img, mask_full.data.data, points=gcps, initM=model,
+                                     spacing=density, dstwin=_search_size(rough_tfm.shape))
+    else:
+        # for each of these pairs (src, dst), find the precise subpixel match (or not...)
+        gcps = matching.find_matches(rough_tfm, ref_img, mask_full.data.data, model,
+                                     spacing=density, dstwin=_search_size(rough_tfm.shape))
 
     x, y = ref_img.ij2xy(gcps['search_i'], gcps['search_j'])
-    gcps['geometry'] = gpd.points_from_xy(x, y, crs=ref_img.crs)
+    gcps = gpd.GeoDataFrame(gcps, geometry=gpd.points_from_xy(x, y, crs=ref_img.crs))
 
-    gcps = gcps.loc[mask_full.data.data[gcps.search_i, gcps.search_j] == 255]
+    gcps = gcps.loc[mask_full.data.data[gcps.search_i.astype(int), gcps.search_j.astype(int)] == 255]
 
     gcps['rel_x'] = reg_gt[4] + gcps['orig_j'].values * reg_gt[0]  # need the original image coordinates
     gcps['rel_y'] = reg_gt[5] + gcps['orig_i'].values * reg_gt[3]
@@ -435,8 +461,8 @@ def register_relative(dirmec, fn_dem, fn_ref=None, fn_ortho=None, glacmask=None,
         dem = ref_img
 
     # gcps.crs = {'init': 'epsg:{}'.format(ref_img.epsg)}
-    gcps['elevation'] = dem.interp_points(zip(gcps.geometry.x, gcps.geometry.y))
-    gcps['el_rel'] = rel_dem.interp_points(gcps[['rel_x', 'rel_y']].values)
+    gcps['elevation'] = dem.interp_points((gcps.geometry.x, gcps.geometry.y))
+    gcps['el_rel'] = rel_dem.interp_points((gcps.rel_x, gcps.rel_y))
 
     # drop any gcps where we don't have a DEM value or a valid match
     if dem.nodata is not None:

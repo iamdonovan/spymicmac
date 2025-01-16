@@ -1292,13 +1292,22 @@ def find_gcp_match(img, template, method=cv2.TM_CCORR_NORMED):
     return res, maxi + i_off + sp_dely, maxj + j_off + sp_delx
 
 
-def find_grid_matches(tfm_img, refgeo, mask, initM=None, spacing=200, srcwin=60, dstwin=600):
+def _match_grid(refgeo, spacing, srcwin):
+
+    jj, ii = np.meshgrid(np.arange(srcwin, spacing * np.ceil((refgeo.shape[1]-srcwin) / spacing) + 1, spacing),
+                         np.arange(srcwin, spacing * np.ceil((refgeo.shape[0]-srcwin) / spacing) + 1, spacing))
+
+    return jj.astype(int).flatten(), ii.astype(int).flatten()
+
+
+def find_matches(tfm_img, refgeo, mask, points=None, initM=None, spacing=200, srcwin=60, dstwin=600):
     """
     Find matches between two images on a grid using normalized cross-correlation template matching.
 
     :param array-like tfm_img: the image to use for matching.
     :param Raster refgeo: the reference image to use for matching.
     :param array-like mask: a mask indicating areas that should be used for matching.
+    :param GeoDataFrame points: a GeoDataFrame of GCP locations
     :param initM: the model used for transforming the initial, non-georeferenced image.
     :param int spacing: the grid spacing, in pixels (default: 200 pixels)
     :param int srcwin: the half-size of the template window.
@@ -1309,23 +1318,28 @@ def find_grid_matches(tfm_img, refgeo, mask, initM=None, spacing=200, srcwin=60,
     z_corrs = []
     peak_corrs = []
 
-    jj = np.arange(srcwin, spacing * np.ceil((refgeo.shape[1]-srcwin) / spacing) + 1, spacing).astype(int)
-    ii = np.arange(srcwin, spacing * np.ceil((refgeo.shape[0]-srcwin) / spacing) + 1, spacing).astype(int)
+    if points is None:
+        jj, ii = np.array(_match_grid(refgeo, spacing, srcwin))
+    else:
+        jj, ii = points.search_j, points.search_i
 
     search_pts = []
 
-    for _i in ii:
-        for _j in jj:
-            search_pts.append((_j, _i))
-            match, z_corr, peak_corr = do_match(tfm_img, refgeo.data, mask, (_i, _j), srcwin, dstwin)
-            match_pts.append(match)
-            z_corrs.append(z_corr)
-            peak_corrs.append(peak_corr)
+    for _i, _j in zip(ii, jj):
+        search_pts.append((_j, _i))
+        match, z_corr, peak_corr = do_match(tfm_img, refgeo.data, mask, (int(_i), int(_j)), srcwin, dstwin)
+        match_pts.append(match)
+        z_corrs.append(z_corr)
+        peak_corrs.append(peak_corr)
 
     search_pts = np.array(search_pts)
     _dst = np.array(match_pts)
 
-    gcps = gpd.GeoDataFrame()
+    if points is None:
+        gcps = gpd.GeoDataFrame()
+    else:
+        gcps = points.copy()
+
     gcps['pk_corr'] = peak_corrs
     gcps['z_corr'] = z_corrs
     gcps['match_j'] = _dst[:, 0]  # points matched in transformed image
@@ -1366,7 +1380,9 @@ def do_match(dest_img, ref_img, mask, pt, srcwin, dstwin):
     _i, _j = pt
     submask, _, _ = make_template(mask, pt, srcwin)
 
-    if np.count_nonzero(submask) / submask.size < 0.05:
+    if submask.size == 0:
+        return (np.nan, np.nan), np.nan, np.nan
+    elif np.count_nonzero(submask) / submask.size < 0.05:
         return (np.nan, np.nan), np.nan, np.nan
 
     try:
