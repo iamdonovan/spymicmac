@@ -47,7 +47,10 @@ def _argparser():
                               'camera model [False]')
     _parser.add_argument('-cp_frac', type=float, default=0.2,
                          help='the fraction of GCPs to use when splitting into GCPs and CPs [0.2]')
-    _parser.add_argument('-fn_gcps', action='store', type='str', default=None,
+    _parser.add_argument('-o', '--use_orb', action='store_true',
+                         help='use skimage.feature.ORB to identify GCP locations in the reference image '
+                              '(default: use regular grid for matching)')
+    _parser.add_argument('-fn_gcps', action='store', type=str, default=None,
                          help='(optional) shapefile or CSV of GCP coordinates to use. Column names should be '
                               '[(name | id), (z | elevation), x, y]. If CSV is used, x,y should have the same '
                               'CRS as the reference image.')
@@ -76,6 +79,7 @@ def main():
                       max_iter=args.max_iter,
                       use_cps=args.use_cps,
                       cp_frac=args.cp_frac,
+                      use_orb=args.use_orb,
                       fn_gcps=args.fn_gcps)
 
 

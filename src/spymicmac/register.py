@@ -313,7 +313,7 @@ def _read_gcps(fn_gcp, ref_img):
 def register_relative(dirmec, fn_dem, fn_ref=None, fn_ortho=None, glacmask=None, landmask=None, footprints=None,
                       im_subset=None, block_num=None, subscript=None, ori='Relative', ortho_res=8.,
                       imgsource='DECLASSII', density=200, out_dir=None, allfree=True, useortho=False, max_iter=5,
-                      use_cps=False, cp_frac=0.2, fn_gcps=None):
+                      use_cps=False, cp_frac=0.2, use_orb=False, fn_gcps=None):
     """
     Register a relative DEM or orthoimage to a reference DEM and/or orthorectified image.
 
@@ -338,6 +338,8 @@ def register_relative(dirmec, fn_dem, fn_ref=None, fn_ortho=None, glacmask=None,
     :param int max_iter: the maximum number of Campari iterations to run. (default: 5)
     :param bool use_cps: split the GCPs into GCPs and CPs, to quantify the uncertainty of the camera model (default: False)
     :param float cp_frac: the fraction of GCPs to use when splitting into GCPs and CPs (default: 0.2)
+    :param bool use_orb: use skimage.feature.ORB to identify GCP locations in the reference image
+        (default: use regular grid for matching)
     :param str fn_gcps: (optional) shapefile or CSV of GCP coordinates to use. Column names should be [(name | id),
         (z | elevation), x, y]. If CSV is used, x,y should have the same CRS as the reference image.
     """
@@ -436,9 +438,20 @@ def register_relative(dirmec, fn_dem, fn_ref=None, fn_ortho=None, glacmask=None,
         gcps = matching.find_matches(rough_tfm, ref_img, mask_full.data.data, points=gcps, initM=model,
                                      spacing=density, dstwin=_search_size(rough_tfm.shape))
     else:
-        # for each of these pairs (src, dst), find the precise subpixel match (or not...)
-        gcps = matching.find_matches(rough_tfm, ref_img, mask_full.data.data, model,
-                                     spacing=density, dstwin=_search_size(rough_tfm.shape))
+        if use_orb:
+            ref_hp = image.highpass_filter(ref_img.data)
+            ref_hp[np.isnan(ref_hp)] = 0
+
+            keypoints = matching.get_dense_keypoints(ref_hp, mask=None, npix=density, use_skimage=True,
+                                                     detector_kwargs={'n_keypoints': int(np.sqrt(density))})
+
+            gcps = pd.DataFrame(data=keypoints, columns=['search_i', 'search_j'])
+            gcps = matching.find_matches(rough_tfm, ref_img, mask_full.data.data, points=gcps, initM=model,
+                                         dstwin=_search_size(rough_tfm.shape))
+
+        else:
+            gcps = matching.find_matches(rough_tfm, ref_img, mask_full.data.data, initM=model,
+                                         spacing=density, dstwin=_search_size(rough_tfm.shape))
 
     x, y = ref_img.ij2xy(gcps['search_i'], gcps['search_j'])
     gcps = gpd.GeoDataFrame(gcps, geometry=gpd.points_from_xy(x, y, crs=ref_img.crs))
