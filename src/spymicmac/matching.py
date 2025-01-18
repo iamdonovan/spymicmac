@@ -11,7 +11,7 @@ import pandas as pd
 from skimage import morphology, io, filters
 from skimage.morphology import binary_dilation, disk
 from skimage.measure import ransac
-from skimage.feature import peak_local_max
+from skimage.feature import peak_local_max, ORB
 from skimage.transform import AffineTransform, EuclideanTransform, SimilarityTransform
 from scipy.interpolate import RectBivariateSpline as RBS
 from scipy import ndimage
@@ -1472,7 +1472,56 @@ def keypoint_grid(img, spacing=25, size=10):
     return [cv2.KeyPoint(pt[0], pt[1], size) for pt in _grid]
 
 
-def get_dense_keypoints(img, mask, npix=100, nblocks=None, return_des=False):
+def _dense_skimage(split_img, oy, ox, return_des, detector_kwargs):
+    orb = ORB(**detector_kwargs)
+
+    keypoints = []
+    descriptors = []
+
+    for ind, img in enumerate(split_img):
+        orb.detect_and_extract(img)
+        kp, des = orb.keypoints, orb.descriptors
+
+        descriptors.append(des)
+
+        kp[:, 1] += ox[ind]
+        kp[:, 0] += oy[ind]
+
+        keypoints.append(kp)
+
+    keypoints = np.concatenate(keypoints, axis=0)
+    descriptors = np.concatenate(descriptors, axis=0)
+
+    if return_des:
+        return keypoints, descriptors
+    else:
+        return keypoints
+
+
+def _dense_opencv(split_img, oy, ox, split_msk, return_des, detector_kwargs):
+    orb = cv2.ORB_create(**detector_kwargs)
+
+    keypoints = []
+    descriptors = []
+
+    for ind, img in enumerate(split_img):
+        kp, des = orb.detectAndCompute(img, mask=split_msk[ind])
+
+        for ds in des:
+            descriptors.append(ds)
+
+        for p in kp:
+            p.pt = p.pt[0] + ox[ind], p.pt[1] + oy[ind]
+            keypoints.append(kp)
+
+    if return_des:
+        return keypoints, np.array(descriptors)
+    else:
+        return keypoints
+
+
+def get_dense_keypoints(img, mask, npix=100, nblocks=None, return_des=False,
+                        use_skimage=False, detector_kwargs={}):
     """
     Find ORB keypoints by dividing an image into smaller parts.
 
@@ -1481,14 +1530,13 @@ def get_dense_keypoints(img, mask, npix=100, nblocks=None, return_des=False):
     :param int npix: the block size (in pixels) to divide the image into.
     :param int nblocks: the number of blocks to divide the image into. If set, overrides value given by npix.
     :param bool return_des: return the keypoint descriptors, as well
+    :param bool use_skimage: use the scikit-image implementation of ORB rather than OpenCV (default: False)
+    :param dict detector_kwargs: additional keyword arguments to pass when creating the ORB detector. For details,
+        see the documentation for cv2.ORB_create or skimage.feature.ORB.
     :return:
         - **keypoints** (*list*) -- a list of keypoint locations
         - **descriptors** (*list*) -- if requested, a list of keypoint descriptors.
     """
-    orb = cv2.ORB_create()
-    keypts = []
-    if return_des:
-        descriptors = []
 
     if nblocks is None:
         x_tiles = np.floor(img.shape[1] / npix).astype(int)
@@ -1505,24 +1553,10 @@ def get_dense_keypoints(img, mask, npix=100, nblocks=None, return_des=False):
     else:
         split_msk = [None] * len(split_img)
 
-    # rel_x, rel_y = get_subimg_offsets(split_img, (y_tiles, x_tiles), overlap=olap)
-
-    for i, img_ in enumerate(split_img):
-
-        kp, des = orb.detectAndCompute(img_, mask=split_msk[i])
-        if return_des:
-            if des is not None:
-                for ds in des:
-                    descriptors.append(ds)
-
-        for p in kp:
-            p.pt = p.pt[0] + ox[i], p.pt[1] + oy[i]
-            keypts.append(p)
-
-    if return_des:
-        return keypts, np.array(descriptors)
+    if use_skimage:
+        return _dense_skimage(split_img, oy, ox, return_des, detector_kwargs)
     else:
-        return keypts
+        return _dense_opencv(split_img, oy, ox, split_msk, return_des, detector_kwargs)
 
 
 def match_halves(left, right, overlap, block_size=None):
