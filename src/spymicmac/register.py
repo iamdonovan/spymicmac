@@ -386,6 +386,7 @@ def register_relative(dirmec, fn_dem, fn_ref=None, fn_ortho=None, glacmask=None,
         fn_reg = os.path.join(dirmec, _get_last_malt(dirmec))
         fn_tfw = fn_reg.replace('.tif', '.tfw')
         reg_img = imread(fn_reg)
+    print(f"Loaded relative image {fn_reg}.")
 
     with open(fn_tfw, 'r') as f:
         reg_gt = [float(l.strip()) for l in f.readlines()]
@@ -418,7 +419,11 @@ def register_relative(dirmec, fn_dem, fn_ref=None, fn_ortho=None, glacmask=None,
         model, inliers = ransac((rough_gcps[['search_j', 'search_i']].values,
                                  rough_gcps[['orig_j', 'orig_i']].values), AffineTransform,
                                 min_samples=6, residual_threshold=20, max_trials=5000)
+        if model is None or np.count_nonzero(inliers) < 6:
+            raise ValueError()
+
         rough_tfm = warp(reg_img, model, output_shape=ref_img.shape, preserve_range=True)
+
     except ValueError as e:
         print('Unable to refine transformation with rough GCPs. Using transform estimated from footprints.')
         model = Minit
