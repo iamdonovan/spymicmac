@@ -73,11 +73,11 @@ def pairs_from_footprints(imlist, fprints=None, name_field='ID', prefix='OIS-Ree
     Using a list of images and a collection of image footprints, return a list of potential image pairs for processing
     with Tapioca.
 
-    :param list imlist: a list of (original) image names to use (e.g., without 'OIS-Reech\_')
+    :param list imlist: a list of (original) image names to use (e.g., without 'OIS-Reech_')
     :param GeoDataFrame fprints: a vector dataset of footprint polygons. If not provided, will attempt to download
         metadata from USGS for the images.
     :param str name_field: the field in fprints table that contains the image name
-    :param str prefix: the prefix attached to the image name read by Tapioca (default: 'OIS-Reech\_')
+    :param str prefix: the prefix attached to the image name read by Tapioca (default: 'OIS-Reech_')
     :param str file_ext: the file extension for the images read by Tapioca (default: .tif)
     :param str dataset: the USGS dataset name to search if no footprints are provided (default: AERIAL_COMBIN)
     :return: **pairs** (*list*) -- a list of tuples representing image pairs
@@ -829,13 +829,12 @@ def write_image_mesures(imlist, gcps, outdir='.', sub='', ort_dir='Ortho-MEC-Rel
         impts = pd.read_csv('Auto-{}.txt'.format(im), sep=' ', names=['j', 'i'])
         # impts_nodist = pd.read_csv('NoDist-{}.txt'.format(im), sep=' ', names=['j', 'i'])
 
-        # TODO: replace GeoImg.find_valid_bbox
-        # could potentially polygonize the valid mask
-        xmin, ymin, xmax, ymax = img_geo.bounds
+        footprint = (img_geo > 0).polygonize().ds.geometry.values[0]
+        valid_pts = footprint.contains(gpd.points_from_xy(gcps.rel_x, gcps.rel_y))
 
         # valid_pts = get_valid_image_points(img.shape, impts, impts_nodist)
-        valid_pts = np.logical_and.reduce([xmin <= gcps.rel_x, gcps.rel_x < xmax,
-                                           ymin <= gcps.rel_y, gcps.rel_y < ymax])
+        # valid_pts = np.logical_and.reduce([xmin <= gcps.rel_x, gcps.rel_x < xmax,
+        #                                    ymin <= gcps.rel_y, gcps.rel_y < ymax])
 
         if np.count_nonzero(valid_pts) == 0:
             continue
@@ -1602,7 +1601,7 @@ def checkpoints(img_pattern, ori, fn_cp, fn_meas, fn_resids=None, ret_df=True):
     p.wait()
 
     if fn_resids is not None and ret_df:
-        return pd.read_csv(str(fn_resids) + '_RollCtrl.txt', delimiter='\s+', names=['id', 'xres', 'yres', 'zres'])
+        return pd.read_csv(str(fn_resids) + '_RollCtrl.txt', delimiter=r'\s+', names=['id', 'xres', 'yres', 'zres'])
 
 
 def banana(fn_dem, fn_ref, deg=2, dZthresh=200., fn_mask=None, spacing=100):
@@ -2023,21 +2022,21 @@ def get_autogcp_locations(ori, meas_file, imlist):
     :param str meas_file: The Measures file to find image locations for
     :param list imlist: a list of image names
     """
-    nodist = '-'.join([ori, 'NoDist'])
+    # nodist = '-'.join([ori, 'NoDist'])
 
     # copy the orientation directory to a new, "nodist" directory
-    shutil.copytree(ori, nodist, dirs_exist_ok=True)
+    # shutil.copytree(ori, nodist, dirs_exist_ok=True)
 
-    autocals = glob('AutoCal*.xml', root_dir=nodist)
-    for autocal in autocals:
-        _remove_distortion_coeffs(os.path.join(nodist, autocal))
+    # autocals = glob('AutoCal*.xml', root_dir=nodist)
+    # for autocal in autocals:
+    #    _remove_distortion_coeffs(os.path.join(nodist, autocal))
 
     for im in imlist:
-        _update_autocal(nodist, im)
+        # _update_autocal(nodist, im)
 
-        p = subprocess.Popen(['mm3d', 'XYZ2Im', os.path.join(nodist, f'Orientation-{im}.xml'),
-                              meas_file, f'NoDist-{im}.txt'])
-        p.wait()
+        # p = subprocess.Popen(['mm3d', 'XYZ2Im', os.path.join(nodist, f'Orientation-{im}.xml'),
+        #                       meas_file, f'NoDist-{im}.txt'])
+        # p.wait()
 
         p = subprocess.Popen(['mm3d', 'XYZ2Im', os.path.join(ori, f'Orientation-{im}.xml'),
                               meas_file, f'Auto-{im}.txt'])
