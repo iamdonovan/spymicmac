@@ -23,7 +23,7 @@ from shapely.geometry import LineString, MultiPoint
 from skimage.io import imread, imsave
 from skimage.transform import AffineTransform
 import geoutils as gu
-from spymicmac import data, register
+from spymicmac import data, register, resample
 
 
 ######################################################################################################################
@@ -825,11 +825,14 @@ def write_image_mesures(imlist, gcps, outdir='.', sub='', ort_dir='Ortho-MEC-Rel
     for im in imlist:
         print(im)
         ort_img = gu.Raster(Path(ort_dir, f"Ort_{im}"))
-
-        impts = pd.read_csv(f"Auto-{im}.txt", sep=' ', names=['j', 'i'])
+        dx, _, xmin, _, dy, ymin, _, _, _ = ort_img.transform
+        ort_img = gu.Raster.from_array(resample.downsample(ort_img.data, fact=10),
+                                       (10 * dx, 0, xmin, 0, 10 * dy, ymin), None)
 
         footprint = (ort_img > 0).polygonize().ds.union_all()
         valid = footprint.contains(gpd.points_from_xy(gcps.rel_x, gcps.rel_y))
+
+        impts = pd.read_csv(f"Auto-{im}.txt", sep=' ', names=['j', 'i'])
 
         if np.count_nonzero(valid) == 0:
             continue
