@@ -381,15 +381,10 @@ def register_relative(dirmec, fn_dem, fn_ref=None, fn_ortho=None, glacmask=None,
         else:
             fn_reg = fn_ortho
         reg_img = gu.Raster(fn_reg)
-        fn_tfw = fn_reg.replace('.tif', '.tfw')
     else:
         fn_reg = os.path.join(dirmec, _get_last_malt(dirmec))
-        fn_tfw = fn_reg.replace('.tif', '.tfw')
         reg_img = gu.Raster(fn_reg)
     print(f"Loaded relative image {fn_reg}.")
-
-    with open(fn_tfw, 'r') as f:
-        reg_gt = [float(l.strip()) for l in f.readlines()]
 
     if footprints is None:
         if os.path.isfile('Footprints.gpkg'):
@@ -422,7 +417,7 @@ def register_relative(dirmec, fn_dem, fn_ref=None, fn_ortho=None, glacmask=None,
         if model is None or np.count_nonzero(inliers) < 6:
             raise ValueError()
 
-        rough_tfm = warp(reg_img, model, output_shape=ref_img.shape, preserve_range=True)
+        rough_tfm = warp(reg_img.data, model, output_shape=ref_img.shape, preserve_range=True)
 
     except ValueError as e:
         print('Unable to refine transformation with rough GCPs. Using transform estimated from footprints.')
@@ -448,7 +443,7 @@ def register_relative(dirmec, fn_dem, fn_ref=None, fn_ortho=None, glacmask=None,
             ref_hp[np.isnan(ref_hp)] = 0
 
             keypoints = matching.get_dense_keypoints(ref_hp, mask=None, npix=int(density/2), use_skimage=True,
-                                                     detector_kwargs={'n_keypoints': 2})
+                                                     detector_kwargs={'n_keypoints': 5})
 
             gcps = pd.DataFrame(data=keypoints, columns=['search_i', 'search_j'])
             gcps = matching.find_matches(rough_tfm, ref_img, mask_full.data.data, points=gcps, initM=model,
@@ -466,9 +461,6 @@ def register_relative(dirmec, fn_dem, fn_ref=None, fn_ortho=None, glacmask=None,
     #gcps['rel_x'] = reg_gt[4] + gcps['orig_j'].values * reg_gt[0]  # need the original image coordinates
     #gcps['rel_y'] = reg_gt[5] + gcps['orig_i'].values * reg_gt[3]
     gcps['rel_x'], gcps['rel_y'] = reg_img.ij2xy(gcps.orig_i, gcps.orig_j)
-
-    gcps['elevation'] = 0
-    gcps.set_crs(crs=ref_img.crs, inplace=True)
 
     gcps.dropna(inplace=True)
     print('{} potential matches found'.format(gcps.shape[0]))
@@ -522,7 +514,7 @@ def register_relative(dirmec, fn_dem, fn_ref=None, fn_ortho=None, glacmask=None,
     micmac.write_auto_mesures(gcps, subscript, out_dir)
 
     print('running get_autogcp_locations to get rough image locations for each point')
-    micmac.get_autogcp_locations(f'Ori-{ori}', os.path.join(out_dir, f'AutoMeasures{subscript}.txt'), imlist)
+    micmac.get_autogcp_locations(f"Ori-{ori}", os.path.join(out_dir, f"AutoMeasures{subscript}.txt"), imlist)
 
     # print('searching for points in orthorectified images')
     print('finding image measures')
