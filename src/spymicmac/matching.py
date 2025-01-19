@@ -1512,7 +1512,7 @@ def _dense_opencv(split_img, oy, ox, split_msk, return_des, detector_kwargs):
 
         for p in kp:
             p.pt = p.pt[0] + ox[ind], p.pt[1] + oy[ind]
-            keypoints.append(kp)
+            keypoints.append(p)
 
     if return_des:
         return keypoints, np.array(descriptors)
