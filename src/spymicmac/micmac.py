@@ -829,7 +829,7 @@ def write_image_mesures(imlist, gcps, outdir='.', sub='', ort_dir='Ortho-MEC-Rel
         impts = pd.read_csv('Auto-{}.txt'.format(im), sep=' ', names=['j', 'i'])
         # impts_nodist = pd.read_csv('NoDist-{}.txt'.format(im), sep=' ', names=['j', 'i'])
 
-        footprint = (img_geo > 0).polygonize().ds.geometry.values[0]
+        footprint = (img_geo > 0).polygonize().ds.union_all()
         valid_pts = footprint.contains(gpd.points_from_xy(gcps.rel_x, gcps.rel_y))
 
         # valid_pts = get_valid_image_points(img.shape, impts, impts_nodist)
