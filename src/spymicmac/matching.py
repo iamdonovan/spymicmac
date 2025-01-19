@@ -1479,15 +1479,21 @@ def _dense_skimage(split_img, oy, ox, return_des, detector_kwargs):
     descriptors = []
 
     for ind, img in enumerate(split_img):
-        orb.detect_and_extract(img)
-        kp, des = orb.keypoints, orb.descriptors
+        try:
+            orb.detect_and_extract(img)
+            kp, des = orb.keypoints, orb.descriptors
 
-        descriptors.append(des)
+            descriptors.append(des)
 
-        kp[:, 1] += ox[ind]
-        kp[:, 0] += oy[ind]
+            kp[:, 1] += ox[ind]
+            kp[:, 0] += oy[ind]
 
-        keypoints.append(kp)
+            keypoints.append(kp)
+        except RuntimeError as e:
+            if "ORB found no features." in e.args[0]:
+                continue
+            else:
+                raise e
 
     keypoints = np.concatenate(keypoints, axis=0)
     descriptors = np.concatenate(descriptors, axis=0)
