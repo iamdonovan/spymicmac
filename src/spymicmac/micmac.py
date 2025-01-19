@@ -21,10 +21,9 @@ from glob import glob
 from shapely.strtree import STRtree
 from shapely.geometry import LineString, MultiPoint
 from skimage.io import imread, imsave
-from skimage.transform import AffineTransform, SimilarityTransform
-from skimage.measure import ransac
+from skimage.transform import AffineTransform
 import geoutils as gu
-from spymicmac import data, matching, register
+from spymicmac import data, register
 
 
 ######################################################################################################################
@@ -825,23 +824,19 @@ def write_image_mesures(imlist, gcps, outdir='.', sub='', ort_dir='Ortho-MEC-Rel
 
     for im in imlist:
         print(im)
-        img_geo = gu.Raster(os.path.join(ort_dir, 'Ort_' + im))
-        impts = pd.read_csv('Auto-{}.txt'.format(im), sep=' ', names=['j', 'i'])
-        # impts_nodist = pd.read_csv('NoDist-{}.txt'.format(im), sep=' ', names=['j', 'i'])
+        ort_img = gu.Raster(Path(ort_dir, f"Ort_{im}"))
 
-        footprint = (img_geo > 0).polygonize().ds.union_all()
-        valid_pts = footprint.contains(gpd.points_from_xy(gcps.rel_x, gcps.rel_y))
+        impts = pd.read_csv(f"Auto-{im}.txt", sep=' ', names=['j', 'i'])
 
-        # valid_pts = get_valid_image_points(img.shape, impts, impts_nodist)
-        # valid_pts = np.logical_and.reduce([xmin <= gcps.rel_x, gcps.rel_x < xmax,
-        #                                    ymin <= gcps.rel_y, gcps.rel_y < ymax])
+        footprint = (ort_img > 0).polygonize().ds.union_all()
+        valid = footprint.contains(gpd.points_from_xy(gcps.rel_x, gcps.rel_y))
 
-        if np.count_nonzero(valid_pts) == 0:
+        if np.count_nonzero(valid) == 0:
             continue
 
         this_im_mes = E.MesureAppuiFlottant1Im(E.NameIm(im))
 
-        for i, (ind, row) in enumerate(impts[valid_pts].iterrows()):
+        for i, (ind, row) in enumerate(impts[valid].iterrows()):
             this_mes = E.OneMesureAF1I(E.NamePt(gcps.iloc[ind]['id']),
                                        E.PtIm('{} {}'.format(row.j, row.i)))
             this_im_mes.append(this_mes)
