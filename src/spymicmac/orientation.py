@@ -471,12 +471,12 @@ def fix_orientation(cameras, ori_df, ori, nsig=4):
             update_center(name, ori, [new_x, new_y, new_z])
 
 
-def transform_centers(img_gt, ref, imlist, footprints, ori, imgeom=True):
+def transform_centers(rel, ref, imlist, footprints, ori, imgeom=True):
     """
     Use the camera centers in relative space provided by MicMac Orientation files, along with camera centers or
     footprints, to estimate a transformation between the relative coordinate system and the absolute coordinate system.
 
-    :param array-like img_gt: the image GeoTransform (as read from a TFW file)
+    :param Raster rel: the relative image
     :param Raster ref: the reference image to use to determine the output image shape
     :param list imlist: a list of the images that were used for the relative orthophoto
     :param GeoDataFrame footprints: the (approximate) image footprints or camera centers. If geom_type is Polygon, the
@@ -505,7 +505,7 @@ def transform_centers(img_gt, ref, imlist, footprints, ori, imgeom=True):
         footprints.loc[ind, 'name'] = 'OIS-Reech_' + row['ID'] + '.tif'
 
     join = footprints.set_index('name').join(rel_ori.set_index('name'), lsuffix='abs', rsuffix='rel')
-    join.dropna(inplace=True)
+    join.dropna(how='all', inplace=True)
 
     if join.shape[0] > 3:
         width_ratio = _point_spread(rel_ori.geometry)
@@ -530,7 +530,7 @@ def transform_centers(img_gt, ref, imlist, footprints, ori, imgeom=True):
         rel_pts = _get_points([Point(row.xrel, row.yrel) for ii, row in join.iterrows()])
 
     if imgeom:
-        model, inliers = transform_points(ref, ref_pts, img_gt, rel_pts)
+        model, inliers = transform_points(ref, ref_pts, rel, rel_pts)
     else:
         model, inliers = _transform(ref_pts, rel_pts)
 
@@ -538,13 +538,13 @@ def transform_centers(img_gt, ref, imlist, footprints, ori, imgeom=True):
     return model, inliers, join
 
 
-def transform_points(ref, ref_pts, rel_gt, rel_pts):
+def transform_points(ref, ref_pts, rel, rel_pts):
     """
     Given x,y points and two "geo"-referenced images, finds an affine transformation between the two images.
 
     :param Raster ref: the reference image
     :param np.array ref_pts: an Mx2 array of the x,y points in the reference image
-    :param array-like rel_gt: the "geo" transform for the second image, as read from a .tfw file.
+    :param Raster rel: the second image
     :param np.array rel_pts: an Mx2 array of the x,y points in the second image.
     :return:
         - **model** (*AffineTransform*) -- the estimated Affine Transformation between relative and absolute space
@@ -552,10 +552,11 @@ def transform_points(ref, ref_pts, rel_gt, rel_pts):
     """
     ref_ij = np.array(ref.xy2ij(ref_pts[:, 0], ref_pts[:, 1])).T
 
-    rel_ij = np.array([((pt[0] - rel_gt[4]) / rel_gt[0],
-                        (pt[1] - rel_gt[5]) / rel_gt[3]) for pt in rel_pts])
+    rel_ij = np.array(rel.xy2ij(rel_pts[:, 0], rel_pts[:, 1])).T
+    # rel_ij = np.array([((pt[0] - rel_gt[4]) / rel_gt[0],
+    #                     (pt[1] - rel_gt[5]) / rel_gt[3]) for pt in rel_pts])
 
-    model, inliers = _transform(ref_ij[:, ::-1], rel_ij)
+    model, inliers = _transform(ref_ij[:, ::-1], rel_ij[:, ::-1])
 
     return model, inliers
 
@@ -607,10 +608,14 @@ def _get_points(centers):
     norm = _norm_vector(line)  # get the normal vector to the line
 
     pt12 = line.centroid  # get the midpoint of the line
-    # get a point perpendicular to the line at a distance of line.length from the midpoint
-    endpt = Point(pt12.x + line.length * norm[0], pt12.y + line.length * norm[1])
+    # get two points perpendicular to the line, centered on the midpoint
+    endpts = [Point(pt12.x - 0.5 * line.length * norm[0],
+                    pt12.y - 0.5 * line.length * norm[1]),
+              Point(pt12.x + 0.5 * line.length * norm[0],
+                    pt12.y + 0.5 * line.length * norm[1])]
 
-    pts = [(p.x, p.y) for p in [pt1, pt2, pt12, endpt]]
+
+    pts = [(p.x, p.y) for p in [pt1, pt2, pt12] + endpts]
 
     return np.array(pts)
 
