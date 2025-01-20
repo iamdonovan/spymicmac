@@ -2,11 +2,13 @@
 spymicmac.micmac is a collection of tools for interfacing with MicMac
 """
 import os
+from pathlib import Path
 import sys
 import re
 import subprocess
 import shutil
 import PIL
+from itertools import combinations
 import numpy as np
 from osgeo import gdal
 import pandas as pd
@@ -17,62 +19,170 @@ import difflib
 import xml.etree.ElementTree as ET
 from glob import glob
 from shapely.strtree import STRtree
+from shapely.geometry import LineString, MultiPoint
 from skimage.io import imread, imsave
-from skimage.transform import AffineTransform, SimilarityTransform
-from skimage.measure import ransac
+from skimage.transform import AffineTransform
 import geoutils as gu
-from spymicmac import data, matching, register
+from spymicmac import data, register, resample
 
 
 ######################################################################################################################
 # MicMac interfaces - write xml files for MicMac to read
 ######################################################################################################################
-def write_neighbour_images(imlist, fprints=None, nameField='ID', prefix='OIS-Reech_', fileExt='.tif',
-                           dataset='AERIAL_COMBIN'):
+def write_neighbour_images(imlist=None, fprints=None, name_field='ID', prefix='OIS-Reech_', file_ext='.tif',
+                           dataset='AERIAL_COMBIN', from_homol=False, img_pattern='OIS*.tif', dir_homol='Homol'):
     """
-    Using a list of images and a collection of image footprints, return a list of potential image pairs for processing
-    with Tapioca.
+    Write an xml file containing image pairs for processing with Tapioca, using either image footprints or a homologue
+    directory.
 
     :param list imlist: a list of (original) image names to use (e.g., without 'OIS-Reech\_')
     :param GeoDataFrame fprints: a vector dataset of footprint polygons. If not provided, will attempt to download
         metadata from USGS for the images.
-    :param str nameField: the field in fprints table that contains the image name
+    :param str name_field: the field in fprints table that contains the image name
     :param str prefix: the prefix attached to the image name read by Tapioca (default: 'OIS-Reech\_')
-    :param str fileExt: the file extension for the images read by Tapioca (default: .tif)
-    :param dataset: the USGS dataset name to search if no footprints are provided (default: AERIAL_COMBIN)
+    :param str file_ext: the file extension for the images read by Tapioca (default: .tif)
+    :param str dataset: the USGS dataset name to search if no footprints are provided (default: AERIAL_COMBIN)
+    :param bool from_homol: get a list of pairs based on homologue files (default: False)
+    :param str img_pattern: the image pattern to pass to glob to get a list of filenames (default: OIS*.tif)
+    :param str dir_homol: the directory where the homologue files are (default: Homol)
     """
     E = builder.ElementMaker()
     NamedRel = E.SauvegardeNamedRel()
 
+    if from_homol:
+        pairs = pairs_from_homol(img_pattern, dir_homol)
+    else:
+        if imlist is None:
+            imlist = sorted([fn.strip(prefix).strip(file_ext) for fn in glob(img_pattern)])
+
+        pairs = pairs_from_footprints(imlist=imlist, fprints=fprints, name_field=name_field, prefix=prefix,
+                                      file_ext=file_ext, dataset=dataset)
+
+    for pair in pairs:
+        this_pair = E.Cple(' '.join(pair))
+        NamedRel.append(this_pair)
+
+    tree = etree.ElementTree(NamedRel)
+    tree.write('FileImagesNeighbour.xml', pretty_print=True, xml_declaration=True, encoding="utf-8")
+
+
+def pairs_from_footprints(imlist, fprints=None, name_field='ID', prefix='OIS-Reech_', file_ext='.tif',
+                          dataset='AERIAL_COMBIN'):
+    """
+    Using a list of images and a collection of image footprints, return a list of potential image pairs for processing
+    with Tapioca.
+
+    :param list imlist: a list of (original) image names to use (e.g., without 'OIS-Reech_')
+    :param GeoDataFrame fprints: a vector dataset of footprint polygons. If not provided, will attempt to download
+        metadata from USGS for the images.
+    :param str name_field: the field in fprints table that contains the image name
+    :param str prefix: the prefix attached to the image name read by Tapioca (default: 'OIS-Reech_')
+    :param str file_ext: the file extension for the images read by Tapioca (default: .tif)
+    :param str dataset: the USGS dataset name to search if no footprints are provided (default: AERIAL_COMBIN)
+    :return: **pairs** (*list*) -- a list of tuples representing image pairs
+    """
+
     if fprints is None:
         fprints = data.get_usgs_footprints(imlist, dataset=dataset)
     else:
-        fprints = fprints[fprints[nameField].isin(imlist)]
+        fprints = fprints[fprints[name_field].isin(imlist)]
 
     fprints.reset_index(inplace=True)  # do this to ensure that strtree indices are correct
     s = STRtree([f for f in fprints['geometry'].values])
 
-    for i, row in fprints.iterrows():
-        fn = row[nameField]
+    all_pairs = []
+
+    for ind, row in fprints.iterrows():
+        fn = row[name_field]
         fp = row['geometry']
 
         print(fn)
 
         res = s.query(fp)
         intersects = [fprints.loc[c, 'geometry'] for c in res if fp.intersection(fprints.loc[c, 'geometry']).area > 0]
-        fnames = [fprints[nameField][fprints['geometry'] == c].values[0] for c in intersects]
+        fnames = [fprints[name_field][fprints['geometry'] == c].values[0] for c in intersects]
         try:
             fnames.remove(fn)
         except ValueError:
             pass
 
-        for f in fnames:
-            this_pair = E.Cple(' '.join([prefix + fn + fileExt,
-                                         prefix + f + fileExt]))
-            NamedRel.append(this_pair)
+        all_pairs += [(prefix + fn + file_ext, prefix + fn_match + file_ext) for fn_match in fnames]
 
-    tree = etree.ElementTree(NamedRel)
-    tree.write('FileImagesNeighbour.xml', pretty_print=True, xml_declaration=True, encoding="utf-8")
+    return all_pairs
+
+
+def _get_pairs(fn_img, dir_homol):
+    datlist = sorted(glob('*.dat', root_dir=Path(dir_homol, f"Pastis{fn_img}")))
+    return sorted([fn.strip('.dat') for fn in datlist])
+
+
+def pairs_from_homol(img_pattern='OIS*.tif', dir_homol='Homol'):
+    """
+    Get a list of image pairs based on homologue files.
+
+    :param str img_pattern: the image pattern to pass to glob to get a list of filenames (default: OIS*.tif)
+    :param str dir_homol: the directory where the homologue files are (default: Homol)
+    :return: **pairs** (*list*) -- a list of tuples representing image pairs
+    """
+    imlist = sorted(glob(img_pattern))
+
+    all_pairs = []
+
+    for fn_img in imlist:
+        pairs = _get_pairs(fn_img, dir_homol)
+        all_pairs += zip(len(pairs) * [fn_img], pairs)
+
+    return all_pairs
+
+
+def _get_dat_sizes(fn_img, dir_homol):
+    datlist = sorted(glob('*.dat', root_dir=Path(dir_homol, f"Pastis{fn_img}")))
+    sizes = np.array([os.stat(Path(dir_homol, f"Pastis{fn_img}", fn)).st_size for fn in datlist])
+    percs = sizes / sizes.sum()
+
+    size_df = pd.DataFrame({'image': fn_img, 'filename': datlist, 'size': sizes, 'percentage': percs})
+
+    size_df['cumulative'] = size_df.sort_values('percentage', ascending=False)['percentage'].cumsum()
+
+    return size_df
+
+
+def clean_homol(img_pattern='OIS*.tif', dir_homol='Homol', min_size=None, remove_asymmetric=False, return_df=False):
+    """
+    Remove spurious homologue files based on a threshold file size.
+
+    :param str img_pattern: the image pattern to pass to glob to get a list of filenames (default: OIS*.tif)
+    :param str dir_homol: the directory where the homologue files are (default: Homol)
+    :param int min_size: the size, in bytes, to use as a threshold for removing file (default: calculated from all files)
+    :param bool remove_asymmetric: remove asymmetric homologue files (pairs where only one image in the pair "sees" the
+        other one) (default: False)
+    :param bool return_df: return a DataFrame of all homologue files, rather than removing them (default: False)
+    """
+    imlist = sorted(glob(img_pattern))
+
+    dat_sizes = pd.concat([_get_dat_sizes(fn, dir_homol) for fn in imlist], ignore_index=True)
+    dat_sizes['symmetric'] = True
+
+    for ind, row in dat_sizes.iterrows():
+        dat_sizes.loc[ind, 'symmetric'] = row['image'] + '.dat' in dat_sizes.loc[
+            dat_sizes['image'] == row['filename'].split('.dat')[0], 'filename'].to_list()
+
+    if return_df:
+        return dat_sizes
+
+    for fn_img, sizes in dat_sizes.groupby('image'):
+        if min_size is None:
+            ind = (sizes.sort_values('cumulative')['cumulative'] > 0.95).idxmax()
+            this_cutoff = min(250, sizes.loc[ind, 'size'] + 1)
+        else:
+            this_cutoff = min_size
+
+        for fn in sizes.loc[sizes['size'] < this_cutoff, 'filename']:
+            os.remove(Path(dir_homol, f"Pastis{fn_img}", fn))
+
+        if remove_asymmetric:
+            for fn in sizes.loc[(~sizes['symmetric']) & (sizes['size'] > this_cutoff), 'filename']:
+                os.remove(Path(dir_homol, f"Pastis{fn_img}", fn))
 
 
 def write_xml(fn_img, fn_mask='./MEC-Malt/Masq_STD-MALT_DeZoom1.tif', fn_xml=None, geomname='eGeomMNTEuclid'):
@@ -336,34 +446,55 @@ def create_measurescamera_xml(fn_csv, ori='InterneScan', translate=False, name='
                xml_declaration=True, encoding="utf-8")
 
 
-def estimate_measures_camera(approx_meas, ori='InterneScan', scan_res=2.5e-5, how='mean'):
+def estimate_measures_camera(approx, pairs, ori='InterneScan', scan_res=2.5e-5, how='mean', write_xml=True):
     """
     Use a set of located fiducial markers to create a MeasuresCamera file using the average location of each fiducial
     marker.
 
-    :param DataFrame approx_meas: A DataFrame with the (very approximate) locations of the fiducial markers.
+    :param approx: a dataframe of approximate fiducial marker locations.
+    :param pairs: a list of pairs of co-linear fiducial markers
     :param str ori: The Ori- directory containing the MeasuresIm files (default: InterneScan)
-    :param float scan_res: the scanning resolution of the images in microns
+    :param float scan_res: the scanning resolution of the images in m (default: 2.5e-5; 25 µm)
     :param str how: what average to use for the output locations. Must be one of [mean, median].
+    :param bool write_xml: write the MeasuresCamera.xml file in addition to a CSV (default: True)
     """
     assert how in ['mean', 'median'], "how must be one of [mean, median]"
 
     meas_list = sorted(glob('MeasuresIm*.xml', root_dir=f'Ori-{ori}'))
 
     all_meas = []
+
     for fn_meas in meas_list:
-        meas = parse_im_meas(os.path.join(f'Ori-{ori}', fn_meas))
-        joined = meas.set_index('name').join(approx_meas.set_index('name'), lsuffix='_img', rsuffix='_cam')
+        meas = parse_im_meas(os.path.join(f'Ori-{ori}', fn_meas)).set_index('name')
 
-        model, inliers = ransac((joined[['j_img', 'i_img']].values, joined[['j_cam', 'i_cam']].values),
-                                SimilarityTransform, min_samples=len(meas) - 1, residual_threshold=2,
-                                max_trials=5000)
+        collinear = [LineString(meas.loc[p, ['j', 'i']].values) for p in pairs]
 
-        rot = matching._rotate_meas(meas, -model.rotation)
-        meas['j'] = rot['j'] - model.translation[0]
-        meas['i'] = rot['i'] - model.translation[1]
+        for ind, pair in enumerate(pairs):
+            meas.loc[pair, ['collim_dist']] = collinear[ind].length
 
-        all_meas.append(meas)
+        scale = np.mean([c.length for c in collinear])
+
+        meas['j'] = meas['j'] / scale
+        meas['i'] = meas['i'] / scale
+
+        ppx, ppy = _meas_center(meas, pairs)
+        meas['j'] -= ppx
+        meas['i'] -= ppy
+
+        model = AffineTransform()
+        joined = meas.join(approx.set_index('name'), lsuffix='_img', rsuffix='_cam')
+        model.estimate(joined[['j_img', 'i_img']].values, joined[['j_cam', 'i_cam']].values)
+
+        meas['resid'] = model.residuals(joined[['j_img', 'i_img']].values, joined[['j_cam', 'i_cam']].values)
+
+        noscale = AffineTransform(translation=model.translation, rotation=model.rotation, shear=model.shear)
+        rot = noscale(meas[['j', 'i']].values)
+        # rot = model(meas[['j', 'i']].values)
+
+        meas['j'] = rot[:, 0]
+        meas['i'] = rot[:, 1]
+
+        all_meas.append(meas.reset_index())
 
     all_meas = pd.concat(all_meas, ignore_index=True)
 
@@ -372,15 +503,80 @@ def estimate_measures_camera(approx_meas, ori='InterneScan', scan_res=2.5e-5, ho
     else:
         avg_meas = all_meas.groupby('name').median(numeric_only=True)
 
-    avg_meas['j'] *= scan_res * 1000  # convert from microns to mm
-    avg_meas['i'] *= scan_res * 1000  # convert from microns to mm
+    joined = avg_meas.join(approx.set_index('name'), lsuffix='_img', rsuffix='_cam')
+    model = AffineTransform()
+    model.estimate(joined[['j_img', 'i_img']].values, joined[['j_cam', 'i_cam']].values)
 
-    avg_meas.reset_index(names='name').to_file('AverageMeasures.csv')
-    create_measurescamera_xml('AverageMeasures.csv', ori=ori, translate=False, name='name', x='j', y='i')
+    noscale = AffineTransform(translation=model.translation, rotation=model.rotation)
+
+    rot = noscale(meas[['j', 'i']].values)
+
+    avg_meas['j'] = rot[:, 0]
+    avg_meas['i'] = rot[:, 1]
+
+    avg_meas['j'] -= avg_meas['j'].min()
+    avg_meas['i'] -= avg_meas['i'].min()
+
+    scale = avg_meas['collim_dist'].mean()
+
+    avg_meas['j'] *= scale * scan_res * 1000  # convert from m to mm
+    avg_meas['i'] *= scale * scan_res * 1000  # convert from m to mm
+
+    all_meas.to_csv('AllMeasures.csv', index=False)
+    avg_meas.to_csv('AverageMeasures.csv')
+
+    if write_xml:
+        create_measurescamera_xml('AverageMeasures.csv', ori=ori, translate=False, name='name', x='j', y='i')
+
+
+def _meas_center(meas, pairs):
+    collims = [LineString(meas.loc[p, ['j', 'i']].values) for p in pairs]
+    pp = MultiPoint([a.intersection(b) for a, b in list(combinations(collims, 2))]).centroid
+
+    return pp.x, pp.y
+
+
+def generate_multicam_csv(patterns=None, prefix='OIS-Reech_', fn_out='camera_defs.csv',
+                          name='', short_name='', film_size='', focal=''):
+    """
+    Create a CSV file with camera parameters than can be read by create_localchantier_xml() to use images acquired by
+    multiple cameras.
+
+    Can be used to create a blank CSV template to be filled out manually, or generated using the optional function
+    arguments.
+
+    :param patterns: a list of filename patterns corresponding to each camera [None]
+    :param str prefix: an optional prefix to add to the matching patterns [OIS-Reech_]
+    :param str fn_out: the name of the CSV file to create [camera_defs.csv]
+    :param name: the name to give each camera. Must be unique.
+    :param short_name: the "short name" description of each camera. Does not need to be unique.
+    :param film_size: the size (width, height in mm) of the frame for each camera. Can be a list of tuples or a str.
+    :param focal: the focal length of each camera, in mm.
+    """
+    cameras = pd.DataFrame()
+
+    if patterns is None:
+        cameras['pattern'] = ''
+    else:
+        patterns = [p + '.*' for p in patterns if '.*' not in p]
+        patterns = [prefix + p for p in patterns if prefix not in p]
+
+        cameras['pattern'] = patterns
+
+    cameras['name'] = name
+    cameras['short_name'] = short_name
+
+    if not isinstance(film_size, str):
+        film_size = [','.join([str(p) for p in pp]) for pp in film_size]
+
+    cameras['film_size'] = film_size
+    cameras['focal'] = focal
+
+    cameras.to_csv(fn_out, index=False)
 
 
 def create_localchantier_xml(name='KH9MC', short_name='KH-9 Hexagon Mapping Camera', film_size=(460, 220),
-                             pattern='.*', focal=304.8, add_sfs=False):
+                             pattern='.*', focal=304.8, add_sfs=False, cam_csv=None):
     """
     Create a MicMac-LocalChantierDescripteur.xml file for a given camera. Default is the KH-9 Hexagon Mapping Camera.
 
@@ -390,38 +586,88 @@ def create_localchantier_xml(name='KH9MC', short_name='KH-9 Hexagon Mapping Came
     :param str pattern: the matching pattern to use for the images [.*]
     :param float focal: the nominal focal length, in mm [304.8]
     :param bool add_sfs: use SFS to help find tie points in low-contrast images [False]
+    :param str cam_csv: the CSV file containing parameters for multiple cameras [None]
     """
     E = builder.ElementMaker()
 
-    chantier = E.ChantierDescripteur(
-        E.LocCamDataBase(
+    chantier = E.ChantierDescripteur()
+    cam_db = E.LocCamDataBase()
+    cam_assocs = E.KeyedNamesAssociations()
+    foc_assocs = E.KeyedNamesAssociations()
+
+    if cam_csv is not None:
+        cameras = pd.read_csv(cam_csv)
+        for ind, cam in cameras.iterrows():
+            width, height = [p.strip() for p in cam['film_size'].split(',')]
+
+            cam_db.append(
+                E.CameraEntry(
+                    E.Name(cam['name']),
+                    E.SzCaptMm(f"{width} {height}"),
+                    E.ShortName(cam['short_name'])
+                )
+            )
+
+            cam_assocs.append(
+                E.Calcs(
+                    E.Arrite('1 1'),
+                    E.Direct(
+                        E.PatternTransform(cam['pattern']),
+                        E.CalcName(cam['name'])
+                    )
+                )
+            )
+
+            foc_assocs.append(
+                E.Calcs(
+                    E.Arrite('1 1'),
+                    E.Direct(
+                        E.PatternTransform(cam['pattern']),
+                        E.CalcName(f"{cam['focal']}")
+                    )
+                )
+            )
+
+    else:
+        width, height = film_size
+        cam_db.append(
             E.CameraEntry(
                 E.Name(name),
-                E.SzCaptMm('{} {}'.format(film_size[0], film_size[1])),
+                E.SzCaptMm(f"{width} {height}"),
                 E.ShortName(short_name)
             )
-        ),
-        E.KeyedNamesAssociations(
+        )
+
+        cam_assocs.append(
             E.Calcs(
                 E.Arrite('1 1'),
                 E.Direct(
                     E.PatternTransform(pattern),
                     E.CalcName(name)
                 )
-            ),
-            E.Key('NKS-Assoc-STD-CAM')
-        ),
-        E.KeyedNamesAssociations(
+            )
+        )
+
+        foc_assocs.append(
             E.Calcs(
                 E.Arrite('1 1'),
                 E.Direct(
-                    E.PatternTransform('OIS.*'),
-                    E.CalcName('{}'.format(focal))
+                    E.PatternTransform(pattern),
+                    E.CalcName(f"{focal}")
                 )
-            ),
-            E.Key('NKS-Assoc-STD-FOC')
+            )
         )
+
+    cam_assocs.append(
+        E.Key('NKS-Assoc-STD-CAM')
     )
+
+    foc_assocs.append(
+        E.Key('NKS-Assoc-STD-FOC')
+    )
+
+    for item in [cam_db, cam_assocs, foc_assocs]:
+        chantier.append(item)
 
     if add_sfs:
         chantier.append(
@@ -578,24 +824,22 @@ def write_image_mesures(imlist, gcps, outdir='.', sub='', ort_dir='Ortho-MEC-Rel
 
     for im in imlist:
         print(im)
-        img_geo = gu.Raster(os.path.join(ort_dir, 'Ort_' + im))
-        impts = pd.read_csv('Auto-{}.txt'.format(im), sep=' ', names=['j', 'i'])
-        # impts_nodist = pd.read_csv('NoDist-{}.txt'.format(im), sep=' ', names=['j', 'i'])
+        ort_img = gu.Raster(Path(ort_dir, f"Ort_{im}"))
+        dx, _, xmin, _, dy, ymin, _, _, _ = ort_img.transform
+        ort_img = gu.Raster.from_array(resample.downsample(ort_img.data, fact=10),
+                                       (10 * dx, 0, xmin, 0, 10 * dy, ymin), None)
 
-        # TODO: replace GeoImg.find_valid_bbox
-        # could potentially polygonize the valid mask
-        xmin, ymin, xmax, ymax = img_geo.bounds
+        footprint = (ort_img > 0).polygonize().ds.union_all()
+        valid = footprint.contains(gpd.points_from_xy(gcps.rel_x, gcps.rel_y))
 
-        # valid_pts = get_valid_image_points(img.shape, impts, impts_nodist)
-        valid_pts = np.logical_and.reduce([xmin <= gcps.rel_x, gcps.rel_x < xmax,
-                                           ymin <= gcps.rel_y, gcps.rel_y < ymax])
+        impts = pd.read_csv(f"Auto-{im}.txt", sep=' ', names=['j', 'i'])
 
-        if np.count_nonzero(valid_pts) == 0:
+        if np.count_nonzero(valid) == 0:
             continue
 
         this_im_mes = E.MesureAppuiFlottant1Im(E.NameIm(im))
 
-        for i, (ind, row) in enumerate(impts[valid_pts].iterrows()):
+        for i, (ind, row) in enumerate(impts[valid].iterrows()):
             this_mes = E.OneMesureAF1I(E.NamePt(gcps.iloc[ind]['id']),
                                        E.PtIm('{} {}'.format(row.j, row.i)))
             this_im_mes.append(this_mes)
@@ -821,10 +1065,11 @@ def _get_homol(fn_img, dir_homol='Homol'):
 def _get_connected_block(img, seen, hdict):
     result = []
     imgs = set([img])
+
     while imgs:
         img = imgs.pop()
         seen.add(img)
-        imgs = imgs or set(hdict[img]) - seen
+        imgs.update(set(hdict[img]) - seen)
         result.append(img)
 
     return result, seen
@@ -842,7 +1087,7 @@ def find_connected_blocks(pattern='OIS*.tif', dir_homol='Homol'):
     :return: blocks -- a list containing lists of connected blocks of images
     """
     imlist = glob(pattern)
-    homols = [_get_homol(fn_img, dir_homol) for fn_img in imlist]
+    homols = [[fn for fn in _get_homol(fn_img, dir_homol) if fn in imlist] for fn_img in imlist]
 
     hdict = dict(zip(imlist, homols))
 
@@ -855,6 +1100,52 @@ def find_connected_blocks(pattern='OIS*.tif', dir_homol='Homol'):
             blocks.append(sorted(block))
 
     return blocks
+
+
+def separate_blocks(pattern='OIS*.tif', dir_homol='Homol', min_size=2):
+    """
+    Based on homologous points, find connected blocks of images and then separate the files into sub-folders.
+    Moves files from {dir_homol} and Pastis, along with the image files.
+
+    :param str pattern: the search pattern to use to get image names (default: OIS*.tif)
+    :param str dir_homol: the Homologue directory to use to determine what images are connected (default: Homol)
+    :param int min_size: the minimum number of images to be considered a block (default: 2)
+    """
+    # get connected blocks
+    blocks = find_connected_blocks(pattern, dir_homol)
+
+    # find single unconnected images
+    singles = sorted([im for imgs in blocks for im in imgs if len(imgs) < min_size])
+    blocks = [b for b in blocks if len(b) >= min_size]
+
+    # make directory
+    os.makedirs('singles', exist_ok=True)
+
+    for fn_sin in singles:
+        shutil.move(fn_sin, 'singles')
+
+    for num, block in enumerate(blocks):
+
+        os.makedirs(f"Block{num}", exist_ok=True)
+        os.makedirs(Path(f"Block{num}", dir_homol), exist_ok=True)
+        os.makedirs(Path(f"Block{num}", 'Pastis'), exist_ok=True)
+
+        for fn_img in block:
+            # move homol files
+            if os.path.exists(Path(dir_homol, f"Pastis{fn_img}")):
+                shutil.move(Path(dir_homol, f"Pastis{fn_img}"), Path(f"Block{num}", dir_homol, f"Pastis{fn_img}"))
+
+            # move pastis files
+            for fn_pas in glob(f"*{fn_img}*", root_dir='Pastis'):
+                shutil.move(Path('Pastis', fn_pas), Path(f"Block{num}", 'Pastis', fn_pas))
+
+            # move image
+            if os.path.exists(fn_img):
+                shutil.move(fn_img, f"Block{num}")
+
+        # copy xml files if they exist
+        if os.path.exists('MicMac-LocalChantierDescripteur.xml'):
+            shutil.copy('MicMac-LocalChantierDescripteur.xml', f"Block{num}")
 
 
 def move_bad_tapas(ori):
@@ -904,7 +1195,7 @@ def _generate_glob(fn_ids):
     tree.write('Tmp-SL-Glob.xml', pretty_print=True, xml_declaration=True, encoding="utf-8")
 
 
-def batch_saisie_fids(imlist, flavor='qt', fn_cam=None, clean=True):
+def batch_saisie_fids(imlist, flavor='qt', fn_cam=None, clean=True, gamma=None):
     """
     Run SaisieAppuisInit to locate the fiducial markers for a given list of images.
 
@@ -912,6 +1203,7 @@ def batch_saisie_fids(imlist, flavor='qt', fn_cam=None, clean=True):
     :param str flavor: which version of SaisieAppuisInit to run. Must be one of [qt, og] (default: qt)
     :param str fn_cam: the filename for the MeasuresCamera.xml file (default: Ori-InterneScan/MeasuresCamera.xml)
     :param bool clean: remove any image files in Tmp-SaisieAppuis
+    :param float gamma: Gamma adjustment value for Saisie (default: 1.0)
     """
     assert flavor in ['qt', 'og'], "flavor must be one of [qt, og]"
 
@@ -952,7 +1244,12 @@ def batch_saisie_fids(imlist, flavor='qt', fn_cam=None, clean=True):
             shutil.copy('Tmp-SL-Glob.xml',
                         os.path.join('Tmp-SaisieAppuis', f'Tmp-SL-Glob-MeasuresIm-{fn_img}.xml'))
 
-        p = subprocess.Popen(['mm3d', saisie, fn_img, 'NONE', 'id_fiducials.txt', f'MeasuresIm-{fn_img}.xml'])
+        saisie_args = ['mm3d', saisie, fn_img, 'NONE', 'id_fiducials.txt', f'MeasuresIm-{fn_img}.xml']
+
+        if gamma is not None:
+            saisie_args.append(f"Gama={gamma}")
+
+        p = subprocess.Popen(saisie_args)
         p.wait()
 
         shutil.move(f'MeasuresIm-{fn_img}-S2D.xml', os.path.join('Ori-InterneScan', f'MeasuresIm-{fn_img}.xml'))
@@ -961,25 +1258,58 @@ def batch_saisie_fids(imlist, flavor='qt', fn_cam=None, clean=True):
     os.remove('Tmp-SL-Glob.xml')
 
 
-def tapioca(img_pattern='OIS.*tif', res_low=400, res_high=1200):
+def tapioca(img_pattern='OIS.*tif', res_low=400, res_high=1200, fn_neighbours=None):
     """
-    Run mm3d Tapioca MulScale
+    Run mm3d Tapioca
 
     :param str img_pattern: The image pattern to pass to Tapioca (default: OIS.*tif)
     :param int res_low: the size of the largest image axis, in pixels, for low-resolution matching (default: 400)
     :param int res_high: the size of the largest image axis, in pixels, for high-resolution matching (default: 1200)
+    :param str fn_neighbours:
     """
     if os.name == 'nt':
         echo = subprocess.Popen('echo', stdout=subprocess.PIPE, shell=True)
     else:
         echo = subprocess.Popen('echo', stdout=subprocess.PIPE)
-    p = subprocess.Popen(['mm3d', 'Tapioca', 'MulScale', img_pattern,
-                          str(res_low), str(res_high)], stdin=echo.stdout)
+
+    if fn_neighbours is None:
+        args = ['mm3d', 'Tapioca', 'MulScale', img_pattern, str(res_low), str(res_high)]
+    else:
+        args = ['mm3d', 'Tapioca', 'File', fn_neighbours, str(res_high)]
+
+    p = subprocess.Popen(args, stdin=echo.stdout)
 
     return p.wait()
 
 
-def tapas(cam_model, ori_out, img_pattern='OIS.*tif', in_cal=None, lib_foc=True, lib_pp=True, lib_cd=True):
+def martini(img_pattern='OIS.*tif', in_ori=None, ori_out=None):
+    """
+    Run mm3d Martini, which provides a quick way to orient images without solving for camera parameters.
+
+    :param str img_pattern: The image pattern to pass to Martini (default: OIS.*tif)
+    :param str in_ori: the orientation directory to use to initialize the calibration (default: None)
+    :param str ori_out: the name of the output orientation directory (default: Martini)
+    """
+    if os.name == 'nt':
+        echo = subprocess.Popen('echo', stdout=subprocess.PIPE, shell=True)
+    else:
+        echo = subprocess.Popen('echo', stdout=subprocess.PIPE)
+
+    args = ['mm3d', 'Martini', img_pattern]
+
+    if in_ori is not None:
+        args.append(f"InOri={in_ori}")
+
+    if ori_out is not None:
+        args.append(f"OriOut={ori_out}")
+
+    p = subprocess.Popen(args, stdin=echo.stdout)
+
+    return p.wait()
+
+
+def tapas(cam_model, ori_out=None, img_pattern='OIS.*tif', in_cal=None, in_ori=None,
+          lib_foc=True, lib_pp=True, lib_cd=True):
     """
     Run mm3d Tapas with a given camera calibration model.
 
@@ -996,6 +1326,7 @@ def tapas(cam_model, ori_out, img_pattern='OIS.*tif', in_cal=None, lib_foc=True,
     :param str ori_out: the output orientation. Will create a directory, Ori-{ori_out}, with camera parameter files.
     :param str img_pattern: the image pattern to pass to Tapas (default: OIS.*tif)
     :param str in_cal: an input calibration model to refine (default: None)
+    :param str in_ori: a set of orientations to initialize the calibration (default: None)
     :param bool lib_foc: allow the focal length to be calibrated (default: True)
     :param bool lib_pp: allow the principal point to be calibrated (default: True)
     :param bool lib_cd: allow the center of distortion to be calibrated (default: True)
@@ -1005,31 +1336,47 @@ def tapas(cam_model, ori_out, img_pattern='OIS.*tif', in_cal=None, lib_foc=True,
     else:
         echo = subprocess.Popen('echo', stdout=subprocess.PIPE)
 
+    args = ['mm3d', 'Tapas', cam_model, img_pattern,
+            'LibFoc={}'.format(int(lib_foc)), 'LibPP={}'.format(int(lib_pp)),
+            'LibCD={}'.format(int(lib_cd))]
+
+    if ori_out is not None:
+        args.append('Out=' + ori_out)
+
     if in_cal is not None:
-        p = subprocess.Popen(['mm3d', 'Tapas', cam_model, img_pattern, 'InCal=' + in_cal,
-                              'LibFoc={}'.format(int(lib_foc)), 'LibPP={}'.format(int(lib_pp)),
-                              'LibCD={}'.format(int(lib_cd)), 'Out=' + ori_out], stdin=echo.stdout)
-    else:
-        p = subprocess.Popen(['mm3d', 'Tapas', cam_model, img_pattern,
-                              'LibFoc={}'.format(int(lib_foc)), 'LibPP={}'.format(int(lib_pp)),
-                              'LibCD={}'.format(int(lib_cd)), 'Out=' + ori_out], stdin=echo.stdout)
+        args.append('InCal=' + in_cal)
+
+    if in_ori is not None:
+        args.append('InOri=' + in_ori)
+
+    p = subprocess.Popen(args, stdin=echo.stdout)
 
     return p.wait()
 
 
-def apericloud(ori, img_pattern='OIS.*tif'):
+def apericloud(ori, img_pattern='OIS.*tif', fn_out=None, with_points=True):
     """
     Run mm3d AperiCloud to create a point cloud layer
 
     :param str ori: the input orientation to use
     :param str img_pattern: the image pattern to pass to AperiCloud (default: OIS.*tif)
+    :param str fn_out: the output filename (default: AperiCloud_{ori}.ply)
+    :param bool with_points: display the point cloud (default: True)
     """
     if os.name == 'nt':
         echo = subprocess.Popen('echo', stdout=subprocess.PIPE, shell=True)
     else:
         echo = subprocess.Popen('echo', stdout=subprocess.PIPE)
 
-    p = subprocess.Popen(['mm3d', 'AperiCloud', img_pattern, ori], stdin=echo.stdout)
+    args = ['mm3d', 'AperiCloud', img_pattern, ori]
+
+    if fn_out is not None:
+        args.append(f"Out={fn_out}")
+
+    if not with_points:
+        args.append(f"WithPoints=0")
+
+    p = subprocess.Popen(args, stdin=echo.stdout)
 
     return p.wait()
 
@@ -1252,7 +1599,7 @@ def checkpoints(img_pattern, ori, fn_cp, fn_meas, fn_resids=None, ret_df=True):
     p.wait()
 
     if fn_resids is not None and ret_df:
-        return pd.read_csv(str(fn_resids) + '_RollCtrl.txt', delimiter='\s+', names=['id', 'xres', 'yres', 'zres'])
+        return pd.read_csv(str(fn_resids) + '_RollCtrl.txt', delimiter=r'\s+', names=['id', 'xres', 'yres', 'zres'])
 
 
 def banana(fn_dem, fn_ref, deg=2, dZthresh=200., fn_mask=None, spacing=100):
@@ -1592,6 +1939,12 @@ def post_process(projstr, out_name, dirmec, do_ortho=True, ind_ortho=False):
     shutil.copy(os.path.join(dirmec, f'Z_Num{level}_DeZoom{zoomf}_STD-MALT.tfw'),
                 os.path.join(dirmec, f'AutoMask_STD-MALT_Num_{level-1}.tfw'))
 
+    if os.path.exists(os.path.join(dirmec, f"Correl_STD-MALT_Num_{level-1}_Tile_0_0.tif")):
+        mosaic_micmac_tiles(f"Correl_STD-MALT_Num_{level-1}", dirmec)
+
+    if os.path.exists(os.path.join(dirmec, f"Z_Num{level}_DeZoom{zoomf}_STD-MALT_Tile_0_0.tif")):
+        mosaic_micmac_tiles(f"Z_Num{level}_DeZoom{zoomf}_STD-MALT", dirmec)
+
     subprocess.Popen(['gdal_translate', '-a_nodata', '0', '-a_srs', projstr,
                       os.path.join(dirmec, f'Correl_STD-MALT_Num_{level-1}.tif'),
                       'tmp_corr.tif']).wait()
@@ -1623,6 +1976,9 @@ def post_process(projstr, out_name, dirmec, do_ortho=True, ind_ortho=False):
     if do_ortho:
         ortho = os.path.join('Ortho-' + dirmec, 'Orthophotomosaic.tif')
 
+        if os.path.join('Ortho-' + dirmec, 'Orthophotomosaic_Tile_0_0.tif'):
+            mosaic_micmac_tiles('Orthophotomosaic', 'Ortho-' + dirmec)
+
         subprocess.Popen(['gdal_translate', '-a_nodata', '0', '-a_srs', projstr, ortho, 'tmp_ortho.tif']).wait()
 
         # TODO: re-size the mask to fit the ortho image, if needed
@@ -1636,6 +1992,10 @@ def post_process(projstr, out_name, dirmec, do_ortho=True, ind_ortho=False):
     if ind_ortho:
         imlist = sorted(glob('OIS*.tif'))
         for fn_img in imlist:
+
+            if os.path.join('Ortho-' + dirmec, f"Ort_{os.path.splitext(fn_img)[0]}_Tile_0_0.tif"):
+                mosaic_micmac_tiles(f"Ort_{os.path.splitext(fn_img)[0]}", 'Ortho-' + dirmec)
+
             _mask_ortho(fn_img, out_name, dirmec, projstr)
 
 
@@ -1673,21 +2033,21 @@ def get_autogcp_locations(ori, meas_file, imlist):
     :param str meas_file: The Measures file to find image locations for
     :param list imlist: a list of image names
     """
-    nodist = '-'.join([ori, 'NoDist'])
+    # nodist = '-'.join([ori, 'NoDist'])
 
     # copy the orientation directory to a new, "nodist" directory
-    shutil.copytree(ori, nodist, dirs_exist_ok=True)
+    # shutil.copytree(ori, nodist, dirs_exist_ok=True)
 
-    autocals = glob('AutoCal*.xml', root_dir=nodist)
-    for autocal in autocals:
-        _remove_distortion_coeffs(os.path.join(nodist, autocal))
+    # autocals = glob('AutoCal*.xml', root_dir=nodist)
+    # for autocal in autocals:
+    #    _remove_distortion_coeffs(os.path.join(nodist, autocal))
 
     for im in imlist:
-        _update_autocal(nodist, im)
+        # _update_autocal(nodist, im)
 
-        p = subprocess.Popen(['mm3d', 'XYZ2Im', os.path.join(nodist, f'Orientation-{im}.xml'),
-                              meas_file, f'NoDist-{im}.txt'])
-        p.wait()
+        # p = subprocess.Popen(['mm3d', 'XYZ2Im', os.path.join(nodist, f'Orientation-{im}.xml'),
+        #                       meas_file, f'NoDist-{im}.txt'])
+        # p.wait()
 
         p = subprocess.Popen(['mm3d', 'XYZ2Im', os.path.join(ori, f'Orientation-{im}.xml'),
                               meas_file, f'Auto-{im}.txt'])

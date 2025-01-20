@@ -11,7 +11,7 @@ import pandas as pd
 from skimage import morphology, io, filters
 from skimage.morphology import binary_dilation, disk
 from skimage.measure import ransac
-from skimage.feature import peak_local_max
+from skimage.feature import peak_local_max, ORB
 from skimage.transform import AffineTransform, EuclideanTransform, SimilarityTransform
 from scipy.interpolate import RectBivariateSpline as RBS
 from scipy import ndimage
@@ -165,7 +165,7 @@ def _filter_fid_matches(coords_all, measures_cam):
         these_meas = coords_all.loc[c].set_index('gcp').join(measures_cam)
 
         model, inliers = ransac((these_meas[['im_col', 'im_row']].values, these_meas[['j', 'i']].values),
-                                SimilarityTransform, min_samples=nfids-1, residual_threshold=10, max_trials=20)
+                                SimilarityTransform, min_samples=3, residual_threshold=10, max_trials=20)
         try:
             resids.append(model.residuals(these_meas[['im_col', 'im_row']].values,
                                           these_meas[['j', 'i']].values).mean())
@@ -259,21 +259,23 @@ def _get_residuals(meas_img, meas_cam):
         raise RuntimeError("Unable to estimate an affine transformation")
 
 
-def _rotate_meas(meas, angle):
+def _rotate_meas(meas, angle, pp=None):
     M = np.array([[np.cos(angle), -np.sin(angle)], [np.sin(angle), np.cos(angle)]])
 
     rot = meas.copy()
 
-    mean_j = meas.j.mean()
-    mean_i = meas.i.mean()
+    if pp is not None:
+        shift_j, shift_i = pp.x, pp.y
+    else:
+        shift_j, shift_i = meas.j.mean(), meas.i.mean()
 
-    rot.j -= mean_j
-    rot.i -= mean_i
+    rot.j -= shift_j
+    rot.i -= shift_i
 
     rot[['j', 'i']] = rot[['j', 'i']].values.dot(M)
 
-    rot.j += mean_j
-    rot.i += mean_i
+    rot.j += shift_j
+    rot.i += shift_j
 
     return rot
 
@@ -393,13 +395,14 @@ def inscribed_cross(size, cross_size, width=3, angle=45):
     return circle - padded
 
 
-def templates_from_meas(fn_img, half_size=100):
+def templates_from_meas(fn_img, half_size=100, threshold=False):
     """
     Create fiducial templates from points in a MeasuresIm file.
 
     :param str fn_img: the filename of the image to use. Points for templates will be taken from
         Ori-InterneScan-Measuresim{fn-img}.xml.
     :param int half_size: the half-size of the template to create, in pixels (default: 100)
+    :param bool threshold: return binary templates based on otsu thresholding (default: False)
     :return: **templates** (*dict*) -- a *dict* of (name, template) pairs for each fiducial marker.
     """
     dir_img = os.path.dirname(fn_img)
@@ -416,6 +419,9 @@ def templates_from_meas(fn_img, half_size=100):
     templates = []
     for ind, row in meas_im.iterrows():
         subimg, _, _ = make_template(img, (row.i, row.j), half_size=half_size)
+        if threshold:
+            subimg = (subimg > filters.threshold_otsu(subimg)).astype(np.uint8)
+
         templates.append(subimg)
 
     return dict(zip(meas_im.name.values, templates))
@@ -1286,13 +1292,22 @@ def find_gcp_match(img, template, method=cv2.TM_CCORR_NORMED):
     return res, maxi + i_off + sp_dely, maxj + j_off + sp_delx
 
 
-def find_grid_matches(tfm_img, refgeo, mask, initM=None, spacing=200, srcwin=60, dstwin=600):
+def _match_grid(refgeo, spacing, srcwin):
+
+    jj, ii = np.meshgrid(np.arange(srcwin, spacing * np.ceil((refgeo.shape[1]-srcwin) / spacing) + 1, spacing),
+                         np.arange(srcwin, spacing * np.ceil((refgeo.shape[0]-srcwin) / spacing) + 1, spacing))
+
+    return jj.astype(int).flatten(), ii.astype(int).flatten()
+
+
+def find_matches(tfm_img, refgeo, mask, points=None, initM=None, spacing=200, srcwin=60, dstwin=600):
     """
     Find matches between two images on a grid using normalized cross-correlation template matching.
 
     :param array-like tfm_img: the image to use for matching.
     :param Raster refgeo: the reference image to use for matching.
     :param array-like mask: a mask indicating areas that should be used for matching.
+    :param GeoDataFrame points: a GeoDataFrame of GCP locations
     :param initM: the model used for transforming the initial, non-georeferenced image.
     :param int spacing: the grid spacing, in pixels (default: 200 pixels)
     :param int srcwin: the half-size of the template window.
@@ -1303,23 +1318,28 @@ def find_grid_matches(tfm_img, refgeo, mask, initM=None, spacing=200, srcwin=60,
     z_corrs = []
     peak_corrs = []
 
-    jj = np.arange(srcwin, spacing * np.ceil((refgeo.shape[1]-srcwin) / spacing) + 1, spacing).astype(int)
-    ii = np.arange(srcwin, spacing * np.ceil((refgeo.shape[0]-srcwin) / spacing) + 1, spacing).astype(int)
+    if points is None:
+        jj, ii = np.array(_match_grid(refgeo, spacing, srcwin))
+    else:
+        jj, ii = points.search_j, points.search_i
 
     search_pts = []
 
-    for _i in ii:
-        for _j in jj:
-            search_pts.append((_j, _i))
-            match, z_corr, peak_corr = do_match(tfm_img, refgeo.data, mask, (_i, _j), srcwin, dstwin)
-            match_pts.append(match)
-            z_corrs.append(z_corr)
-            peak_corrs.append(peak_corr)
+    for _i, _j in zip(ii, jj):
+        search_pts.append((_j, _i))
+        match, z_corr, peak_corr = do_match(tfm_img, refgeo.data, mask, (int(_i), int(_j)), srcwin, dstwin)
+        match_pts.append(match)
+        z_corrs.append(z_corr)
+        peak_corrs.append(peak_corr)
 
     search_pts = np.array(search_pts)
     _dst = np.array(match_pts)
 
-    gcps = gpd.GeoDataFrame()
+    if points is None:
+        gcps = gpd.GeoDataFrame()
+    else:
+        gcps = points.copy()
+
     gcps['pk_corr'] = peak_corrs
     gcps['z_corr'] = z_corrs
     gcps['match_j'] = _dst[:, 0]  # points matched in transformed image
@@ -1360,7 +1380,9 @@ def do_match(dest_img, ref_img, mask, pt, srcwin, dstwin):
     _i, _j = pt
     submask, _, _ = make_template(mask, pt, srcwin)
 
-    if np.count_nonzero(submask) / submask.size < 0.05:
+    if submask.size == 0:
+        return (np.nan, np.nan), np.nan, np.nan
+    elif np.count_nonzero(submask) / submask.size < 0.05:
         return (np.nan, np.nan), np.nan, np.nan
 
     try:
@@ -1450,7 +1472,62 @@ def keypoint_grid(img, spacing=25, size=10):
     return [cv2.KeyPoint(pt[0], pt[1], size) for pt in _grid]
 
 
-def get_dense_keypoints(img, mask, npix=100, nblocks=None, return_des=False):
+def _dense_skimage(split_img, oy, ox, return_des, detector_kwargs):
+    orb = ORB(**detector_kwargs)
+
+    keypoints = []
+    descriptors = []
+
+    for ind, img in enumerate(split_img):
+        try:
+            orb.detect_and_extract(img)
+            kp, des = orb.keypoints, orb.descriptors
+
+            descriptors.append(des)
+
+            kp[:, 1] += ox[ind]
+            kp[:, 0] += oy[ind]
+
+            keypoints.append(kp)
+        except RuntimeError as e:
+            if "ORB found no features." in e.args[0]:
+                continue
+            else:
+                raise e
+
+    keypoints = np.concatenate(keypoints, axis=0)
+    descriptors = np.concatenate(descriptors, axis=0)
+
+    if return_des:
+        return keypoints, descriptors
+    else:
+        return keypoints
+
+
+def _dense_opencv(split_img, oy, ox, split_msk, return_des, detector_kwargs):
+    orb = cv2.ORB_create(**detector_kwargs)
+
+    keypoints = []
+    descriptors = []
+
+    for ind, img in enumerate(split_img):
+        kp, des = orb.detectAndCompute(img, mask=split_msk[ind])
+
+        for ds in des:
+            descriptors.append(ds)
+
+        for p in kp:
+            p.pt = p.pt[0] + ox[ind], p.pt[1] + oy[ind]
+            keypoints.append(p)
+
+    if return_des:
+        return keypoints, np.array(descriptors)
+    else:
+        return keypoints
+
+
+def get_dense_keypoints(img, mask, npix=100, nblocks=None, return_des=False,
+                        use_skimage=False, detector_kwargs={}):
     """
     Find ORB keypoints by dividing an image into smaller parts.
 
@@ -1459,14 +1536,13 @@ def get_dense_keypoints(img, mask, npix=100, nblocks=None, return_des=False):
     :param int npix: the block size (in pixels) to divide the image into.
     :param int nblocks: the number of blocks to divide the image into. If set, overrides value given by npix.
     :param bool return_des: return the keypoint descriptors, as well
+    :param bool use_skimage: use the scikit-image implementation of ORB rather than OpenCV (default: False)
+    :param dict detector_kwargs: additional keyword arguments to pass when creating the ORB detector. For details,
+        see the documentation for cv2.ORB_create or skimage.feature.ORB.
     :return:
         - **keypoints** (*list*) -- a list of keypoint locations
         - **descriptors** (*list*) -- if requested, a list of keypoint descriptors.
     """
-    orb = cv2.ORB_create()
-    keypts = []
-    if return_des:
-        descriptors = []
 
     if nblocks is None:
         x_tiles = np.floor(img.shape[1] / npix).astype(int)
@@ -1483,24 +1559,10 @@ def get_dense_keypoints(img, mask, npix=100, nblocks=None, return_des=False):
     else:
         split_msk = [None] * len(split_img)
 
-    # rel_x, rel_y = get_subimg_offsets(split_img, (y_tiles, x_tiles), overlap=olap)
-
-    for i, img_ in enumerate(split_img):
-
-        kp, des = orb.detectAndCompute(img_, mask=split_msk[i])
-        if return_des:
-            if des is not None:
-                for ds in des:
-                    descriptors.append(ds)
-
-        for p in kp:
-            p.pt = p.pt[0] + ox[i], p.pt[1] + oy[i]
-            keypts.append(p)
-
-    if return_des:
-        return keypts, np.array(descriptors)
+    if use_skimage:
+        return _dense_skimage(split_img, oy, ox, return_des, detector_kwargs)
     else:
-        return keypts
+        return _dense_opencv(split_img, oy, ox, split_msk, return_des, detector_kwargs)
 
 
 def match_halves(left, right, overlap, block_size=None):
