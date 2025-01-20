@@ -18,6 +18,7 @@ dependencies:
   - imagemagick
   - exiftool
   - pillow>9.1.0
+  - rtree
   - pip
   - pip:
       - sphinx-argparse
