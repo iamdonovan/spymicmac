@@ -5,22 +5,17 @@ import os
 import subprocess
 import numpy as np
 import pyproj
+import geoutils as gu
 from osgeo import gdal
 from shapely.ops import split, orient
 from shapely.geometry import LineString, Point, Polygon
-from spymicmac import data
+from spymicmac import data, declass
 
 
 sample_params = {
     'KH4': {'f': 0.61, 'tilt': np.deg2rad(15), 'scan_time': 0.36, 'speed': 7700},
     'KH9': {'f': 1.5, 'tilt': np.deg2rad(10), 'scan_time': 0.7, 'speed': 8000}
 }
-
-usgs_datasets = {
-    'KH4': 'corona2',
-    'KH9': 'declassiii'
-}
-
 
 def _isaft(fn_img):
     return os.path.splitext(fn_img)[0][-4] == 'A'
@@ -64,7 +59,18 @@ def _init_center(fprint):
     return x, y, z
 
 
-def optical_bar_cam(fn_img, flavor, out_name, fprint=None, scan_res=7e-6):
+def add_motion_comp(cam, params):
+    """
+    Add a default motion compensation factor value to write to an ASP camera.
+    """
+    # values based on reported results from Ghuffar et al. 2022
+    imc_params = {'KH4': 0.014, 'KH4A': 0.014, 'KH4B': 1e-4}
+
+    params['motion_comp'] = imc_params[cam]
+    return params
+
+
+def optical_bar_cam(fn_img, flavor, out_name, fprint=None, scan_res=7e-6, mean_el=1000):
     """
     Generate a sample ASP camera file for a KH-4 Optical Bar camera.
 
@@ -74,6 +80,7 @@ def optical_bar_cam(fn_img, flavor, out_name, fprint=None, scan_res=7e-6):
     :param str out_name: the filename to write the camera file to.
     :param Polygon fprint: an optional image, footprint used to estimate the initial camera position
     :param float scan_res: the image scanning resolution, in m per pixel (e.g., 7 microns -> 7.0e-6)
+    :param float mean_el: the mean elevation covered by the image
     """
     assert flavor in sample_params.keys(), "flavor must be one of {}".format(list(sample_params.keys()))
     ds = gdal.Open(fn_img)
@@ -83,6 +90,12 @@ def optical_bar_cam(fn_img, flavor, out_name, fprint=None, scan_res=7e-6):
     ds = None  # close the image
 
     params = sample_params[flavor]
+
+    if flavor == 'KH4':
+        cam = declass.get_declass_camera(fn_img)
+        params = add_motion_comp(cam, params)
+    else:
+        params['motion_comp'] = 1
 
     with open(out_name, 'w') as f:
         print('VERSION_4', file=f)
@@ -110,8 +123,8 @@ def optical_bar_cam(fn_img, flavor, out_name, fprint=None, scan_res=7e-6):
         print(f'speed = {params["speed"]}', file=f)
         print('mean_earth_radius = 6371000', file=f)
         # need a better value than this
-        print('mean_surface_elevation = 4000', file=f)
-        print('motion_compensation_factor = 1.0', file=f)
+        print(f"mean_surface_elevation = {mean_el}", file=f)
+        print(f"motion_compensation_factor = {params['motion_comp']}", file=f)
 
         if _isaft(fn_img):
             print('scan_dir = left', file=f)
@@ -119,7 +132,7 @@ def optical_bar_cam(fn_img, flavor, out_name, fprint=None, scan_res=7e-6):
             print('scan_dir = right', file=f)
 
 
-def cam_from_footprint(fn_img, flavor, scan_res, fn_dem, north_up=True, footprints=None):
+def cam_from_footprint(fn_img, flavor, scan_res, fn_dem, north_up=True, footprints=None, mean_el=1000):
     """
     Generate a camera (.tsai) file from an image footprint.
 
@@ -130,22 +143,29 @@ def cam_from_footprint(fn_img, flavor, scan_res, fn_dem, north_up=True, footprin
     :param bool north_up: whether the top of the image corresponds to North or not (default: True)
     :param GeoDataFrame footprints: a GeoDataFrame containing image footprints and an ID field with image names. If not
         provided, will attempt to download from USGS.
+    :param float|str mean_el: the mean surface elevation covered by the image. If None, uses DEM and footprint to
+        calculate the value.
     :return:
     """
     clean_name = fn_img.split('OIS-Reech_')[-1].split('.tif')[0]
 
     # now, get the image footprint, and use ul_corner to get the ul, ur, lr, ll coordinates
     if footprints is None:
-        footprints = data.get_usgs_footprints([clean_name], dataset=usgs_datasets[flavor])
+        footprints = data.get_usgs_footprints([clean_name], dataset=declass.usgs_datasets[flavor])
         fprint = footprints.loc[0, 'geometry']
     else:
         fprint = footprints.loc[footprints['ID'] == clean_name, 'geometry'].values[0]
 
+    if mean_el is None:
+        dem = gu.Raster(fn_dem)
+        mask = gu.Vector(footprints.loc[footprints['ID'] == clean_name])
+        mean_el = dem[mask].mean()
+
     if _isaft(fn_img):
-        optical_bar_cam(fn_img, flavor, 'samp_aft.tsai', fprint, scan_res=scan_res)
+        optical_bar_cam(fn_img, flavor, 'samp_aft.tsai', fprint, scan_res=scan_res, mean_el=mean_el)
         fn_samp = 'samp_aft.tsai'
     else:
-        optical_bar_cam(fn_img, flavor, 'samp_for.tsai', fprint, scan_res=scan_res)
+        optical_bar_cam(fn_img, flavor, 'samp_for.tsai', fprint, scan_res=scan_res, mean_el=mean_el)
         fn_samp = 'samp_for.tsai'
 
     coords = _stanrogers(fprint, north_up)
@@ -160,6 +180,15 @@ def cam_from_footprint(fn_img, flavor, scan_res, fn_dem, north_up=True, footprin
     p.wait()
 
     os.remove(fn_samp)
+
+
+# helper functions to help sort polygons from north to south and east to west
+def _cenlat(poly):
+    return poly.centroid.y
+
+
+def _cenlon(poly):
+    return poly.centroid.x
 
 
 # return the upper left, upper right, lower right, lower left coordinates for an image
@@ -182,14 +211,11 @@ def _stanrogers(fprint, north_up):
     vertical = LineString([top.centroid, bot.centroid])
 
     # split the envelope into upper and lower halves
-    if north_up:
-        lower, upper = split(inner, horizontal).geoms
-    else:
-        # check this with an actual south up image!
-        upper, lower = split(inner, horizontal).geoms
+    # split the geometry, sort by centroid latitude, in descending order if the top of the image is north
+    lower, upper = sorted(split(inner, horizontal).geoms, key=_cenlat, reverse=(not north_up))
 
-    upper_left, upper_right = split(upper, vertical).geoms
-    lower_right, lower_left = split(lower, vertical).geoms
+    upper_left, upper_right = sorted(split(upper, vertical).geoms, key=_cenlon, reverse=(not north_up))
+    lower_left, lower_right = sorted(split(lower, vertical).geoms, key=_cenlon, reverse=(not north_up))
 
     fx, fy = fprint.exterior.xy
     vertices = np.array([Point(x, y) for x, y in zip(fx[:-1], fy[:-1])])

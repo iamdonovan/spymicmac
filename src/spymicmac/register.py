@@ -264,7 +264,6 @@ def _get_mask(footprints, img, imlist, landmask=None, glacmask=None):
     fmask, fprint = _get_footprint_mask(footprints, img, imlist, fprint_out=True)
 
     img.crop(fprint.buffer(img.res[0] * 10).bounds, mode='match_pixel', inplace=True)
-
     fmask.crop(fprint.buffer(img.res[0]*10).bounds, mode='match_pixel', inplace=True)
 
     mask = img.copy(new_array=np.zeros(img.shape))
