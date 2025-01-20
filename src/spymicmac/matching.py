@@ -611,7 +611,7 @@ def match_wild_rc(fn_img, size, model, data_strip='left', fn_cam=None, width=3, 
                                       gap=gap, vgap=vgap, dot_size=dot_size, pad=pad)]
     else:
         fids = [f'P{n}' for n in range(1, 9)]
-        stempl = _wild_midside(size, model)
+        stempl = _wild_midside(size, model, circle_size, ring_width)
         ctempl = _wild_corner(size, model, circle_size, ring_width, width=width,
                               gap=gap, vgap=vgap, dot_size=dot_size, pad=pad)
         templates = 4 * [ctempl] + 4 * [stempl]
