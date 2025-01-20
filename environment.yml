@@ -9,7 +9,7 @@ dependencies:
   - geoutils
   - matplotlib
   - sphinx
-  - opencv
+  - opencv<4.9.0
   - lxml
   - gdal
   - pyasn1

@@ -95,34 +95,40 @@ def _argparser():
     parser.add_argument('--skip', action='store', type=str, nargs='+', default='none',
                         help='The pre-processing steps to skip.')
     parser.add_argument('--tar_ext', action='store', type=str, default='.tgz',
-                        help='Extension for tar files (default: .tgz)')
+                        help='Extension for tar files [.tgz]')
     parser.add_argument('-s', '--scale', action='store', type=int, default=70,
-                        help='The scale of the resampled images, in pixels per mm. (default: 70)')
+                        help='The scale of the resampled images, in pixels per mm. [70]')
     parser.add_argument('--clip_limit', action='store', type=float, default=0.005,
-                        help='Clipping limit, for contrast-limited adaptive histogram equalization. (default: 0.005)')
+                        help='Clipping limit, for contrast-limited adaptive histogram equalization. [0.005]')
+    parser.add_argument('-r', '--reversed', action='store_true',
+                        help='Order of image parts is reversed (a is the right side of the image). [False]')
+    parser.add_argument('-o', '--overlap', action='store', type=int, default=2000,
+                        help='The amount of overlap between image parts to use to search for matches. [2000]')
+    parser.add_argument('-k', '--block_size', action='store', type=int, default=2000,
+                    help='the number of rows each search sub-block should cover [2000].')
     parser.add_argument('-b', '--blend', action='store_true',
-                        help='Blend across image halves to prevent a sharp line at edge.')
+                        help='Blend across image halves to prevent a sharp line at edge. [False]')
     parser.add_argument('--add_sfs', action='store_true',
                         help='use SFS to help find tie points in low-contrast images [False]')
     parser.add_argument('--res_low', action='store', type=int, default=400,
                         help='the size of the largest image axis, in pixels, '
-                             'for low-resolution matching with Tapioca (default: 400)')
+                             'for low-resolution matching with Tapioca [400]')
     parser.add_argument('--res_high', action='store', type=int, default=1200,
                         help='the size of the largest image axis, in pixels, '
-                             'for low-resolution matching with Tapioca (default: 1200)')
+                             'for low-resolution matching with Tapioca [1200]')
     parser.add_argument('--camera_model', action='store', type=str, default='RadialExtended',
-                        help='The camera calibration model to use for Tapas (default: RadialExtended)')
+                        help='The camera calibration model to use for Tapas [RadialExtended]')
     parser.add_argument('--ori', action='store', type=str, default='Relative',
-                        help='The output Ori directory to create using Tapas (default: Relative)')
+                        help='The output Ori directory to create using Tapas [Relative]')
     parser.add_argument('--init_cal', action='store', type=str, default='Init',
-                        help='The initial calibration Ori to use for Tapas (default: Init)')
+                        help='The initial calibration Ori to use for Tapas [Init]')
     parser.add_argument('--lib_foc', action='store_true',
-                        help='Use LibFoc=1 for mm3d Tapas (default: LibFoc=0)')
+                        help='Use LibFoc=1 for mm3d Tapas [LibFoc=0]')
     parser.add_argument('--lib_pp', action='store_true',
-                        help='Use LibPP=1 for mm3d Tapas (default: LibPP=0)')
+                        help='Use LibPP=1 for mm3d Tapas [LibPP=0]')
     parser.add_argument('--lib_cd', action='store_true',
-                        help='Use LibCD=1 for mm3d Tapas (default: LibCD=0)')
-    parser.add_argument('-n', '--nproc', type=int, default=1, help='number of sub-processes to use (default: 1).')
+                        help='Use LibCD=1 for mm3d Tapas [LibCD=0]')
+    parser.add_argument('-n', '--nproc', type=int, default=1, help='number of sub-processes to use [1].')
     return parser
 
 
@@ -182,7 +188,13 @@ def main():
         else:
             for fn_img in half_list:
                 print(fn_img)
-                join_hexagon(fn_img, blend=args.blend)
+
+                join_args = {'overlap': args.overlap,
+                             'block_size': args.block_size,
+                             'blend': args.blend,
+                             'is_reversed': args.reversed}
+
+                join_hexagon(fn_img, **join_args)
                 shutil.move(fn_img + '_a.tif', 'halves')
                 shutil.move(fn_img + '_b.tif', 'halves')
 
@@ -230,7 +242,6 @@ def main():
         for fn_img in imlist:
             shutil.move(fn_img + '.tif', 'Orig')
 
-
     if do['balance']:
         print('Using CLAHE to balance image contrast')
         for fn_img in imlist:
@@ -261,4 +272,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

@@ -2,6 +2,7 @@
 spymicmac.register is a collection of tools for registering images and finding GCPs.
 """
 import os
+from pathlib import Path
 import re
 import subprocess
 import shutil
@@ -10,12 +11,17 @@ import matplotlib.pyplot as plt
 import geopandas as gpd
 import geoutils as gu
 from glob import glob
+
+import pandas as pd
+from pyogrio.errors import DataSourceError
 from rtree import index
 from shapely.ops import unary_union
 from shapely.geometry.point import Point
 from skimage.io import imread
 from skimage.measure import ransac
 from skimage.transform import AffineTransform, warp
+from tifffile.geodb import Datum
+
 from spymicmac import data, image, matching, micmac, orientation
 
 
@@ -135,6 +141,12 @@ def _get_utm_str(epsg):
         return 'not utm'
 
 
+def _split_cps_gcps(gcps, frac):
+    cps = gcps.sample(frac=frac)
+    gcps.drop(cps.index, inplace=True)
+    return gcps.sort_index(), cps.sort_index()
+
+
 def warp_image(model, ref, img):
     """
     Given a transformation model between two coordinate systems, warp an image to a reference image
@@ -252,11 +264,10 @@ def _get_mask(footprints, img, imlist, landmask=None, glacmask=None):
     fmask, fprint = _get_footprint_mask(footprints, img, imlist, fprint_out=True)
 
     img.crop(fprint.buffer(img.res[0] * 10).bounds, mode='match_pixel', inplace=True)
-
     fmask.crop(fprint.buffer(img.res[0]*10).bounds, mode='match_pixel', inplace=True)
 
     mask = img.copy(new_array=np.zeros(img.shape))
-    mask[~img.data.mask] = 255
+    mask.data[~img.data.mask] = 255
 
     if landmask is not None:
         lmask = gu.Vector(landmask).create_mask(img)
@@ -284,9 +295,24 @@ def _get_last_malt(dirmec):
     return f'Z_Num{level}_DeZoom{zoomf}_STD-MALT.tif'
 
 
+def _read_gcps(fn_gcp, ref_img):
+    gcps = gpd.read_file(fn_gcp)
+    gcps = gcps.rename(columns={'z': 'elevation', 'name': 'id'})
+
+    if isinstance(gcps, pd.DataFrame):
+        gcps = gpd.GeoDataFrame(gcps, geometry=gpd.points_from_xy(gcps.x, gcps.y, crs=ref_img.crs))
+    else:
+        gcps = gcps.to_crs(ref_img.crs)
+
+    gcps['search_i'], gcps['search_j'] = ref_img.xy2ij(gcps.geometry.x, gcps.geometry.y)
+
+    return gcps
+
+
 def register_relative(dirmec, fn_dem, fn_ref=None, fn_ortho=None, glacmask=None, landmask=None, footprints=None,
                       im_subset=None, block_num=None, subscript=None, ori='Relative', ortho_res=8.,
-                      imgsource='DECLASSII', density=200, out_dir=None, allfree=True, useortho=False, max_iter=5):
+                      imgsource='DECLASSII', density=200, out_dir=None, allfree=True, useortho=False, max_iter=5,
+                      use_cps=False, cp_frac=0.2, use_orb=False, fn_gcps=None):
     """
     Register a relative DEM or orthoimage to a reference DEM and/or orthorectified image.
 
@@ -309,6 +335,12 @@ def register_relative(dirmec, fn_dem, fn_ref=None, fn_ortho=None, glacmask=None,
     :param bool useortho: use the orthomosaic in Ortho-{dirmec} rather than the DEM (default: False). If fn_ortho is
         set, uses that file instead.
     :param int max_iter: the maximum number of Campari iterations to run. (default: 5)
+    :param bool use_cps: split the GCPs into GCPs and CPs, to quantify the uncertainty of the camera model (default: False)
+    :param float cp_frac: the fraction of GCPs to use when splitting into GCPs and CPs (default: 0.2)
+    :param bool use_orb: use skimage.feature.ORB to identify GCP locations in the reference image
+        (default: use regular grid for matching)
+    :param str fn_gcps: (optional) shapefile or CSV of GCP coordinates to use. Column names should be [(name | id),
+        (z | elevation), x, y]. If CSV is used, x,y should have the same CRS as the reference image.
     """
     print('start.')
 
@@ -347,15 +379,11 @@ def register_relative(dirmec, fn_dem, fn_ref=None, fn_ortho=None, glacmask=None,
             fn_reg = os.path.join(ort_dir, 'Orthophotomosaic.tif')
         else:
             fn_reg = fn_ortho
-        reg_img = imread(fn_reg)
-        fn_tfw = fn_reg.replace('.tif', '.tfw')
+        reg_img = gu.Raster(fn_reg)
     else:
         fn_reg = os.path.join(dirmec, _get_last_malt(dirmec))
-        fn_tfw = fn_reg.replace('.tif', '.tfw')
-        reg_img = imread(fn_reg)
-
-    with open(fn_tfw, 'r') as f:
-        reg_gt = [float(l.strip()) for l in f.readlines()]
+        reg_img = gu.Raster(fn_reg)
+    print(f"Loaded relative image {fn_reg}.")
 
     if footprints is None:
         if os.path.isfile('Footprints.gpkg'):
@@ -373,19 +401,23 @@ def register_relative(dirmec, fn_dem, fn_ref=None, fn_ortho=None, glacmask=None,
 
     mask_full, _, ref_img = _get_mask(footprints, ref_img, imlist, landmask, glacmask)
 
-    Minit, _, centers = orientation.transform_centers(reg_gt, ref_img, imlist, footprints, 'Ori-{}'.format(ori))
-    rough_tfm = warp(reg_img, Minit, output_shape=ref_img.shape, preserve_range=True)
+    Minit, _, centers = orientation.transform_centers(reg_img, ref_img, imlist, footprints, 'Ori-{}'.format(ori))
+    rough_tfm = warp(reg_img.data, Minit, output_shape=ref_img.shape, preserve_range=True)
 
     rough_spacing = max(1000, np.round(max(ref_img.shape) / 20 / 1000) * 1000)
 
-    rough_gcps = matching.find_grid_matches(rough_tfm, ref_img, mask_full.data.data, Minit,
-                                            spacing=int(rough_spacing), dstwin=int(rough_spacing))
+    rough_gcps = matching.find_matches(rough_tfm, ref_img, mask_full.data.data, initM=Minit,
+                                       spacing=int(rough_spacing), dstwin=int(rough_spacing))
 
     try:
         model, inliers = ransac((rough_gcps[['search_j', 'search_i']].values,
                                  rough_gcps[['orig_j', 'orig_i']].values), AffineTransform,
                                 min_samples=6, residual_threshold=20, max_trials=5000)
-        rough_tfm = warp(reg_img, model, output_shape=ref_img.shape, preserve_range=True)
+        if model is None or np.count_nonzero(inliers) < 6:
+            raise ValueError()
+
+        rough_tfm = warp(reg_img.data, model, output_shape=ref_img.shape, preserve_range=True)
+
     except ValueError as e:
         print('Unable to refine transformation with rough GCPs. Using transform estimated from footprints.')
         model = Minit
@@ -400,20 +432,34 @@ def register_relative(dirmec, fn_dem, fn_ref=None, fn_ortho=None, glacmask=None,
     fig.savefig('initial_transformation{}.png'.format(subscript), dpi=200, bbox_inches='tight')
     plt.close(fig)
 
-    # for each of these pairs (src, dst), find the precise subpixel match (or not...)
-    gcps = matching.find_grid_matches(rough_tfm, ref_img, mask_full.data.data, model,
-                                      spacing=density, dstwin=_search_size(rough_tfm.shape))
+    if fn_gcps is not None:
+        gcps = _read_gcps(fn_gcps, ref_img)
+        gcps = matching.find_matches(rough_tfm, ref_img, mask_full.data.data, points=gcps, initM=model,
+                                     spacing=density, dstwin=_search_size(rough_tfm.shape))
+    else:
+        if use_orb:
+            ref_hp = image.highpass_filter(ref_img.data)
+            ref_hp[np.isnan(ref_hp)] = 0
+
+            keypoints = matching.get_dense_keypoints(ref_hp, mask=None, npix=int(density/2), use_skimage=True,
+                                                     detector_kwargs={'n_keypoints': 5})
+
+            gcps = pd.DataFrame(data=keypoints, columns=['search_i', 'search_j'])
+            gcps = matching.find_matches(rough_tfm, ref_img, mask_full.data.data, points=gcps, initM=model,
+                                         dstwin=_search_size(rough_tfm.shape))
+
+        else:
+            gcps = matching.find_matches(rough_tfm, ref_img, mask_full.data.data, initM=model,
+                                         spacing=density, dstwin=_search_size(rough_tfm.shape))
 
     x, y = ref_img.ij2xy(gcps['search_i'], gcps['search_j'])
-    gcps['geometry'] = gpd.points_from_xy(x, y, crs=ref_img.crs)
+    gcps = gpd.GeoDataFrame(gcps, geometry=gpd.points_from_xy(x, y, crs=ref_img.crs))
 
-    gcps = gcps.loc[mask_full.data.data[gcps.search_i, gcps.search_j] == 255]
+    gcps = gcps.loc[mask_full.data.data[gcps.search_i.astype(int), gcps.search_j.astype(int)] == 255]
 
-    gcps['rel_x'] = reg_gt[4] + gcps['orig_j'].values * reg_gt[0]  # need the original image coordinates
-    gcps['rel_y'] = reg_gt[5] + gcps['orig_i'].values * reg_gt[3]
-
-    gcps['elevation'] = 0
-    gcps.set_crs(crs=ref_img.crs, inplace=True)
+    #gcps['rel_x'] = reg_gt[4] + gcps['orig_j'].values * reg_gt[0]  # need the original image coordinates
+    #gcps['rel_y'] = reg_gt[5] + gcps['orig_i'].values * reg_gt[3]
+    gcps['rel_x'], gcps['rel_y'] = reg_img.ij2xy(gcps.orig_i, gcps.orig_j)
 
     gcps.dropna(inplace=True)
     print('{} potential matches found'.format(gcps.shape[0]))
@@ -425,8 +471,8 @@ def register_relative(dirmec, fn_dem, fn_ref=None, fn_ortho=None, glacmask=None,
         dem = ref_img
 
     # gcps.crs = {'init': 'epsg:{}'.format(ref_img.epsg)}
-    gcps['elevation'] = dem.interp_points(zip(gcps.geometry.x, gcps.geometry.y))
-    gcps['el_rel'] = rel_dem.interp_points(gcps[['rel_x', 'rel_y']].values)
+    gcps['elevation'] = dem.interp_points((gcps.geometry.x, gcps.geometry.y))
+    gcps['el_rel'] = rel_dem.interp_points((gcps.rel_x, gcps.rel_y))
 
     # drop any gcps where we don't have a DEM value or a valid match
     if dem.nodata is not None:
@@ -467,7 +513,7 @@ def register_relative(dirmec, fn_dem, fn_ref=None, fn_ortho=None, glacmask=None,
     micmac.write_auto_mesures(gcps, subscript, out_dir)
 
     print('running get_autogcp_locations to get rough image locations for each point')
-    micmac.get_autogcp_locations(f'Ori-{ori}', os.path.join(out_dir, f'AutoMeasures{subscript}.txt'), imlist)
+    micmac.get_autogcp_locations(f"Ori-{ori}", os.path.join(out_dir, f"AutoMeasures{subscript}.txt"), imlist)
 
     # print('searching for points in orthorectified images')
     print('finding image measures')
@@ -490,9 +536,38 @@ def register_relative(dirmec, fn_dem, fn_ref=None, fn_ortho=None, glacmask=None,
 
     micmac.save_gcps(gcps, out_dir, utm_str, subscript)
 
+    # if we're getting cps, split them now
+    if use_cps:
+        gcps, cps = _split_cps_gcps(gcps, cp_frac)
+
+        micmac.save_gcps(gcps, out_dir, utm_str, subscript)
+
+        micmac.write_auto_gcps(cps, subscript, out_dir, utm_str, outname='AutoCPs')
+        subprocess.Popen(['mm3d', 'GCPConvert', 'AppInFile',
+                          Path(out_dir, 'AutoCPs{}.txt'.format(subscript))]).wait()
+
+        micmac.write_auto_mesures(cps, subscript, out_dir, outname='AutoCPMeasures')
+        micmac.get_autogcp_locations(f'Ori-{ori}', Path(out_dir, f'AutoCPMeasures{subscript}.txt'), imlist)
+        micmac.write_image_mesures(imlist, cps, out_dir, subscript, ort_dir=ort_dir, outname='AutoCPMeasures')
+
     # now, iterate campari to refine the orientation
     gcps = micmac.iterate_campari(gcps, out_dir, match_pattern, subscript, ref_img.res[0], ortho_res,
                                   rel_ori=ori, allfree=allfree, max_iter=max_iter)
+
+    if use_cps:
+        cp_resids = micmac.checkpoints(match_pattern, 'Ori-TerrainFinal{}'.format(subscript),
+                                       fn_cp=Path(out_dir, f'AutoCPs{subscript}.xml'),
+                                       fn_meas=Path(out_dir, f'AutoCPMeasures{subscript}-S2D.xml'),
+                                       fn_resids=Path(out_dir, f'AutoCPs{subscript}', ret_df=True))
+
+        # merge cps and cp_resids
+        cps.drop(['xres', 'yres', 'zres', 'residual', 'res_dist'], axis=1, inplace=True)
+
+        cps = cps.merge(cp_resids, left_on='id', right_on='id')
+        cps['res_dist'] = np.sqrt(cps.xres ** 2 + cps.yres ** 2)
+        cps['residual'] = np.sqrt(cps.xres ** 2 + cps.yres ** 2 + cps.zres ** 2)
+
+        cps.to_file(Path(out_dir, f'AutoCPs{subscript}.shp'))
 
     # final write of gcps to disk.
     gcps.to_file(os.path.join(out_dir, 'AutoGCPs{}.shp'.format(subscript)))
@@ -501,6 +576,9 @@ def register_relative(dirmec, fn_dem, fn_ref=None, fn_ortho=None, glacmask=None,
     plt.imshow(reg_img[::5, ::5], cmap='gray', extent=[0, reg_img.shape[1], reg_img.shape[0], 0])
     plt.plot(gcps.orig_j, gcps.orig_i, 'r+')
     plt.quiver(gcps.orig_j, gcps.orig_i, gcps.camp_xres, gcps.camp_yres, color='r')
+    if use_cps:
+        plt.plot(cps.orig_j, cps.orig_i, 'bs')
+        plt.quiver(cps.orig_j, cps.orig_i, cps.xres, cps.yres, color='b')
 
     plt.savefig(os.path.join(out_dir, 'relative_gcps{}.png'.format(subscript)), bbox_inches='tight', dpi=200)
     plt.close(fig1)
@@ -509,12 +587,15 @@ def register_relative(dirmec, fn_dem, fn_ref=None, fn_ortho=None, glacmask=None,
     xmin, ymin, xmax, ymax = ref_img.bounds
     plt.imshow(ref_img.data[::10, ::10], cmap='gray', extent=[xmin, xmax, ymin, ymax])
     plt.plot(gcps.geometry.x, gcps.geometry.y, 'r+')
+    if use_cps:
+        plt.plot(cps.geometry.x, cps.geometry.y, 'bs')
+
     plt.savefig(os.path.join(out_dir, 'world_gcps{}.png'.format(subscript)), bbox_inches='tight', dpi=200)
     plt.close(fig2)
 
     print('cleaning up.')
     # remove Auto-im.tif.txt, NoDist-im.tif.txt, etc. Ori-Relative-NoDist
-    shutil.rmtree('Ori-{}-NoDist/'.format(ori))
+    # shutil.rmtree('Ori-{}-NoDist/'.format(ori))
 
     for txtfile in glob('Auto-OIS*.tif.txt') + \
                    glob('NoDist-OIS*.tif.txt'):
