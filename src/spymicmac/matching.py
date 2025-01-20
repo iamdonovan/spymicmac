@@ -1545,8 +1545,8 @@ def get_dense_keypoints(img, mask, npix=100, nblocks=None, return_des=False,
     """
 
     if nblocks is None:
-        x_tiles = np.floor(img.shape[1] / npix).astype(int)
-        y_tiles = np.floor(img.shape[0] / npix).astype(int)
+        x_tiles = max(1, np.floor(img.shape[1] / npix).astype(int))
+        y_tiles = max(1, np.floor(img.shape[0] / npix).astype(int))
     else:
         x_tiles = nblocks
         y_tiles = nblocks
