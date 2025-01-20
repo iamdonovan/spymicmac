@@ -1939,6 +1939,12 @@ def post_process(projstr, out_name, dirmec, do_ortho=True, ind_ortho=False):
     shutil.copy(os.path.join(dirmec, f'Z_Num{level}_DeZoom{zoomf}_STD-MALT.tfw'),
                 os.path.join(dirmec, f'AutoMask_STD-MALT_Num_{level-1}.tfw'))
 
+    if os.path.exists(os.path.join(dirmec, f"Correl_STD-MALT_Num_{level-1}_Tile_0_0.tif")):
+        mosaic_micmac_tiles(f"Correl_STD-MALT_Num_{level-1}", dirmec)
+
+    if os.path.exists(os.path.join(dirmec, f"Z_Num{level}_DeZoom{zoomf}_STD-MALT_Tile_0_0.tif")):
+        mosaic_micmac_tiles(f"Z_Num{level}_DeZoom{zoomf}_STD-MALT", dirmec)
+
     subprocess.Popen(['gdal_translate', '-a_nodata', '0', '-a_srs', projstr,
                       os.path.join(dirmec, f'Correl_STD-MALT_Num_{level-1}.tif'),
                       'tmp_corr.tif']).wait()
@@ -1970,6 +1976,9 @@ def post_process(projstr, out_name, dirmec, do_ortho=True, ind_ortho=False):
     if do_ortho:
         ortho = os.path.join('Ortho-' + dirmec, 'Orthophotomosaic.tif')
 
+        if os.path.join('Ortho-' + dirmec, 'Orthophotomosaic_Tile_0_0.tif'):
+            mosaic_micmac_tiles('Orthophotomosaic', 'Ortho-' + dirmec)
+
         subprocess.Popen(['gdal_translate', '-a_nodata', '0', '-a_srs', projstr, ortho, 'tmp_ortho.tif']).wait()
 
         # TODO: re-size the mask to fit the ortho image, if needed
@@ -1983,6 +1992,10 @@ def post_process(projstr, out_name, dirmec, do_ortho=True, ind_ortho=False):
     if ind_ortho:
         imlist = sorted(glob('OIS*.tif'))
         for fn_img in imlist:
+
+            if os.path.join('Ortho-' + dirmec, f"Ort_{os.path.splitext(fn_img)[0]}_Tile_0_0.tif"):
+                mosaic_micmac_tiles(f"Ort_{os.path.splitext(fn_img)[0]}", 'Ortho-' + dirmec)
+
             _mask_ortho(fn_img, out_name, dirmec, projstr)
 
 
