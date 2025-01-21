@@ -92,10 +92,11 @@ def get_usgs_footprints(imlist, dataset='DECLASSII'):
 
     :return: **footprints** (*GeoDataFrame*) -- a GeoDataFrame of image footprints.
     """
-    # air photos: 'AERIAL_COMBIN'
-    gdf = gpd.GeoDataFrame()
 
     login = _authenticate()
+
+    geoms = []
+    ids = []
 
     if login['errorCode'] is not None:
         print('Error logging in to USGS EROS.')
@@ -105,12 +106,10 @@ def get_usgs_footprints(imlist, dataset='DECLASSII'):
         for ii, result in enumerate(search_results['data']):
             poly = Polygon(result['spatialCoverage']['coordinates'][0])
 
-            gdf.loc[ii, 'geometry'] = poly
-            gdf.loc[ii, 'ID'] = result['entityId']
+            geoms.append(poly)
+            ids.append(result['entityId'])
 
-        gdf.set_crs(epsg=4326, inplace=True)
-
-        return gdf
+        return gpd.GeoDataFrame(data=ids, columns=['ID'], geometry=geoms, crs='epsg:4326')
 
 
 def landsat_to_gdf(results):
