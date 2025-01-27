@@ -295,6 +295,16 @@ def _get_last_malt(dirmec):
     return f'Z_Num{level}_DeZoom{zoomf}_STD-MALT.tif'
 
 
+def _load_auto_mask(dirmec):
+    last_dem = _get_last_malt(dirmec)
+    num = int(last_dem.split('_')[1].strip('Num')) - 1
+
+    shutil.copy(Path(dirmec, last_dem.replace('.tif', '.tfw')),
+                Path(dirmec, f"AutoMask_STD-MALT_Num_{num}.tfw"))
+
+    return gu.Raster(Path(dirmec, f"AutoMask_STD-MALT_Num_{num}.tif")) == 1
+
+
 def _read_gcps(fn_gcp, ref_img):
     gcps = gpd.read_file(fn_gcp)
     gcps = gcps.rename(columns={'z': 'elevation', 'name': 'id'})
@@ -374,15 +384,20 @@ def register_relative(dirmec, fn_dem, fn_ref=None, fn_ortho=None, glacmask=None,
     utm_str = _get_utm_str(ref_img.crs.to_epsg())
 
     rel_dem = gu.Raster(os.path.join(dirmec, _get_last_malt(dirmec)))
+    rel_mask = _load_auto_mask(dirmec)
+    rel_dem[~rel_mask] = np.nan
+
     if useortho:
         if fn_ortho is None:
             fn_reg = os.path.join(ort_dir, 'Orthophotomosaic.tif')
         else:
             fn_reg = fn_ortho
         reg_img = gu.Raster(fn_reg)
+        reg_img.set_nodata(0)
     else:
         fn_reg = os.path.join(dirmec, _get_last_malt(dirmec))
         reg_img = gu.Raster(fn_reg)
+        reg_img[~rel_mask] = np.nan
     print(f"Loaded relative image {fn_reg}.")
 
     if footprints is None:
