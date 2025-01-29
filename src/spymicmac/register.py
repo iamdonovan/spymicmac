@@ -515,7 +515,9 @@ def register_relative(dirmec, fn_dem, fn_ref=None, fn_ortho=None, glacmask=None,
     print('{} valid matches found after estimating transformation'.format(gcps.shape[0]))
 
     gcps.index = range(gcps.shape[0])  # make sure index corresponds to row we're writing out
-    gcps['id'] = ['GCP{}'.format(i) for i in range(gcps.shape[0])]
+    if 'id' not in gcps.columns:
+        gcps['id'] = ['GCP{}'.format(i) for i in range(gcps.shape[0])]
+
     gcps.to_file(os.path.join(out_dir, 'AutoGCPs{}.shp'.format(subscript)))
 
     print('writing AutoGCPs.txt')
