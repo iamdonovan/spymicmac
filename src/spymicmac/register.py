@@ -309,10 +309,10 @@ def _read_gcps(fn_gcp, ref_img):
     gcps = gpd.read_file(fn_gcp)
     gcps = gcps.rename(columns={'z': 'elevation', 'name': 'id'})
 
-    if isinstance(gcps, pd.DataFrame):
-        gcps = gpd.GeoDataFrame(gcps, geometry=gpd.points_from_xy(gcps.x, gcps.y, crs=ref_img.crs))
-    else:
+    if isinstance(gcps, gpd.GeoDataFrame):
         gcps = gcps.to_crs(ref_img.crs)
+    else:
+        gcps = gpd.GeoDataFrame(gcps, geometry=gpd.points_from_xy(gcps.x, gcps.y, crs=ref_img.crs))
 
     gcps['search_i'], gcps['search_j'] = ref_img.xy2ij(gcps.geometry.x, gcps.geometry.y)
 
@@ -486,7 +486,8 @@ def register_relative(dirmec, fn_dem, fn_ref=None, fn_ortho=None, glacmask=None,
         dem = ref_img
 
     # gcps.crs = {'init': 'epsg:{}'.format(ref_img.epsg)}
-    gcps['elevation'] = dem.interp_points((gcps.geometry.x, gcps.geometry.y))
+    if 'elevation' not in gcps.columns:
+        gcps['elevation'] = dem.interp_points((gcps.geometry.x, gcps.geometry.y))
     gcps['el_rel'] = rel_dem.interp_points((gcps.rel_x, gcps.rel_y))
 
     # drop any gcps where we don't have a DEM value or a valid match
