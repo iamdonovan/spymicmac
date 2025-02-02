@@ -1874,6 +1874,9 @@ def mosaic_micmac_tiles(filename, dirname='.'):
     :param str dirname: Directory containing images to Mosaic (default: .)
     """
     filelist = glob(os.path.sep.join([dirname, '{}_Tile*'.format(filename)]))
+    if len(filelist) == 0:
+        print(f"No tiles found for {Path(dirname, filename)}; exiting.")
+        return
 
     tiled = arrange_tiles(filelist, filename, dirname)
     I, J = tiled.shape
@@ -1939,10 +1942,10 @@ def post_process(projstr, out_name, dirmec, do_ortho=True, ind_ortho=False):
     shutil.copy(os.path.join(dirmec, f'Z_Num{level}_DeZoom{zoomf}_STD-MALT.tfw'),
                 os.path.join(dirmec, f'AutoMask_STD-MALT_Num_{level-1}.tfw'))
 
-    if os.path.exists(os.path.join(dirmec, f"Correl_STD-MALT_Num_{level-1}_Tile_0_0.tif")):
+    if _needs_mosaic(os.path.join(dirmec, f"Correl_STD-MALT_Num_{level-1}.tif")):
         mosaic_micmac_tiles(f"Correl_STD-MALT_Num_{level-1}", dirmec)
 
-    if os.path.exists(os.path.join(dirmec, f"Z_Num{level}_DeZoom{zoomf}_STD-MALT_Tile_0_0.tif")):
+    if _needs_mosaic(os.path.join(dirmec, f"Z_Num{level}_DeZoom{zoomf}_STD-MALT.tif")):
         mosaic_micmac_tiles(f"Z_Num{level}_DeZoom{zoomf}_STD-MALT", dirmec)
 
     subprocess.Popen(['gdal_translate', '-a_nodata', '0', '-a_srs', projstr,
@@ -1974,12 +1977,12 @@ def post_process(projstr, out_name, dirmec, do_ortho=True, ind_ortho=False):
 
     # now, mask the ortho image(s)
     if do_ortho:
-        ortho = os.path.join('Ortho-' + dirmec, 'Orthophotomosaic.tif')
+        fn_ortho = os.path.join('Ortho-' + dirmec, 'Orthophotomosaic.tif')
 
-        if os.path.join('Ortho-' + dirmec, 'Orthophotomosaic_Tile_0_0.tif'):
+        if _needs_mosaic(fn_ortho):
             mosaic_micmac_tiles('Orthophotomosaic', 'Ortho-' + dirmec)
 
-        subprocess.Popen(['gdal_translate', '-a_nodata', '0', '-a_srs', projstr, ortho, 'tmp_ortho.tif']).wait()
+        subprocess.Popen(['gdal_translate', '-a_nodata', '0', '-a_srs', projstr, fn_ortho, 'tmp_ortho.tif']).wait()
 
         # TODO: re-size the mask to fit the ortho image, if needed
         subprocess.Popen(_gdal_calc() + ['--quiet', '-A', 'tmp_mask.tif', '-B', 'tmp_ortho.tif',
@@ -1992,11 +1995,19 @@ def post_process(projstr, out_name, dirmec, do_ortho=True, ind_ortho=False):
     if ind_ortho:
         imlist = sorted(glob('OIS*.tif'))
         for fn_img in imlist:
+            fn_ort = Path('Ortho-' + dirmec, f"Ort_{fn_img}")
 
-            if os.path.join('Ortho-' + dirmec, f"Ort_{os.path.splitext(fn_img)[0]}_Tile_0_0.tif"):
+            if _needs_mosaic(fn_ort):
                 mosaic_micmac_tiles(f"Ort_{os.path.splitext(fn_img)[0]}", 'Ortho-' + dirmec)
 
             _mask_ortho(fn_img, out_name, dirmec, projstr)
+
+def _needs_mosaic(fn_img):
+    fn_tile = os.path.splitext(fn_img)[0] + '_Tile_0_0.tif'
+    if not os.path.exists(fn_tile):
+        return False
+    # if the tile exists, we compare the file size of the full image to the size of the first tile
+    return os.path.getsize(fn_img) < os.path.getsize(fn_tile)
 
 
 def _mask_ortho(fn_img, out_name, dirmec, projstr):
