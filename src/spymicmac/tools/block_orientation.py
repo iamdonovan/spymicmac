@@ -32,6 +32,8 @@ def _argparser():
                         help='run Campari with AllFree set to False')
     parser.add_argument('-max_iter', action='store', type=int, default=1,
                         help='the maximum number of iterations to run. (default: 1)')
+    parser.add_argument('-share_gcps', action='store_true',
+                        help='GCPs are shared between blocks (default: False)')
     return parser
 
 

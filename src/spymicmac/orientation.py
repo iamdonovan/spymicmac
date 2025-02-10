@@ -42,7 +42,8 @@ def plot_camera_centers(ori, ax=None):
 
 
 def combine_block_measures(blocks, meas_out='AutoMeasures', gcp_out='AutoGCPs',
-                           fn_mes='AutoMeasures_block', fn_gcp='AutoGCPs_block', dirname='auto_gcps'):
+                           fn_mes='AutoMeasures_block', fn_gcp='AutoGCPs_block', dirname='auto_gcps',
+                           share_gcps=False):
     """
     Combine GCPs and Measures files from multiple sub-blocks into a single file.
 
@@ -52,6 +53,7 @@ def combine_block_measures(blocks, meas_out='AutoMeasures', gcp_out='AutoGCPs',
     :param str fn_mes: the name pattern of the measures files to combine (default: AutoMeasures_block)
     :param str fn_gcp: the name pattern of the GCP files to combine (default: AutoGCPs_block)
     :param str dirname: the output directory where the files are saved (default: auto_gcps)
+    :param bool share_gcps: GCPs are shared between blocks (default: False)
     """
     ngcp = 0 # keep track of the number of GCPs
 
@@ -62,21 +64,35 @@ def combine_block_measures(blocks, meas_out='AutoMeasures', gcp_out='AutoGCPs',
     for b in blocks:
         # load dirname/AutoMeasures_block{b}-S2D.xml
         this_root = ET.parse(os.path.join(dirname, fn_mes + '{}-S2D.xml'.format(b))).getroot()
+        this_gcp = gpd.read_file(os.path.join(dirname, fn_gcp + '{}.shp'.format(b)))
 
-        this_mes_dict, this_gcp_dict = micmac.rename_gcps(this_root, ngcp=ngcp)
+        if share_gcps:
+            this_mes_dict = dict()
+            this_gcp_dict = dict()
+
+            for im in this_root.findall('MesureAppuiFlottant1Im'):
+                this_name = im.find('NameIm').text
+                these_mes = im.findall('OneMesureAF1I')
+
+                this_mes_dict[this_name] = these_mes
+        else:
+            this_mes_dict, this_gcp_dict = micmac.rename_gcps(this_root, ngcp=ngcp)
+
+            ngcp += len(this_gcp_dict)
+            # load dirname/AutoGCPs_block{b}.shp
+
+            for ii, row in this_gcp.iterrows():
+                this_gcp.loc[ii, 'id'] = this_gcp_dict[row['id']]
+
+        gcp_shps.append(this_gcp)
         mes_dicts.append(this_mes_dict)
         gcp_dicts.append(this_gcp_dict)
 
-        ngcp += len(this_gcp_dict)
-        # load dirname/AutoGCPs_block{b}.shp
-        this_gcp = gpd.read_file(os.path.join(dirname, fn_gcp + '{}.shp'.format(b)))
-
-        for ii, row in this_gcp.iterrows():
-            this_gcp.loc[ii, 'id'] = this_gcp_dict[row['id']]
-
-        gcp_shps.append(this_gcp)
-
     out_gcp = gpd.GeoDataFrame(pd.concat(gcp_shps, ignore_index=True))
+
+    if share_gcps:
+        out_gcp = out_gcp[['id', 'elevation', 'geometry']].drop_duplicates(subset='id')
+
     out_gcp.sort_values('id', ignore_index=True, inplace=True)
 
     out_gcp.set_crs(gcp_shps[0].crs, inplace=True)
@@ -116,7 +132,7 @@ def combine_block_measures(blocks, meas_out='AutoMeasures', gcp_out='AutoGCPs',
 def block_orientation(blocks, meas_out='AutoMeasures', gcp_out='AutoGCPs',
                       fn_mes='AutoMeasures_block', fn_gcp='AutoGCPs_block', dirname='auto_gcps',
                       rel_ori='Relative', outori='TerrainFinal', homol='Homol',
-                      ref_dx=15, ortho_res=8, allfree=True, max_iter=1):
+                      ref_dx=15, ortho_res=8, allfree=True, max_iter=1, share_gcps=False):
     """
     Combine GCPs, Measures files, and Ori directories from multiple sub-blocks into a single file and orientation.
 
@@ -133,9 +149,11 @@ def block_orientation(blocks, meas_out='AutoMeasures', gcp_out='AutoGCPs',
     :param int|float ortho_res: the pixel resolution of the orthoimage being used, in meters. (default: 8)
     :param bool allfree: run Campari with AllFree=1 (True), or AllFree=0 (False). (default: True)
     :param int max_iter: the maximum number of iterations to run. (default: 1)
+    :param bool share_gcps: GCPs are shared between blocks (default: False)
     :return: **gcps** (*GeoDataFrame*) -- the combined GCPs output from spymicmac.micmac.iterate_campari
     """
-    combine_block_measures(blocks, meas_out=meas_out, gcp_out=gcp_out, fn_mes=fn_mes, fn_gcp=fn_gcp, dirname=dirname)
+    combine_block_measures(blocks, meas_out=meas_out, gcp_out=gcp_out,
+                           fn_mes=fn_mes, fn_gcp=fn_gcp, dirname=dirname, share_gcps=share_gcps)
 
     gcps = gpd.read_file(os.path.join(dirname, gcp_out + '.shp'))
 
