@@ -1928,7 +1928,7 @@ def post_process(projstr, out_name, dirmec, do_ortho=True, ind_ortho=False):
         mm3d Tawny with Out=Orthophotomosaic first.
     :param bool ind_ortho: apply a mask to each individual ortho image (default: false)
     """
-    # TODO: re-implement this with geoutils/xdem instead of subprocess calls
+
     os.makedirs('post_processed', exist_ok=True)
 
     # first, the stuff in MEC
@@ -1974,6 +1974,7 @@ def post_process(projstr, out_name, dirmec, do_ortho=True, ind_ortho=False):
     # clean up the temporary files
     os.remove('tmp_geo.tif')
     os.remove('tmp_corr.tif')
+    os.remove('tmp_mask.tif')
 
     # now, mask the ortho image(s)
     if do_ortho:
@@ -1982,15 +1983,8 @@ def post_process(projstr, out_name, dirmec, do_ortho=True, ind_ortho=False):
         if _needs_mosaic(fn_ortho):
             mosaic_micmac_tiles('Orthophotomosaic', 'Ortho-' + dirmec)
 
-        subprocess.Popen(['gdal_translate', '-a_nodata', '0', '-a_srs', projstr, fn_ortho, 'tmp_ortho.tif']).wait()
-
-        # TODO: re-size the mask to fit the ortho image, if needed
-        subprocess.Popen(_gdal_calc() + ['--quiet', '-A', 'tmp_mask.tif', '-B', 'tmp_ortho.tif',
-                          '--outfile={}'.format(os.path.join('post_processed', f'{out_name}_Ortho.tif')),
-                          '--calc="B*(A>0)"', '--NoDataValue=0']).wait()
-        os.remove('tmp_ortho.tif')
-
-    os.remove('tmp_mask.tif')
+        subprocess.Popen(['gdal_translate', '-a_nodata', '0', '-a_srs', projstr, fn_ortho,
+                          os.path.join('post_processed', f'{out_name}_Ortho.tif')]).wait()
 
     if ind_ortho:
         imlist = sorted(glob('OIS*.tif'))
