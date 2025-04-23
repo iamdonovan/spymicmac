@@ -165,7 +165,7 @@ def _filter_fid_matches(coords_all, measures_cam):
         these_meas = coords_all.loc[c].set_index('gcp').join(measures_cam)
 
         model, inliers = ransac((these_meas[['im_col', 'im_row']].values, these_meas[['j', 'i']].values),
-                                SimilarityTransform, min_samples=3, residual_threshold=10, max_trials=20)
+                                AffineTransform, min_samples=3, residual_threshold=10, max_trials=20)
         try:
             resids.append(model.residuals(these_meas[['im_col', 'im_row']].values,
                                           these_meas[['j', 'i']].values).mean())
@@ -223,7 +223,7 @@ def fix_measures_xml(fn_img, fn_cam=None):
 
     meas = measures_cam.join(measures_img, lsuffix='_cam', rsuffix='_img').dropna()
 
-    model = SimilarityTransform()
+    model = AffineTransform()
     model.estimate(meas[['j_img', 'i_img']].values,
                    meas[['j_cam', 'i_cam']].values)
 
@@ -251,7 +251,7 @@ def fix_measures_xml(fn_img, fn_cam=None):
 def _get_residuals(meas_img, meas_cam):
     joined = meas_cam.join(meas_img.set_index('gcp'))
 
-    model = SimilarityTransform()
+    model = AffineTransform()
     est = model.estimate(joined[['im_col', 'im_row']].values, joined[['j', 'i']].values)
     if est:
         return model, model.residuals(joined[['im_col', 'im_row']].values, joined[['j', 'i']].values)
