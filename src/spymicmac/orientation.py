@@ -523,7 +523,7 @@ def transform_centers(rel, ref, imlist, footprints, ori, imgeom=True):
         footprints.loc[ind, 'name'] = 'OIS-Reech_' + row['ID'] + '.tif'
 
     join = footprints.set_index('name').join(rel_ori.set_index('name'), lsuffix='abs', rsuffix='rel')
-    join.dropna(how='all', inplace=True)
+    join.dropna(subset='geometryrel', inplace=True)
 
     if join.shape[0] > 3:
         width_ratio = _point_spread(rel_ori.geometry)
