@@ -537,7 +537,7 @@ def _meas_center(meas, pairs):
 
 
 def generate_multicam_csv(patterns=None, prefix='OIS-Reech_', fn_out='camera_defs.csv',
-                          name='', short_name='', film_size='', focal=''):
+                          name='', short_name='', film_width='', film_height='', focal=''):
     """
     Create a CSV file with camera parameters than can be read by create_localchantier_xml() to use images acquired by
     multiple cameras.
@@ -550,8 +550,8 @@ def generate_multicam_csv(patterns=None, prefix='OIS-Reech_', fn_out='camera_def
     :param str fn_out: the name of the CSV file to create [camera_defs.csv]
     :param str|list name: the name to give each camera. Must be unique.
     :param str|list short_name: the "short name" description of each camera. Does not need to be unique.
-    :param str|list film_size: the size (width, height in mm) of the frame for each camera.
-        Can be a list of tuples or a str.
+    :param float|list film_width: the width in mm of the frame for each camera.
+    :param float|list film_height: the height in mm of the frame for each camera.
     :param float|str|list focal: the focal length of each camera, in mm.
     """
     cameras = pd.DataFrame()
@@ -567,10 +567,9 @@ def generate_multicam_csv(patterns=None, prefix='OIS-Reech_', fn_out='camera_def
     cameras['name'] = name
     cameras['short_name'] = short_name
 
-    if not isinstance(film_size, str):
-        film_size = [','.join([str(p) for p in pp]) for pp in film_size]
+    cameras['width'] = film_width
+    cameras['height'] = film_height
 
-    cameras['film_size'] = film_size
     cameras['focal'] = focal
 
     cameras.to_csv(fn_out, index=False)
@@ -599,12 +598,10 @@ def create_localchantier_xml(name='KH9MC', short_name='KH-9 Hexagon Mapping Came
     if cam_csv is not None:
         cameras = pd.read_csv(cam_csv)
         for ind, cam in cameras.iterrows():
-            width, height = [p.strip() for p in cam['film_size'].split(',')]
-
             cam_db.append(
                 E.CameraEntry(
                     E.Name(cam['name']),
-                    E.SzCaptMm(f"{width} {height}"),
+                    E.SzCaptMm(f"{cam['width']} {cam['height']}"),
                     E.ShortName(cam['short_name'])
                 )
             )
