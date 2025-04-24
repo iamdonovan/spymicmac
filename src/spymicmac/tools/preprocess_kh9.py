@@ -12,29 +12,6 @@ from spymicmac.resample import resample_hex
 from spymicmac import micmac, preprocessing
 
 
-def extract(tar_ext='.tgz'):
-    # make a directory to move the tarballs to
-    os.makedirs('tarballs', exist_ok=True)
-
-    tarlist = glob('*' + tar_ext)
-    tarlist.sort()
-
-    if len(tarlist) > 0:
-        print('Extracting images from tar files.')
-        for tarball in tarlist:
-            print(tarball)
-            with tarfile.open(tarball, 'r') as tfile:
-                tfile.extractall('.')
-            shutil.move(tarball, 'tarballs')
-    else:
-        print('No tar files found, skipping.')
-        # we still want to make sure that we have a list of images to work with.
-        tarlist = list(set([os.path.splitext(fn)[0].split('_')[0] for fn in glob('DZB*.tif')]))
-        tarlist.sort()
-
-    return tarlist
-
-
 def check_reseau():
     imlist = glob('DZB*.tif')
     measlist = glob('MeasuresIm*.tif.xml', dir_fd='Ori-InterneScan')
@@ -156,7 +133,7 @@ def main():
 
     # now, do all the steps we were asked to do, in order
     if do['extract']:
-        imlist = extract(args.tar_ext)
+        imlist = preprocessing.extract(args.tar_ext)
         imlist = [tfile.split(args.tar_ext)[0] for tfile in imlist]
     elif any([do['join'], do['reseau'], do['erase'], do['resample']]):
         imlist = list(set([os.path.splitext(fn)[0].split('_')[0] for fn in glob('DZB*.tif')]))
