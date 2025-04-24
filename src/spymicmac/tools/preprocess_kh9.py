@@ -12,18 +12,6 @@ from spymicmac.resample import resample_hex
 from spymicmac import micmac, preprocessing
 
 
-def check_reseau():
-    imlist = glob('DZB*.tif')
-    measlist = glob('MeasuresIm*.tif.xml', dir_fd='Ori-InterneScan')
-
-    # if there are no DZB*.tif, but there are MeasuresIm files, we've probably done this step
-    if len(imlist) == 0 and len(measlist) > 0:
-        return True
-    else:
-        # check that each image file has a matching measuresim file
-        return all([any([im in meas for meas in measlist]) for im in imlist])
-
-
 def batch_resample(imlist, args):
     pool = mp.Pool(args.nproc, maxtasksperchild=1)
 
@@ -171,7 +159,7 @@ def main():
 
         # if we're doing all steps, check that we need to; if we explicitly asked to
         # do this step, then do it.
-        if (args.steps == 'all' and not check_reseau()) or ('reseau' in args.steps):
+        if (args.steps == 'all' and not preprocessing.check_reseau()) or ('reseau' in args.steps):
             for fn_img in imlist:
                 find_reseau_grid(fn_img + '.tif')
         else:

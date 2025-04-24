@@ -85,12 +85,12 @@ def extract(tar_ext='.tgz'):
     return tarlist
 
 
-def check_reseau():
+def check_reseau() -> bool:
     """
     Check whether all KH-9 Mapping Camera images in the current directory have a corresponding Measures{fn_img}.xml
     file in Ori-InterneScan.
 
-    :return:
+    :return: True if the files exist; False if they do not exist
     """
     imlist = glob('DZB*.tif')
     measlist = glob('MeasuresIm*.tif.xml', dir_fd='Ori-InterneScan')
