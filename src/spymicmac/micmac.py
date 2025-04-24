@@ -35,11 +35,11 @@ def write_neighbour_images(imlist=None, fprints=None, name_field='ID', prefix='O
     Write an xml file containing image pairs for processing with Tapioca, using either image footprints or a homologue
     directory.
 
-    :param list imlist: a list of (original) image names to use (e.g., without 'OIS-Reech\_')
+    :param list imlist: a list of (original) image names to use (e.g., without 'OIS-Reech_')
     :param GeoDataFrame fprints: a vector dataset of footprint polygons. If not provided, will attempt to download
         metadata from USGS for the images.
     :param str name_field: the field in fprints table that contains the image name
-    :param str prefix: the prefix attached to the image name read by Tapioca (default: 'OIS-Reech\_')
+    :param str prefix: the prefix attached to the image name read by Tapioca (default: 'OIS-Reech_')
     :param str file_ext: the file extension for the images read by Tapioca (default: .tif)
     :param str dataset: the USGS dataset name to search if no footprints are provided (default: AERIAL_COMBIN)
     :param bool from_homol: get a list of pairs based on homologue files (default: False)
@@ -253,12 +253,12 @@ def get_gcp_meas(im_name, meas_name, in_dir, E, nodist=None, gcp_name='GCP'):
     for ind, row in impts.iterrows():
         in_im = 0 < row.j < maxj and 0 < row.i < maxi
         if nodist is not None:
-            in_nd = -200 < impts_nodist.j[ind]+200 < maxj and -200 < impts_nodist.i[ind] < maxi+200
+            in_nd = -200 < impts_nodist.loc[ind, 'j'] + 200 < maxj and -200 < impts_nodist.loc[ind, 'i'] < maxi + 200
             in_im = in_im and in_nd
         if in_im:
             this_mes = E.OneMesureAF1I(
-                                E.NamePt('{}{}'.format(gcp_name, ind+1)),
-                                E.PtIm('{} {}'.format(row['j'], row['i']))
+                                E.NamePt(f"{gcp_name}{ind+1}"),
+                                E.PtIm(f"{row['j']} {row['i']}")
                             )
             this_im_mes.append(this_mes)
     return this_im_mes
@@ -783,7 +783,7 @@ def write_auto_mesures(gcps, sub, outdir, outname='AutoMeasures'):
     :param str outname: the base name of the file to create (default: AutoMeasures).
     """
     with open(os.path.join(outdir, '{}{}.txt'.format(outname, sub)), 'w') as f:
-        for i, row in gcps.iterrows():
+        for row in gcps.itertuples():
             print('{} {} {}'.format(row.rel_x, row.rel_y, row.el_rel), file=f)
 
 
@@ -837,9 +837,9 @@ def write_image_mesures(imlist, gcps, outdir='.', sub='', ort_dir='Ortho-MEC-Rel
 
         this_im_mes = E.MesureAppuiFlottant1Im(E.NameIm(im))
 
-        for i, (ind, row) in enumerate(impts[valid].iterrows()):
-            this_mes = E.OneMesureAF1I(E.NamePt(gcps.iloc[ind]['id']),
-                                       E.PtIm('{} {}'.format(row.j, row.i)))
+        for ii, row in enumerate(impts[valid].itertuples()):
+            this_mes = E.OneMesureAF1I(E.NamePt(gcps.iloc[ii]['id']),
+                                       E.PtIm(f"{row.j} {row.i}"))
             this_im_mes.append(this_mes)
 
         MesureSet.append(this_im_mes)
@@ -863,7 +863,7 @@ def write_auto_gcps(gcp_df, sub, outdir, utm_zone, outname='AutoGCPs'):
         # print('#F= N X Y Z Ix Iy Iz', file=f)
         print('#F= N X Y Z', file=f)
         print('#Here the coordinates are in UTM {} X=Easting Y=Northing Z=Altitude'.format(utm_zone), file=f)
-        for i, row in gcp_df.iterrows():
+        for row in gcp_df.itertuples():
             # print('{} {} {} {} {} {} {}'.format(row.id, row.geometry.x, row.geometry.y, row.elevation,
             #                                        5/row.z_corr, 5/row.z_corr, 1), file=f)
             print('{} {} {} {}'.format(row.id, row.geometry.x, row.geometry.y, row.elevation), file=f)
