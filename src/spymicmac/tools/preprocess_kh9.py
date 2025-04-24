@@ -9,7 +9,7 @@ from skimage import io, filters, exposure
 from spymicmac.image import join_hexagon
 from spymicmac.matching import find_reseau_grid, remove_crosses
 from spymicmac.resample import resample_hex
-from spymicmac import micmac
+from spymicmac import micmac, preprocessing
 
 
 def extract(tar_ext='.tgz'):
@@ -151,17 +151,8 @@ def main():
             if step in do.keys():
                 do.update({step: False})
 
-    # create the necessary xml files, but only if they don't exist
-    if not os.path.exists(os.path.join('Ori-Init', 'AutoCal_Foc-304800_KH9MC.xml')):
-        micmac.init_autocal()
-
-    if not os.path.exists('MicMac-LocalChantierDescripteur.xml'):
-        micmac.create_localchantier_xml(add_sfs=args.add_sfs)
-
-    if not os.path.isfile(os.path.join('Ori-InterneScan', 'MeasuresCamera.xml')):
-        os.makedirs('Ori-InterneScan', exist_ok=True)
-        micmac.generate_measures_files(joined=True)
-        shutil.move('MeasuresCamera.xml', 'Ori-InterneScan')
+    # generate the xml files that we need
+    preprocessing.initialize_kh9_mc(add_sfs=args.add_sfs)
 
     # now, do all the steps we were asked to do, in order
     if do['extract']:
