@@ -519,8 +519,7 @@ def transform_centers(rel, ref, imlist, footprints, ori, imgeom=True):
     else:
         raise ValueError("footprint geometry contains mixed types - please ensure that only Point or Polygon is used.")
 
-    for ind, row in footprints.iterrows():
-        footprints.loc[ind, 'name'] = 'OIS-Reech_' + row['ID'] + '.tif'
+    footprints['name'] = 'OIS-Reech_' + footprints['ID'] + '.tif'
 
     join = footprints.set_index('name').join(rel_ori.set_index('name'), lsuffix='abs', rsuffix='rel')
     join.dropna(subset='geometryrel', inplace=True)
@@ -529,7 +528,7 @@ def transform_centers(rel, ref, imlist, footprints, ori, imgeom=True):
         width_ratio = _point_spread(rel_ori.geometry)
         # if the points are very linear, we want to add a point to keep the transformation from being too sheared
         if width_ratio > 10:
-            ind1, ind2 = _find_add([Point(row.xrel, row.yrel) for ii, row in join.iterrows()])
+            ind1, ind2 = _find_add([Point(row.xrel, row.yrel) for row in join.itertuples()])
 
             ref_pts = np.concatenate([join[['xabs', 'yabs']].values,
                                       _get_points([Point(join['xabs'].values[ind1], join['yabs'].values[ind1]),
@@ -544,8 +543,8 @@ def transform_centers(rel, ref, imlist, footprints, ori, imgeom=True):
     else:
         # if we only have 2 points, we add two (midpoint, perpendicular to midpoint) using _get_points()
         # this ensures that we can actually get an affine transformation
-        ref_pts = _get_points([Point(row.xabs, row.yabs) for ii, row in join.iterrows()])
-        rel_pts = _get_points([Point(row.xrel, row.yrel) for ii, row in join.iterrows()])
+        ref_pts = _get_points([Point(row.xabs, row.yabs) for row in join.itertuples()])
+        rel_pts = _get_points([Point(row.xrel, row.yrel) for row in join.itertuples()])
 
     if imgeom:
         model, inliers = transform_points(ref, ref_pts, rel, rel_pts)
