@@ -850,7 +850,7 @@ def remove_crosses(fn_img, nproc=1):
         np.uint8)
 
     if nproc == 1:
-        for i, row in gcps.loc[1:].iterrows():
+        for ind, row in gcps.loc[1:].iterrows():
             pt = np.round([row.i, row.j]).astype(int)
             subim, row_, col_ = make_template(img, pt, 200)
             img[pt[0] - row_[0]:pt[0] + row_[1] + 1, pt[1] - col_[0]:pt[1] + col_[1] + 1] = _fix_cross(subim)
