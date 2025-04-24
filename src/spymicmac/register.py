@@ -11,17 +11,12 @@ import matplotlib.pyplot as plt
 import geopandas as gpd
 import geoutils as gu
 from glob import glob
-
 import pandas as pd
-from pyogrio.errors import DataSourceError
 from rtree import index
 from shapely.ops import unary_union
 from shapely.geometry.point import Point
-from skimage.io import imread
 from skimage.measure import ransac
 from skimage.transform import AffineTransform, warp
-from tifffile.geodb import Datum
-
 from spymicmac import data, image, matching, micmac, orientation
 
 
