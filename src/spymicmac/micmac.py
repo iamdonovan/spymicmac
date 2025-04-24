@@ -548,18 +548,19 @@ def generate_multicam_csv(patterns=None, prefix='OIS-Reech_', fn_out='camera_def
     :param patterns: a list of filename patterns corresponding to each camera [None]
     :param str prefix: an optional prefix to add to the matching patterns [OIS-Reech_]
     :param str fn_out: the name of the CSV file to create [camera_defs.csv]
-    :param name: the name to give each camera. Must be unique.
-    :param short_name: the "short name" description of each camera. Does not need to be unique.
-    :param film_size: the size (width, height in mm) of the frame for each camera. Can be a list of tuples or a str.
-    :param focal: the focal length of each camera, in mm.
+    :param str|list name: the name to give each camera. Must be unique.
+    :param str|list short_name: the "short name" description of each camera. Does not need to be unique.
+    :param str|list film_size: the size (width, height in mm) of the frame for each camera.
+        Can be a list of tuples or a str.
+    :param float|str|list focal: the focal length of each camera, in mm.
     """
     cameras = pd.DataFrame()
 
     if patterns is None:
         cameras['pattern'] = ''
     else:
-        patterns = [p + '.*' for p in patterns if '.*' not in p]
-        patterns = [prefix + p for p in patterns if prefix not in p]
+        patterns = [p + '.*' if '.*' not in p else p for p in patterns]
+        patterns = [prefix + p if prefix not in p else p for p in patterns]
 
         cameras['pattern'] = patterns
 
