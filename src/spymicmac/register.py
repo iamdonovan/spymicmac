@@ -493,8 +493,11 @@ def register_relative(dirmec, fn_dem, fn_ref=None, fn_ortho=None, glacmask=None,
 
     # run ransac to find the matches between the transformed image and the master image make a coherent transformation
     # residual_threshold is 20 pixels to allow for some local distortions, but get rid of the big blunders
+    gcps['offset'] = np.sqrt(gcps['dj'] ** 2 + gcps['di'] ** 2)
+    thresh = gcps['offset'].median() + 4 * nmad(gcps['offset'])
+
     Mref, inliers_ref = ransac((gcps[['search_j', 'search_i']].values, gcps[['match_j', 'match_i']].values),
-                               AffineTransform, min_samples=6, residual_threshold=20, max_trials=5000)
+                               AffineTransform, min_samples=6, residual_threshold=thresh, max_trials=5000)
     gcps['aff_resid'] = Mref.residuals(gcps[['search_j', 'search_i']].values,
                                        gcps[['match_j', 'match_i']].values)
 
