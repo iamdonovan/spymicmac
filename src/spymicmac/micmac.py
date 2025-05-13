@@ -838,7 +838,7 @@ def write_image_mesures(imlist, gcps, outdir='.', sub='', ort_dir='Ortho-MEC-Rel
         this_im_mes = E.MesureAppuiFlottant1Im(E.NameIm(im))
 
         for ii, row in enumerate(impts[valid].itertuples()):
-            this_mes = E.OneMesureAF1I(E.NamePt(gcps.iloc[ii]['id']),
+            this_mes = E.OneMesureAF1I(E.NamePt(gcps.iloc[row.Index]['id']),
                                        E.PtIm(f"{row.j} {row.i}"))
             this_im_mes.append(this_mes)
 
