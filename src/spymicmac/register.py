@@ -264,8 +264,10 @@ def _get_mask(footprints, img, imlist, landmask=None, glacmask=None):
     img.crop(fprint.buffer(buff_dist).bounds, mode='match_pixel', inplace=True)
     fmask.crop(fprint.buffer(buff_dist).bounds, mode='match_pixel', inplace=True)
 
-    mask = img.copy(new_array=np.zeros(img.shape))
+    mask = fmask.copy(new_array=np.ones(img.shape, dtype=np.uint8))
+    mask.astype(np.uint8, inplace=True)
     mask.data[~img.data.mask] = 255
+    mask.data[mask.data == 1] = 0
 
     if landmask is not None:
         lmask = gu.Vector(landmask).create_mask(img)
@@ -398,6 +400,12 @@ def register_relative(dirmec, fn_dem, fn_ref=None, fn_ortho=None, glacmask=None,
         reg_img[~rel_mask] = np.nan
     print(f"Loaded relative image {fn_reg}.")
 
+    # set the fill value for the rough_tfm image (0 or np.nan)
+    if np.issubdtype(reg_img.data.dtype, np.floating):
+        tfm_fill = np.nan
+    else:
+        tfm_fill = 0
+
     if footprints is None:
         if os.path.isfile('Footprints.gpkg'):
             print('Using existing Footprints.gpkg file in current directory.')
@@ -415,7 +423,7 @@ def register_relative(dirmec, fn_dem, fn_ref=None, fn_ortho=None, glacmask=None,
     mask_full, _, ref_img = _get_mask(footprints, ref_img, imlist, landmask, glacmask)
 
     Minit, _, centers = orientation.transform_centers(reg_img, ref_img, imlist, footprints, 'Ori-{}'.format(ori))
-    rough_tfm = warp(reg_img.data, Minit, output_shape=ref_img.shape, preserve_range=True)
+    rough_tfm = warp(reg_img.data, Minit, output_shape=ref_img.shape, preserve_range=True, cval=tfm_fill)
 
     rough_spacing = max(1000, np.round(max(ref_img.shape) / 20 / 1000) * 1000)
 
@@ -429,7 +437,7 @@ def register_relative(dirmec, fn_dem, fn_ref=None, fn_ortho=None, glacmask=None,
         if model is None or np.count_nonzero(inliers) < 6:
             raise ValueError()
 
-        rough_tfm = warp(reg_img.data, model, output_shape=ref_img.shape, preserve_range=True)
+        rough_tfm = warp(reg_img.data, model, output_shape=ref_img.shape, preserve_range=True, cval=tfm_fill)
 
     except ValueError as e:
         print('Unable to refine transformation with rough GCPs. Using transform estimated from footprints.')
@@ -439,7 +447,8 @@ def register_relative(dirmec, fn_dem, fn_ref=None, fn_ortho=None, glacmask=None,
     rough_geo.save('Register{}_rough_geo.tif'.format(subscript))
 
     fig, ax = plt.subplots(1, 2, figsize=(7, 5))
-    ax[0].imshow(rough_tfm[::10, ::10], extent=[0, rough_tfm.shape[1], rough_tfm.shape[0], 0], cmap='gray')
+    ax[0].imshow(rough_tfm[::10, ::10], extent=[0, rough_tfm.shape[1], rough_tfm.shape[0], 0], cmap='gray',
+                 vmin=np.nanpercentile(rough_tfm, 0.5), vmax=np.nanpercentile(rough_tfm, 99.5))
     ax[1].imshow(ref_img.data[::10, ::10], extent=[0, ref_img.shape[1], ref_img.shape[0], 0], cmap='gray')
 
     fig.savefig('initial_transformation{}.png'.format(subscript), dpi=200, bbox_inches='tight')
@@ -470,8 +479,6 @@ def register_relative(dirmec, fn_dem, fn_ref=None, fn_ortho=None, glacmask=None,
 
     gcps = gcps.loc[mask_full.data.data[gcps.search_i.astype(int), gcps.search_j.astype(int)] == 255]
 
-    #gcps['rel_x'] = reg_gt[4] + gcps['orig_j'].values * reg_gt[0]  # need the original image coordinates
-    #gcps['rel_y'] = reg_gt[5] + gcps['orig_i'].values * reg_gt[3]
     gcps['rel_x'], gcps['rel_y'] = reg_img.ij2xy(gcps.orig_i, gcps.orig_j)
 
     gcps.dropna(inplace=True)
