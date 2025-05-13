@@ -446,10 +446,14 @@ def register_relative(dirmec, fn_dem, fn_ref=None, fn_ortho=None, glacmask=None,
     rough_geo = ref_img.copy(new_array=rough_tfm)
     rough_geo.save('Register{}_rough_geo.tif'.format(subscript))
 
-    fig, ax = plt.subplots(1, 2, figsize=(7, 5))
-    ax[0].imshow(rough_tfm[::10, ::10], extent=[0, rough_tfm.shape[1], rough_tfm.shape[0], 0], cmap='gray',
+    fig, axs = plt.subplots(1, 2, figsize=(7, 5))
+    axs[0].imshow(rough_tfm[::10, ::10], extent=[0, rough_tfm.shape[1], rough_tfm.shape[0], 0], cmap='gray',
                  vmin=np.nanpercentile(rough_tfm, 0.5), vmax=np.nanpercentile(rough_tfm, 99.5))
-    ax[1].imshow(ref_img.data[::10, ::10], extent=[0, ref_img.shape[1], ref_img.shape[0], 0], cmap='gray')
+    axs[1].imshow(ref_img.data[::10, ::10], extent=[0, ref_img.shape[1], ref_img.shape[0], 0], cmap='gray')
+
+    for ax in axs:
+        ax.set_xticks([])
+        ax.set_yticks([])
 
     fig.savefig('initial_transformation{}.png'.format(subscript), dpi=200, bbox_inches='tight')
     plt.close(fig)
