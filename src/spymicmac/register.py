@@ -254,12 +254,15 @@ def _get_mask(footprints, img, imlist, landmask=None, glacmask=None):
     :returns:
         - **mask** (*array-like*) -- the mask
         - **fmask** (*Raster*) -- the georeferenced footprint mask
-        - **img** (*Raster*) -- the input Raster, cropped to a 10 pixel buffer around the image footprints
+        - **img** (*Raster*) -- the input Raster, cropped to a buffer around the image footprints
     """
     fmask, fprint = _get_footprint_mask(footprints, img, imlist, fprint_out=True)
 
-    img.crop(fprint.buffer(img.res[0] * 10).bounds, mode='match_pixel', inplace=True)
-    fmask.crop(fprint.buffer(img.res[0]*10).bounds, mode='match_pixel', inplace=True)
+    xmin, ymin, xmax, ymax = fprint.bounds
+    buff_dist = 0.05 * min(abs(xmax - xmin), abs(ymax - ymin))
+
+    img.crop(fprint.buffer(buff_dist).bounds, mode='match_pixel', inplace=True)
+    fmask.crop(fprint.buffer(buff_dist).bounds, mode='match_pixel', inplace=True)
 
     mask = img.copy(new_array=np.zeros(img.shape))
     mask.data[~img.data.mask] = 255
