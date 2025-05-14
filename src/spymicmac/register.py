@@ -365,7 +365,7 @@ def register_relative(dirmec, fn_dem, fn_ref=None, fn_ortho=None, glacmask=None,
     if subscript is not None:
         subscript = '_' + subscript
     elif block_num is not None:
-        subscript = '_block{}'.format(block_num)
+        subscript = f"_block{block_num}"
     else:
         subscript = ''
 
@@ -422,7 +422,7 @@ def register_relative(dirmec, fn_dem, fn_ref=None, fn_ortho=None, glacmask=None,
 
     mask_full, _, ref_img = _get_mask(footprints, ref_img, imlist, landmask, glacmask)
 
-    Minit, _, centers = orientation.transform_centers(reg_img, ref_img, imlist, footprints, 'Ori-{}'.format(ori))
+    Minit, _, centers = orientation.transform_centers(reg_img, ref_img, imlist, footprints, f"Ori-{ori}")
     rough_tfm = warp(reg_img.data, Minit, output_shape=ref_img.shape, preserve_range=True, cval=tfm_fill)
 
     rough_spacing = max(1000, np.round(max(ref_img.shape) / 20 / 1000) * 1000)
@@ -444,7 +444,7 @@ def register_relative(dirmec, fn_dem, fn_ref=None, fn_ortho=None, glacmask=None,
         model = Minit
 
     rough_geo = ref_img.copy(new_array=rough_tfm)
-    rough_geo.save('Register{}_rough_geo.tif'.format(subscript))
+    rough_geo.save(f"Register{subscript}_rough_geo.tif")
 
     fig, axs = plt.subplots(1, 2, figsize=(7, 5))
     axs[0].imshow(rough_tfm[::10, ::10], extent=[0, rough_tfm.shape[1], rough_tfm.shape[0], 0], cmap='gray',
@@ -455,7 +455,7 @@ def register_relative(dirmec, fn_dem, fn_ref=None, fn_ortho=None, glacmask=None,
         ax.set_xticks([])
         ax.set_yticks([])
 
-    fig.savefig('initial_transformation{}.png'.format(subscript), dpi=200, bbox_inches='tight')
+    fig.savefig(f"initial_transformation{subscript}.png", dpi=200, bbox_inches='tight')
     plt.close(fig)
 
     if fn_gcps is not None:
@@ -486,7 +486,7 @@ def register_relative(dirmec, fn_dem, fn_ref=None, fn_ortho=None, glacmask=None,
     gcps['rel_x'], gcps['rel_y'] = reg_img.ij2xy(gcps.orig_i, gcps.orig_j)
 
     gcps.dropna(inplace=True)
-    print('{} potential matches found'.format(gcps.shape[0]))
+    print(f"{gcps.shape[0]} potential matches found")
 
     if useortho:
         print('loading dems')
@@ -494,7 +494,6 @@ def register_relative(dirmec, fn_dem, fn_ref=None, fn_ortho=None, glacmask=None,
     else:
         dem = ref_img
 
-    # gcps.crs = {'init': 'epsg:{}'.format(ref_img.epsg)}
     if 'elevation' not in gcps.columns:
         gcps['elevation'] = dem.interp_points((gcps.geometry.x, gcps.geometry.y))
     gcps['el_rel'] = rel_dem.interp_points((gcps.rel_x, gcps.rel_y))
@@ -503,7 +502,7 @@ def register_relative(dirmec, fn_dem, fn_ref=None, fn_ortho=None, glacmask=None,
     if dem.nodata is not None:
         gcps.loc[np.abs(gcps.elevation - dem.nodata) < 1, 'elevation'] = np.nan
     gcps.dropna(inplace=True)
-    print('{} matches with valid elevations'.format(gcps.shape[0]))
+    print(f"{gcps.shape[0]} matches with valid elevations")
 
     # run ransac to find the matches between the transformed image and the master image make a coherent transformation
     # residual_threshold is 20 pixels to allow for some local distortions, but get rid of the big blunders
@@ -524,20 +523,20 @@ def register_relative(dirmec, fn_dem, fn_ref=None, fn_ortho=None, glacmask=None,
     #                              mindist=500, how='pk_corr', is_ascending=True)
     # gcps = gcps.loc[out]
 
-    print('{} valid matches found after estimating transformation'.format(gcps.shape[0]))
+    print(f"{gcps.shape[0]} valid matches found after estimating transformation")
 
     gcps.index = range(gcps.shape[0])  # make sure index corresponds to row we're writing out
     if 'id' not in gcps.columns:
-        gcps['id'] = ['GCP{}'.format(i) for i in range(gcps.shape[0])]
+        gcps['id'] = [f'GCP{ind}' for ind in range(gcps.shape[0])]
 
-    gcps.to_file(os.path.join(out_dir, 'AutoGCPs{}.shp'.format(subscript)))
+    gcps.to_file(Path(out_dir, f"AutoGCPs{subscript}.shp"))
 
     print('writing AutoGCPs.txt')
     micmac.write_auto_gcps(gcps, subscript, out_dir, utm_str)
 
     print('converting AutoGCPs.txt to AutoGCPs.xml')
     subprocess.Popen(['mm3d', 'GCPConvert', 'AppInFile',
-                      os.path.join(out_dir, 'AutoGCPs{}.txt'.format(subscript))]).wait()
+                      Path(out_dir, f"AutoGCPs{subscript}.txt")]).wait()
 
     print('writing AutoMeasures.txt')
     micmac.write_auto_mesures(gcps, subscript, out_dir)
@@ -574,10 +573,10 @@ def register_relative(dirmec, fn_dem, fn_ref=None, fn_ortho=None, glacmask=None,
 
         micmac.write_auto_gcps(cps, subscript, out_dir, utm_str, outname='AutoCPs')
         subprocess.Popen(['mm3d', 'GCPConvert', 'AppInFile',
-                          Path(out_dir, 'AutoCPs{}.txt'.format(subscript))]).wait()
+                          Path(out_dir, f"AutoCPs{subscript}.txt")]).wait()
 
         micmac.write_auto_mesures(cps, subscript, out_dir, outname='AutoCPMeasures')
-        micmac.get_autogcp_locations(f'Ori-{ori}', Path(out_dir, f'AutoCPMeasures{subscript}.txt'), imlist)
+        micmac.get_autogcp_locations(f"Ori-{ori}", Path(out_dir, f"AutoCPMeasures{subscript}.txt"), imlist)
         micmac.write_image_mesures(imlist, cps, out_dir, subscript, ort_dir=ort_dir, outname='AutoCPMeasures')
 
     # now, iterate campari to refine the orientation
@@ -585,10 +584,10 @@ def register_relative(dirmec, fn_dem, fn_ref=None, fn_ortho=None, glacmask=None,
                                   rel_ori=ori, allfree=allfree, max_iter=max_iter)
 
     if use_cps:
-        cp_resids = micmac.checkpoints(match_pattern, 'Ori-TerrainFinal{}'.format(subscript),
-                                       fn_cp=Path(out_dir, f'AutoCPs{subscript}.xml'),
-                                       fn_meas=Path(out_dir, f'AutoCPMeasures{subscript}-S2D.xml'),
-                                       fn_resids=Path(out_dir, f'AutoCPs{subscript}', ret_df=True))
+        cp_resids = micmac.checkpoints(match_pattern, f"Ori-TerrainFinal{subscript}",
+                                       fn_cp=Path(out_dir, f"AutoCPs{subscript}.xml"),
+                                       fn_meas=Path(out_dir, f"AutoCPMeasures{subscript}-S2D.xml"),
+                                       fn_resids=Path(out_dir, f"AutoCPs{subscript}", ret_df=True))
 
         # merge cps and cp_resids
         cps.drop(['xres', 'yres', 'zres', 'residual', 'res_dist'], axis=1, inplace=True)
@@ -597,35 +596,33 @@ def register_relative(dirmec, fn_dem, fn_ref=None, fn_ortho=None, glacmask=None,
         cps['res_dist'] = np.sqrt(cps.xres ** 2 + cps.yres ** 2)
         cps['residual'] = np.sqrt(cps.xres ** 2 + cps.yres ** 2 + cps.zres ** 2)
 
-        cps.to_file(Path(out_dir, f'AutoCPs{subscript}.shp'))
+        cps.to_file(Path(out_dir, f"AutoCPs{subscript}.shp"))
 
     # final write of gcps to disk.
-    gcps.to_file(os.path.join(out_dir, 'AutoGCPs{}.shp'.format(subscript)))
+    gcps.to_file(os.path.join(out_dir, f"AutoGCPs{subscript}.shp"))
 
-    fig1 = plt.figure(figsize=(7, 5))
-    plt.imshow(reg_img[::5, ::5], cmap='gray', extent=[0, reg_img.shape[1], reg_img.shape[0], 0])
-    plt.plot(gcps.orig_j, gcps.orig_i, 'r+')
-    plt.quiver(gcps.orig_j, gcps.orig_i, gcps.camp_xres, gcps.camp_yres, color='r')
+    fig1, ax1 = plt.subplots(1, 1, figsize=(7, 5))
+    ax1.imshow(reg_img[::5, ::5], cmap='gray', extent=(0, reg_img.shape[1], reg_img.shape[0], 0))
+    ax1.plot(gcps.orig_j, gcps.orig_i, 'r+')
+    ax1.quiver(gcps.orig_j, gcps.orig_i, gcps.camp_xres, gcps.camp_yres, color='r')
     if use_cps:
-        plt.plot(cps.orig_j, cps.orig_i, 'bs')
-        plt.quiver(cps.orig_j, cps.orig_i, cps.xres, cps.yres, color='b')
+        ax1.plot(cps.orig_j, cps.orig_i, 'bs')
+        ax1.quiver(cps.orig_j, cps.orig_i, cps.xres, cps.yres, color='b')
 
-    plt.savefig(os.path.join(out_dir, 'relative_gcps{}.png'.format(subscript)), bbox_inches='tight', dpi=200)
+    fig1.savefig(os.path.join(out_dir, f"relative_gcps{subscript}.png"), bbox_inches='tight', dpi=200)
     plt.close(fig1)
 
-    fig2 = plt.figure(figsize=(7, 5))
+    fig2, ax2 = plt.subplots(1, 1, figsize=(7, 5))
     xmin, ymin, xmax, ymax = ref_img.bounds
-    plt.imshow(ref_img.data[::10, ::10], cmap='gray', extent=[xmin, xmax, ymin, ymax])
-    plt.plot(gcps.geometry.x, gcps.geometry.y, 'r+')
+    ax2.imshow(ref_img.data[::10, ::10], cmap='gray', extent=(xmin, xmax, ymin, ymax))
+    ax2.plot(gcps.geometry.x, gcps.geometry.y, 'r+')
     if use_cps:
-        plt.plot(cps.geometry.x, cps.geometry.y, 'bs')
+        ax2.plot(cps.geometry.x, cps.geometry.y, 'bs')
 
-    plt.savefig(os.path.join(out_dir, 'world_gcps{}.png'.format(subscript)), bbox_inches='tight', dpi=200)
+    fig2.savefig(os.path.join(out_dir, f"world_gcps{subscript}.png"), bbox_inches='tight', dpi=200)
     plt.close(fig2)
 
     print('cleaning up.')
-    # remove Auto-im.tif.txt, NoDist-im.tif.txt, etc. Ori-Relative-NoDist
-    # shutil.rmtree('Ori-{}-NoDist/'.format(ori))
 
     for txtfile in glob('Auto-OIS*.tif.txt') + \
                    glob('NoDist-OIS*.tif.txt'):
