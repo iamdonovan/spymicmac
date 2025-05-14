@@ -383,19 +383,19 @@ def register_relative(dirmec, fn_dem, fn_ref=None, fn_ortho=None, glacmask=None,
 
     utm_str = _get_utm_str(ref_img.crs.to_epsg())
 
-    rel_dem = gu.Raster(os.path.join(dirmec, _get_last_malt(dirmec)))
+    rel_dem = gu.Raster(Path(dirmec, _get_last_malt(dirmec)))
     rel_mask = _load_auto_mask(dirmec)
     rel_dem[~rel_mask] = np.nan
 
     if useortho:
         if fn_ortho is None:
-            fn_reg = os.path.join(ort_dir, 'Orthophotomosaic.tif')
+            fn_reg = Path(ort_dir, 'Orthophotomosaic.tif')
         else:
             fn_reg = fn_ortho
         reg_img = gu.Raster(fn_reg)
         reg_img.set_nodata(0)
     else:
-        fn_reg = os.path.join(dirmec, _get_last_malt(dirmec))
+        fn_reg = Path(dirmec, _get_last_malt(dirmec))
         reg_img = gu.Raster(fn_reg)
         reg_img[~rel_mask] = np.nan
     print(f"Loaded relative image {fn_reg}.")
@@ -542,7 +542,7 @@ def register_relative(dirmec, fn_dem, fn_ref=None, fn_ortho=None, glacmask=None,
     micmac.write_auto_mesures(gcps, subscript, out_dir)
 
     print('running get_autogcp_locations to get rough image locations for each point')
-    micmac.get_autogcp_locations(f"Ori-{ori}", os.path.join(out_dir, f"AutoMeasures{subscript}.txt"), imlist)
+    micmac.get_autogcp_locations(f"Ori-{ori}", Path(out_dir, f"AutoMeasures{subscript}.txt"), imlist)
 
     # print('searching for points in orthorectified images')
     print('finding image measures')
@@ -599,7 +599,7 @@ def register_relative(dirmec, fn_dem, fn_ref=None, fn_ortho=None, glacmask=None,
         cps.to_file(Path(out_dir, f"AutoCPs{subscript}.shp"))
 
     # final write of gcps to disk.
-    gcps.to_file(os.path.join(out_dir, f"AutoGCPs{subscript}.shp"))
+    gcps.to_file(Path(out_dir, f"AutoGCPs{subscript}.shp"))
 
     fig1, ax1 = plt.subplots(1, 1, figsize=(7, 5))
     ax1.imshow(reg_img[::5, ::5], cmap='gray', extent=(0, reg_img.shape[1], reg_img.shape[0], 0))
@@ -609,7 +609,7 @@ def register_relative(dirmec, fn_dem, fn_ref=None, fn_ortho=None, glacmask=None,
         ax1.plot(cps.orig_j, cps.orig_i, 'bs')
         ax1.quiver(cps.orig_j, cps.orig_i, cps.xres, cps.yres, color='b')
 
-    fig1.savefig(os.path.join(out_dir, f"relative_gcps{subscript}.png"), bbox_inches='tight', dpi=200)
+    fig1.savefig(Path(out_dir, f"relative_gcps{subscript}.png"), bbox_inches='tight', dpi=200)
     plt.close(fig1)
 
     fig2, ax2 = plt.subplots(1, 1, figsize=(7, 5))
@@ -619,7 +619,7 @@ def register_relative(dirmec, fn_dem, fn_ref=None, fn_ortho=None, glacmask=None,
     if use_cps:
         ax2.plot(cps.geometry.x, cps.geometry.y, 'bs')
 
-    fig2.savefig(os.path.join(out_dir, f"world_gcps{subscript}.png"), bbox_inches='tight', dpi=200)
+    fig2.savefig(Path(out_dir, f"world_gcps{subscript}.png"), bbox_inches='tight', dpi=200)
     plt.close(fig2)
 
     print('cleaning up.')

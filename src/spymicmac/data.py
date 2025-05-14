@@ -195,11 +195,11 @@ def download_cop30_vrt(imlist=None, footprints=None, imgsource='DECLASSII', glob
     for tile in tiles:
         this_url = '/'.join(['https://copernicus-dem-30m.s3.amazonaws.com', tile, tile + '.tif'])
         try:
-            urllib.request.urlretrieve(this_url, os.path.join('cop30_dem', tile + '.tif'))
+            urllib.request.urlretrieve(this_url, Path('cop30_dem', tile + '.tif'))
         except urllib.error.HTTPError:
             print(f'No tile found for {tile}')
 
-    filelist = glob(os.path.join('cop30_dem', '*DEM.tif'))
+    filelist = glob(Path('cop30_dem', '*DEM.tif'))
     out_vrt = gdal.BuildVRT('Copernicus_DSM.vrt', filelist, srcNodata=0)
     out_vrt = None
 
@@ -334,7 +334,7 @@ def download_pgc_mosaic(flavor, imlist=None, footprints=None, imgsource='DECLASS
         for tarball in tarlist:
             _unpack_pgc(tarball)
 
-        filelist = glob(os.path.join(flavor, '*_dem.tif'))
+        filelist = glob(Path(flavor, '*_dem.tif'))
         out_vrt = gdal.BuildVRT(outfile, filelist)
         out_vrt = None
 

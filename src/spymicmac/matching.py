@@ -2,6 +2,7 @@
 spymicmac.matching is a collection of tools for matching templates in images
 """
 import os
+from pathlib import Path
 import shutil
 import itertools
 import multiprocessing as mp
@@ -45,7 +46,7 @@ def find_fiducials(fn_img, templates, fn_cam=None, thresh_tol=0.9, npeaks=5, min
     """
     img = io.imread(fn_img)
 
-    measures_cam = micmac.parse_im_meas(os.path.join('Ori-InterneScan', 'MeasuresCamera.xml'))
+    measures_cam = micmac.parse_im_meas(Path('Ori-InterneScan', 'MeasuresCamera.xml'))
     measures_cam.set_index('name', inplace=True)
 
     if angle is not None:
@@ -216,10 +217,10 @@ def fix_measures_xml(fn_img, fn_cam=None):
     :param str fn_cam: the Measures file to use. Defaults to Ori-InterneScan/MeasuresCamera.xml.
     """
     if fn_cam is None:
-        fn_cam = os.path.join('Ori-InterneScan', 'MeasuresCamera.xml')
+        fn_cam = Path('Ori-InterneScan', 'MeasuresCamera.xml')
 
     measures_cam = micmac.parse_im_meas(fn_cam).set_index('name')
-    measures_img = micmac.parse_im_meas(os.path.join('Ori-InterneScan', f'MeasuresIm-{fn_img}.xml')).set_index('name')
+    measures_img = micmac.parse_im_meas(Path('Ori-InterneScan', f'MeasuresIm-{fn_img}.xml')).set_index('name')
 
     meas = measures_cam.join(measures_img, lsuffix='_cam', rsuffix='_img').dropna()
 
@@ -411,7 +412,7 @@ def templates_from_meas(fn_img, half_size=100, threshold=False):
 
     bn_img = os.path.basename(fn_img)
 
-    fn_meas = os.path.join(dir_img, 'Ori-InterneScan', f'MeasuresIm-{bn_img}.xml')
+    fn_meas = Path(dir_img, 'Ori-InterneScan', f'MeasuresIm-{bn_img}.xml')
     meas_im = micmac.parse_im_meas(fn_meas)
 
     img = io.imread(fn_img)
@@ -830,7 +831,7 @@ def remove_crosses(fn_img, nproc=1):
     :param str fn_img: the image filename.
     :param int nproc: the number of subprocesses to use (default: 1).
     """
-    fn_meas = os.path.join('Ori-InterneScan', f"MeasuresIm-{fn_img}.xml")
+    fn_meas = Path('Ori-InterneScan', f"MeasuresIm-{fn_img}.xml")
     img = io.imread(fn_img)
     gcps = micmac.parse_im_meas(fn_meas)
 
@@ -988,7 +989,7 @@ def find_reseau_grid(fn_img, csize=361, return_val=False):
     ax.plot(grid_df.match_j[outliers], grid_df.match_i[outliers], 'b+')
 
     this_out = os.path.splitext(fn_img)[0]
-    fig.savefig(os.path.join('match_imgs', this_out + '_matches.png'), bbox_inches='tight', dpi=200)
+    fig.savefig(Path('match_imgs', this_out + '_matches.png'), bbox_inches='tight', dpi=200)
 
     micmac.write_measures_im(grid_df, fn_img)
 

@@ -63,8 +63,8 @@ def combine_block_measures(blocks, meas_out='AutoMeasures', gcp_out='AutoGCPs',
 
     for b in blocks:
         # load dirname/AutoMeasures_block{b}-S2D.xml
-        this_root = ET.parse(os.path.join(dirname, fn_mes + f"{b}-S2D.xml")).getroot()
-        this_gcp = gpd.read_file(os.path.join(dirname, fn_gcp + f"{b}.shp"))
+        this_root = ET.parse(Path(dirname, fn_mes + f"{b}-S2D.xml")).getroot()
+        this_gcp = gpd.read_file(Path(dirname, fn_gcp + f"{b}.shp"))
 
         if share_gcps:
             this_mes_dict = dict()
@@ -96,13 +96,13 @@ def combine_block_measures(blocks, meas_out='AutoMeasures', gcp_out='AutoGCPs',
     out_gcp.sort_values('id', ignore_index=True, inplace=True)
 
     out_gcp.set_crs(gcp_shps[0].crs, inplace=True)
-    out_gcp.to_file(os.path.join(dirname, gcp_out + '.shp'))
+    out_gcp.to_file(Path(dirname, gcp_out + '.shp'))
 
     micmac.write_auto_gcps(out_gcp, '', dirname, register._get_utm_str(out_gcp.crs.to_epsg), outname=gcp_out)
 
     echo = subprocess.Popen('echo', stdout=subprocess.PIPE)
     p = subprocess.Popen(['mm3d', 'GCPConvert', 'AppInFile',
-                          os.path.join(dirname, gcp_out + '.txt')], stdin=echo.stdout)
+                          Path(dirname, gcp_out + '.txt')], stdin=echo.stdout)
     p.wait()
 
     # now have to combine mes_dicts based on key names
@@ -126,7 +126,7 @@ def combine_block_measures(blocks, meas_out='AutoMeasures', gcp_out='AutoGCPs',
         MesureSet.append(this_im_mes)
 
     tree = etree.ElementTree(MesureSet)
-    tree.write(os.path.join(dirname, meas_out + '-S2D.xml'), pretty_print=True, xml_declaration=True, encoding="utf-8")
+    tree.write(Path(dirname, meas_out + '-S2D.xml'), pretty_print=True, xml_declaration=True, encoding="utf-8")
 
 
 def block_orientation(blocks, meas_out='AutoMeasures', gcp_out='AutoGCPs',
@@ -155,7 +155,7 @@ def block_orientation(blocks, meas_out='AutoMeasures', gcp_out='AutoGCPs',
     combine_block_measures(blocks, meas_out=meas_out, gcp_out=gcp_out,
                            fn_mes=fn_mes, fn_gcp=fn_gcp, dirname=dirname, share_gcps=share_gcps)
 
-    gcps = gpd.read_file(os.path.join(dirname, gcp_out + '.shp'))
+    gcps = gpd.read_file(Path(dirname, gcp_out + '.shp'))
 
     gcps = micmac.iterate_campari(gcps, dirname, "OIS.*tif", '', ref_dx, ortho_res, fn_gcp=gcp_out,
                                   fn_meas=meas_out, rel_ori=rel_ori, outori=outori, homol=homol,
@@ -181,7 +181,7 @@ def load_orientation(fn_img, ori):
         - **altisol** (*float*) -- the 'AltiSol' value from the xml file.
 
     """
-    ori_root = ET.parse(os.path.join(ori, f"Orientation-{fn_img}.xml")).getroot()
+    ori_root = ET.parse(Path(ori, f"Orientation-{fn_img}.xml")).getroot()
     if ori_root.tag != 'OrientationConique':
         ori_coniq = ori_root.find('OrientationConique')
     else:
@@ -226,7 +226,7 @@ def load_all_orientation(ori, imlist=None):
 
     if imlist is None:
         imlist = [os.path.basename(g).split('Orientation-')[1].split('.xml')[0] for g in
-                  glob(os.path.join(ori, 'Orientation*.xml'))]
+                  glob(Path(ori, 'Orientation*.xml'))]
         imlist.sort()
 
     for i, fn_img in enumerate(imlist):
@@ -311,7 +311,7 @@ def update_center(fn_img, ori, new_center):
     :param str ori: the name of the orientation directory (e.g., 'Ori-Relative')
     :param list new_center: a list of the new camera position [x, y, z]
     """
-    ori_root = ET.parse(os.path.join(ori, f"Orientation-{fn_img}.xml")).getroot()
+    ori_root = ET.parse(Path(ori, f"Orientation-{fn_img}.xml")).getroot()
     if ori_root.tag != 'OrientationConique':
         ori_coniq = ori_root.find('OrientationConique')
     else:
@@ -320,7 +320,7 @@ def update_center(fn_img, ori, new_center):
     ori_coniq.find('Externe').find('Centre').text = ' '.join([str(f) for f in new_center])
 
     tree = ET.ElementTree(ori_root)
-    tree.write(os.path.join(ori, f"Orientation-{fn_img}.xml"),
+    tree.write(Path(ori, f"Orientation-{fn_img}.xml"),
                encoding="utf-8", xml_declaration=True)
 
 
@@ -332,7 +332,7 @@ def update_pose(fn_img, ori, new_rot):
     :param str ori: the name of the orientation directory (e.g., 'Ori-Relative')
     :param array-like new_rot: the new 3x3 rotation matrix
     """
-    ori_root = ET.parse(os.path.join(ori, f"Orientation-{fn_img}.xml")).getroot()
+    ori_root = ET.parse(Path(ori, f"Orientation-{fn_img}.xml")).getroot()
     if ori_root.tag != 'OrientationConique':
         ori_coniq = ori_root.find('OrientationConique')
     else:
@@ -343,7 +343,7 @@ def update_pose(fn_img, ori, new_rot):
             .find('CodageMatr').find(f"L{ii+1}").text = ' '.join([str(f) for f in row])
 
     tree = ET.ElementTree(ori_root)
-    tree.write(os.path.join(ori, f"Orientation-{fn_img}.xml"),
+    tree.write(Path(ori, f"Orientation-{fn_img}.xml"),
                encoding="utf-8", xml_declaration=True)
 
 
@@ -356,7 +356,7 @@ def update_params(fn_img, ori, profondeur, altisol):
     :param float profondeur: the new profondeur value
     :param float altisol: the new altisol value
     """
-    ori_root = ET.parse(os.path.join(ori, f"Orientation-{fn_img}.xml")).getroot()
+    ori_root = ET.parse(Path(ori, f"Orientation-{fn_img}.xml")).getroot()
     if ori_root.tag != 'OrientationConique':
         ori_coniq = ori_root.find('OrientationConique')
     else:
@@ -366,7 +366,7 @@ def update_params(fn_img, ori, profondeur, altisol):
     ori_coniq.find('Externe').find('Profondeur').text = str(profondeur)
 
     tree = ET.ElementTree(ori_root)
-    tree.write(os.path.join(ori, f"Orientation-{fn_img}.xml"),
+    tree.write(Path(ori, f"Orientation-{fn_img}.xml"),
                encoding="utf-8", xml_declaration=True)
 
 

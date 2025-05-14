@@ -2,6 +2,7 @@
 spymicmac.preprocessing is a collection of tools for preprocessing images
 """
 import os
+from pathlib import Path
 import argparse
 import shutil
 import tarfile
@@ -41,17 +42,17 @@ def initialize_kh9_mc(add_sfs=False, cam_csv='camera_defs.csv', overwrite=False)
 
         for cam in cameras.itertuples():
             foc = int(cam.focal * 1000)
-            if not os.path.exists(os.path.join('Ori-Init', f"AutoCal_Foc-{foc}_{cam.name}.xml")):
+            if not os.path.exists(Path('Ori-Init', f"AutoCal_Foc-{foc}_{cam.name}.xml")):
                 micmac.init_autocal(framesize=(cam.width, cam.height), foc=cam.focal, camname=cam.name)
 
     else:
-        if not os.path.exists(os.path.join('Ori-Init', 'AutoCal_Foc-304800_KH9MC.xml')) or overwrite:
+        if not os.path.exists(Path('Ori-Init', 'AutoCal_Foc-304800_KH9MC.xml')) or overwrite:
             micmac.init_autocal()
 
         if not os.path.exists('MicMac-LocalChantierDescripteur.xml') or overwrite:
             micmac.create_localchantier_xml(add_sfs=add_sfs)
 
-    if not os.path.isfile(os.path.join('Ori-InterneScan', 'MeasuresCamera.xml')) or overwrite:
+    if not os.path.isfile(Path('Ori-InterneScan', 'MeasuresCamera.xml')) or overwrite:
         os.makedirs('Ori-InterneScan', exist_ok=True)
         micmac.generate_measures_files(joined=True)
         shutil.move('MeasuresCamera.xml', 'Ori-InterneScan')

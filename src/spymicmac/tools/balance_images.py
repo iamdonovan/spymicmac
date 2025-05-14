@@ -1,3 +1,4 @@
+from pathlib import Path
 import os
 import argparse
 from glob import glob
@@ -23,7 +24,7 @@ def main():
     for im in imlist:
         print(im)
         img_filt = balance_image(imread(im))
-        imsave(os.path.join('balanced', im), img_filt)
+        imsave(Path('balanced', im), img_filt)
 
 
 if __name__ == "__main__":

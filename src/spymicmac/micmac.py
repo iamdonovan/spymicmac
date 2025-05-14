@@ -241,13 +241,13 @@ def get_gcp_meas(im_name, meas_name, in_dir, E, nodist=None, gcp_name='GCP'):
     :return: **this_im_meas** (*lxml.builder.ElementMaker*) -- an ElementMaker object with the GCP location in
       the image.
     """
-    im = gdal.Open(os.path.sep.join([in_dir, im_name]))
+    im = gdal.Open(Path(in_dir, im_name))
     maxj = im.RasterXSize
     maxi = im.RasterYSize
 
-    impts = pd.read_csv(os.path.join(in_dir, meas_name), sep=' ', names=['j', 'i'])
+    impts = pd.read_csv(Path(in_dir, meas_name), sep=' ', names=['j', 'i'])
     if nodist is not None:
-        impts_nodist = pd.read_csv(os.path.join(in_dir, nodist), sep=' ', names=['j', 'i'])
+        impts_nodist = pd.read_csv(Path(in_dir, nodist), sep=' ', names=['j', 'i'])
 
     this_im_mes = E.MesureAppuiFlottant1Im(E.NameIm(im_name))
     for ind, row in impts.iterrows():
@@ -342,7 +342,7 @@ def write_measures_im(meas_df, fn_img):
     outxml = E.SetOfMesureAppuisFlottants(ImMes)
 
     tree = etree.ElementTree(outxml)
-    tree.write(os.path.join('Ori-InterneScan', 'MeasuresIm-' + fn_img + '.xml'), pretty_print=True,
+    tree.write(Path('Ori-InterneScan', 'MeasuresIm-' + fn_img + '.xml'), pretty_print=True,
                xml_declaration=True, encoding="utf-8")
 
 
@@ -442,7 +442,7 @@ def create_measurescamera_xml(fn_csv, ori='InterneScan', translate=False, name='
     tree = etree.ElementTree(outxml)
 
     os.makedirs(f'Ori-{ori}', exist_ok=True)
-    tree.write(os.path.join(f'Ori-{ori}', 'MeasuresCamera.xml'), pretty_print=True,
+    tree.write(Path(f'Ori-{ori}', 'MeasuresCamera.xml'), pretty_print=True,
                xml_declaration=True, encoding="utf-8")
 
 
@@ -465,7 +465,7 @@ def estimate_measures_camera(approx, pairs, ori='InterneScan', scan_res=2.5e-5, 
     all_meas = []
 
     for fn_meas in meas_list:
-        meas = parse_im_meas(os.path.join(f'Ori-{ori}', fn_meas)).set_index('name')
+        meas = parse_im_meas(Path(f'Ori-{ori}', fn_meas)).set_index('name')
 
         collinear = [LineString(meas.loc[p, ['j', 'i']].values) for p in pairs]
 
@@ -738,7 +738,7 @@ def init_autocal(imsize=(32200, 15400), framesize=(460, 220), foc=304.8, camname
     )
 
     tree = etree.ElementTree(outxml)
-    tree.write(os.path.join('Ori-Init', f"AutoCal_Foc-{int(foc*1000)}_{camname}.xml"),
+    tree.write(Path('Ori-Init', f"AutoCal_Foc-{int(foc*1000)}_{camname}.xml"),
                pretty_print=True, xml_declaration=True, encoding="utf-8")
 
 
@@ -782,7 +782,7 @@ def write_auto_mesures(gcps, sub, outdir, outname='AutoMeasures'):
     :param str outdir: the output directory to save the files to.
     :param str outname: the base name of the file to create (default: AutoMeasures).
     """
-    with open(os.path.join(outdir, f"{outname}{sub}.txt"), 'w') as f:
+    with open(Path(outdir, f"{outname}{sub}.txt"), 'w') as f:
         for row in gcps.itertuples():
             print(f"{row.rel_x} {row.rel_y} {row.el_rel}", file=f)
 
@@ -845,7 +845,7 @@ def write_image_mesures(imlist, gcps, outdir='.', sub='', ort_dir='Ortho-MEC-Rel
         MesureSet.append(this_im_mes)
 
     tree = etree.ElementTree(MesureSet)
-    tree.write(os.path.join(outdir, f"{outname}{sub}-S2D.xml"),
+    tree.write(Path(outdir, f"{outname}{sub}-S2D.xml"),
                pretty_print=True, xml_declaration=True, encoding="utf-8")
 
 
@@ -859,7 +859,7 @@ def write_auto_gcps(gcp_df, sub, outdir, utm_zone, outname='AutoGCPs'):
     :param str utm_zone: the UTM zone name (e.g., 8N).
     :param str outname: the name to use for the GCPs file (default: AutoGCPs.txt)
     """
-    with open(os.path.join(outdir, f"{outname}{sub}.txt"), 'w') as f:
+    with open(Path(outdir, f"{outname}{sub}.txt"), 'w') as f:
         # print('#F= N X Y Z Ix Iy Iz', file=f)
         print('#F= N X Y Z', file=f)
         print(f"#Here the coordinates are in UTM {utm_zone} X=Easting Y=Northing Z=Altitude", file=f)
@@ -1012,7 +1012,7 @@ def get_tapas_residuals(ori):
     :param str ori: the name of the Ori directory to read the residuals from (e.g., 'Relative' for Ori-Relative)
     :return: img_df (DataFrame) -- a DataFrame with image names and residuals
     """
-    root = ET.parse(os.path.join(f'Ori-{ori}', 'Residus.xml'))
+    root = ET.parse(Path(f'Ori-{ori}', 'Residus.xml'))
     last = root.findall('Iters')[-1]
 
     img_df = pd.DataFrame()
@@ -1049,10 +1049,10 @@ def find_empty_homol(imlist=None, dir_homol='Homol', pattern='OIS*.tif'):
 
 
 def _get_homol(fn_img, dir_homol='Homol'):
-    if not os.path.exists(os.path.join(dir_homol, 'Pastis' + fn_img)):
+    if not os.path.exists(Path(dir_homol, 'Pastis' + fn_img)):
         return []
     else:
-        return sorted([h.split('.dat')[0] for h in glob('*.dat', root_dir=os.path.join(dir_homol, 'Pastis' + fn_img))])
+        return sorted([h.split('.dat')[0] for h in glob('*.dat', root_dir=Path(dir_homol, 'Pastis' + fn_img))])
 
 
 # adapted from the fantastic answer provided by
@@ -1150,7 +1150,7 @@ def move_bad_tapas(ori):
 
     :param str ori: the orientation directory to read the residuals file from (e.g., 'Ori-Relative').
     """
-    root = ET.parse(os.path.join(ori, 'Residus.xml')).getroot()
+    root = ET.parse(Path(ori, 'Residus.xml')).getroot()
     res_df = pd.DataFrame()
 
     nimgs = [len(a.findall('OneIm')) for a in root.findall('Iters')]
@@ -1207,7 +1207,7 @@ def batch_saisie_fids(imlist, flavor='qt', fn_cam=None, clean=True, gamma=None):
     os.makedirs('Tmp-SaisieAppuis', exist_ok=True)
 
     if fn_cam is None:
-        fn_cam = os.path.join('Ori-InterneScan', 'MeasuresCamera.xml')
+        fn_cam = Path('Ori-InterneScan', 'MeasuresCamera.xml')
 
     if os.path.exists(fn_cam):
         measures_cam = parse_im_meas(fn_cam)
@@ -1228,17 +1228,17 @@ def batch_saisie_fids(imlist, flavor='qt', fn_cam=None, clean=True, gamma=None):
         saisie = 'SaisieAppuisInit'
 
     for fn_img in imlist:
-        if os.path.exists(os.path.join('Ori-InterneScan', f'MeasuresIm-{fn_img}.xml')):
+        if os.path.exists(Path('Ori-InterneScan', f'MeasuresIm-{fn_img}.xml')):
             if clean:
                 tmplist = glob('*' + fn_img + '*', root_dir='Tmp-SaisieAppuis')
                 for fn_tmp in tmplist:
-                    os.remove(os.path.join('Tmp-SaisieAppuis', fn_tmp))
+                    os.remove(Path('Tmp-SaisieAppuis', fn_tmp))
 
-            shutil.copy(os.path.join('Ori-InterneScan', f'MeasuresIm-{fn_img}.xml'),
+            shutil.copy(Path('Ori-InterneScan', f'MeasuresIm-{fn_img}.xml'),
                         f'MeasuresIm-{fn_img}-S2D.xml')
 
             shutil.copy('Tmp-SL-Glob.xml',
-                        os.path.join('Tmp-SaisieAppuis', f'Tmp-SL-Glob-MeasuresIm-{fn_img}.xml'))
+                        Path('Tmp-SaisieAppuis', f'Tmp-SL-Glob-MeasuresIm-{fn_img}.xml'))
 
         saisie_args = ['mm3d', saisie, fn_img, 'NONE', 'id_fiducials.txt', f'MeasuresIm-{fn_img}.xml']
 
@@ -1248,7 +1248,7 @@ def batch_saisie_fids(imlist, flavor='qt', fn_cam=None, clean=True, gamma=None):
         p = subprocess.Popen(saisie_args)
         p.wait()
 
-        shutil.move(f'MeasuresIm-{fn_img}-S2D.xml', os.path.join('Ori-InterneScan', f'MeasuresIm-{fn_img}.xml'))
+        shutil.move(f'MeasuresIm-{fn_img}-S2D.xml', Path('Ori-InterneScan', f'MeasuresIm-{fn_img}.xml'))
         os.remove(f'MeasuresIm-{fn_img}-S3D.xml')
 
     os.remove('Tmp-SL-Glob.xml')
@@ -1523,11 +1523,11 @@ def bascule(in_gcps, outdir, img_pattern, sub, ori, outori='TerrainRelAuto',
 
     p = subprocess.Popen(['mm3d', 'GCPBascule', img_pattern, ori,
                           outori + sub,
-                          os.path.join(outdir, fn_gcp),
-                          os.path.join(outdir, fn_meas)], stdin=echo.stdout)
+                          Path(outdir, fn_gcp),
+                          Path(outdir, fn_meas)], stdin=echo.stdout)
     p.wait()
 
-    out_gcps = get_bascule_residuals(os.path.join(f"Ori-{outori}{sub}",
+    out_gcps = get_bascule_residuals(Path(f"Ori-{outori}{sub}",
                                                   'Result-GCP-Bascule.xml'), in_gcps)
     return out_gcps
 
@@ -1749,14 +1749,14 @@ def mask_invalid_els(dir_mec, fn_dem, fn_mask, ori, match_pattern='OIS.*tif', zo
     ind = np.argmax(etapes)
     etape0 = max(etapes)
 
-    fn_auto = os.path.join(dir_mec, f"AutoMask_STD-MALT_Num_{etape0 - 1}.tif")
+    fn_auto = Path(dir_mec, f"AutoMask_STD-MALT_Num_{etape0 - 1}.tif")
 
     print(fn_auto)
     print(zlist[ind])
 
-    dem = gu.Raster(os.path.join(dir_mec, zlist[ind]))
+    dem = gu.Raster(Path(dir_mec, zlist[ind]))
 
-    automask = gu.Raster(os.path.join(dir_mec, f"AutoMask_STD-MALT_Num_{etape0 - 1}.tif"))
+    automask = gu.Raster(Path(dir_mec, f"AutoMask_STD-MALT_Num_{etape0 - 1}.tif"))
 
     shutil.copy(zlist[ind].replace('tif', 'tfw'),
                 fn_auto.replace('tif', 'tfw'))
@@ -1804,7 +1804,7 @@ def save_gcps(in_gcps, outdir, utmstr, sub, fn_gcp='AutoGCPs', fn_meas='AutoMeas
     :param str fn_meas: the filename pattern for the measures file. The file that will be loaded will be
         fn_meas + sub + '-S2D.xml' (e.g., default: AutoMeasures -> AutoMeasures_block0-S2D.xml)
     """
-    in_gcps.to_file(os.path.join(outdir, fn_gcp + sub + '.shp'))
+    in_gcps.to_file(Path(outdir, fn_gcp + sub + '.shp'))
     write_auto_gcps(in_gcps, sub, outdir, utmstr, outname=fn_gcp)
 
     if os.name == 'nt':
@@ -1813,10 +1813,10 @@ def save_gcps(in_gcps, outdir, utmstr, sub, fn_gcp='AutoGCPs', fn_meas='AutoMeas
         echo = subprocess.Popen('echo', stdout=subprocess.PIPE)
 
     p = subprocess.Popen(['mm3d', 'GCPConvert', 'AppInFile',
-                          os.path.join(outdir, fn_gcp + sub + '.txt')], stdin=echo.stdout)
+                          Path(outdir, fn_gcp + sub + '.txt')], stdin=echo.stdout)
     p.wait()
 
-    auto_root = ET.parse(os.path.join(outdir, fn_meas + sub + '-S2D.xml')).getroot()
+    auto_root = ET.parse(Path(outdir, fn_meas + sub + '-S2D.xml')).getroot()
     for im in auto_root.findall('MesureAppuiFlottant1Im'):
         for pt in im.findall('OneMesureAF1I'):
             if pt.find('NamePt').text not in in_gcps.id.values:
@@ -1824,7 +1824,7 @@ def save_gcps(in_gcps, outdir, utmstr, sub, fn_gcp='AutoGCPs', fn_meas='AutoMeas
 
     # save AutoMeasures
     out_xml = ET.ElementTree(auto_root)
-    out_xml.write(os.path.join(outdir, fn_meas + sub + '-S2D.xml'),
+    out_xml.write(Path(outdir, fn_meas + sub + '-S2D.xml'),
                   encoding="utf-8", xml_declaration=True)
 
 
@@ -1868,7 +1868,7 @@ def mosaic_micmac_tiles(filename, dirname='.'):
     :param str filename: MicMac filename to mosaic together
     :param str dirname: Directory containing images to Mosaic (default: .)
     """
-    filelist = glob(os.path.sep.join([dirname, f"{filename}_Tile*"]))
+    filelist = glob(f"{filename}_Tile*", root_dir=dirname)
     if len(filelist) == 0:
         print(f"No tiles found for {Path(dirname, filename)}; exiting.")
         return
@@ -1900,7 +1900,7 @@ def arrange_tiles(flist, filename, dirname='.'):
 def _gdal_calc():
     if os.name == 'nt':
         # if we're on windows, call gdal_calc.py with the currently active python
-        return ['python', os.path.join(sys.prefix, 'Scripts', 'gdal_calc.py')]
+        return ['python', Path(sys.prefix, 'Scripts', 'gdal_calc.py')]
     else:
         # if we're not on windows, call gdal_calc.py as a shell script
         return ['gdal_calc.py']
@@ -1931,36 +1931,36 @@ def post_process(projstr, out_name, dirmec, do_ortho=True, ind_ortho=False):
     level = int(re.findall(r'\d+', dem_list[-1].split('_')[1])[0])
     zoomf = int(re.findall(r'\d+', dem_list[-1].split('_')[2])[0])
 
-    shutil.copy(os.path.join(dirmec, f'Z_Num{level}_DeZoom{zoomf}_STD-MALT.tfw'),
-                os.path.join(dirmec, f'Correl_STD-MALT_Num_{level-1}.tfw'))
+    shutil.copy(Path(dirmec, f'Z_Num{level}_DeZoom{zoomf}_STD-MALT.tfw'),
+                Path(dirmec, f'Correl_STD-MALT_Num_{level-1}.tfw'))
 
-    shutil.copy(os.path.join(dirmec, f'Z_Num{level}_DeZoom{zoomf}_STD-MALT.tfw'),
-                os.path.join(dirmec, f'AutoMask_STD-MALT_Num_{level-1}.tfw'))
+    shutil.copy(Path(dirmec, f'Z_Num{level}_DeZoom{zoomf}_STD-MALT.tfw'),
+                Path(dirmec, f'AutoMask_STD-MALT_Num_{level-1}.tfw'))
 
-    if _needs_mosaic(os.path.join(dirmec, f"Correl_STD-MALT_Num_{level-1}.tif")):
+    if _needs_mosaic(Path(dirmec, f"Correl_STD-MALT_Num_{level-1}.tif")):
         mosaic_micmac_tiles(f"Correl_STD-MALT_Num_{level-1}", dirmec)
 
-    if _needs_mosaic(os.path.join(dirmec, f"Z_Num{level}_DeZoom{zoomf}_STD-MALT.tif")):
+    if _needs_mosaic(Path(dirmec, f"Z_Num{level}_DeZoom{zoomf}_STD-MALT.tif")):
         mosaic_micmac_tiles(f"Z_Num{level}_DeZoom{zoomf}_STD-MALT", dirmec)
 
     subprocess.Popen(['gdal_translate', '-a_nodata', '0', '-a_srs', projstr,
-                      os.path.join(dirmec, f'Correl_STD-MALT_Num_{level-1}.tif'),
+                      Path(dirmec, f'Correl_STD-MALT_Num_{level-1}.tif'),
                       'tmp_corr.tif']).wait()
 
     subprocess.Popen(['gdal_translate', '-a_srs', projstr,
-                      os.path.join(dirmec, f'Z_Num{level}_DeZoom{zoomf}_STD-MALT.tif'),
+                      Path(dirmec, f'Z_Num{level}_DeZoom{zoomf}_STD-MALT.tif'),
                       'tmp_geo.tif']).wait()
 
     subprocess.Popen(['gdal_translate', '-a_nodata', '0', '-a_srs', projstr,
-                      os.path.join(dirmec, f'AutoMask_STD-MALT_Num_{level-1}.tif'),
+                      Path(dirmec, f'AutoMask_STD-MALT_Num_{level-1}.tif'),
                       'tmp_mask.tif']).wait()
 
     subprocess.Popen(_gdal_calc() + ['--quiet', '-A', 'tmp_mask.tif', '-B', 'tmp_geo.tif',
                       f"--outfile={Path('post_processed', f"{out_name}_Z.tif")}",
                       '--calc="B*(A>0)"', '--NoDataValue=-9999']).wait()
 
-    subprocess.Popen(['gdaldem', 'hillshade', os.path.join('post_processed', f'{out_name}_Z.tif'),
-                      os.path.join('post_processed', f'{out_name}_HS.tif')]).wait()
+    subprocess.Popen(['gdaldem', 'hillshade', Path('post_processed', f'{out_name}_Z.tif'),
+                      Path('post_processed', f'{out_name}_HS.tif')]).wait()
 
     subprocess.Popen(_gdal_calc() + ['--quiet', '-A', 'tmp_corr.tif',
                       f"--outfile={Path('post_processed', f"{out_name}_CORR.tif")}",
@@ -1973,13 +1973,13 @@ def post_process(projstr, out_name, dirmec, do_ortho=True, ind_ortho=False):
 
     # now, mask the ortho image(s)
     if do_ortho:
-        fn_ortho = os.path.join('Ortho-' + dirmec, 'Orthophotomosaic.tif')
+        fn_ortho = Path('Ortho-' + dirmec, 'Orthophotomosaic.tif')
 
         if _needs_mosaic(fn_ortho):
             mosaic_micmac_tiles('Orthophotomosaic', 'Ortho-' + dirmec)
 
         subprocess.Popen(['gdal_translate', '-a_nodata', '0', '-a_srs', projstr, fn_ortho,
-                          os.path.join('post_processed', f'{out_name}_Ortho.tif')]).wait()
+                          Path('post_processed', f'{out_name}_Ortho.tif')]).wait()
 
     if ind_ortho:
         imlist = sorted(glob('OIS*.tif'))
@@ -2000,9 +2000,9 @@ def _needs_mosaic(fn_img):
 
 
 def _mask_ortho(fn_img, out_name, dirmec, projstr):
-    fn_ortho = os.path.join('-'.join(['Ortho', dirmec]), '_'.join(['Ort', fn_img]))
-    fn_incid = os.path.join('-'.join(['Ortho', dirmec]), '_'.join(['Incid', fn_img]))
-    fn_mask = os.path.join('-'.join(['Ortho', dirmec]), '_'.join(['Mask', fn_img]))
+    fn_ortho = Path('-'.join(['Ortho', dirmec]), '_'.join(['Ort', fn_img]))
+    fn_incid = Path('-'.join(['Ortho', dirmec]), '_'.join(['Incid', fn_img]))
+    fn_mask = Path('-'.join(['Ortho', dirmec]), '_'.join(['Mask', fn_img]))
 
     shutil.copy(fn_ortho.replace('tif', 'tfw'), fn_mask.replace('tif', 'tfw'))
 
@@ -2040,16 +2040,16 @@ def get_autogcp_locations(ori, meas_file, imlist):
 
     # autocals = glob('AutoCal*.xml', root_dir=nodist)
     # for autocal in autocals:
-    #    _remove_distortion_coeffs(os.path.join(nodist, autocal))
+    #    _remove_distortion_coeffs(Path(nodist, autocal))
 
     for im in imlist:
         # _update_autocal(nodist, im)
 
-        # p = subprocess.Popen(['mm3d', 'XYZ2Im', os.path.join(nodist, f'Orientation-{im}.xml'),
+        # p = subprocess.Popen(['mm3d', 'XYZ2Im', Path(nodist, f'Orientation-{im}.xml'),
         #                       meas_file, f'NoDist-{im}.txt'])
         # p.wait()
 
-        p = subprocess.Popen(['mm3d', 'XYZ2Im', os.path.join(ori, f'Orientation-{im}.xml'),
+        p = subprocess.Popen(['mm3d', 'XYZ2Im', Path(ori, f'Orientation-{im}.xml'),
                               meas_file, f'Auto-{im}.txt'])
         p.wait()
 
@@ -2068,11 +2068,11 @@ def _remove_distortion_coeffs(fn_xml):
 
 
 def _update_autocal(ori, im):
-    fn_xml = os.path.join(ori, f'Orientation-{im}.xml')
+    fn_xml = Path(ori, f'Orientation-{im}.xml')
     root = ET.parse(fn_xml).getroot()
 
     old_autocal = root.find('OrientationConique').find('FileInterne').text
-    old_autocal = os.path.join(ori, os.path.basename(old_autocal))
+    old_autocal = Path(ori, os.path.basename(old_autocal))
 
     root.find('OrientationConique').find('FileInterne').text = old_autocal
 

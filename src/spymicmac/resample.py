@@ -2,6 +2,7 @@
 spymicmac.resample is a collection of tools for resampling images
 """
 import os
+from pathlib import Path
 import multiprocessing as mp
 import PIL.Image
 from osgeo import gdal
@@ -36,8 +37,8 @@ def resample_hex(fn_img, scale, ori='InterneScan', alg=gdal.GRA_Bilinear, tps=Tr
     :param bool tps: use a thin plate spline transformer to transform based on reseau grid (default: False)
     :param int order: the order (1-3) of polynomial GCP interpolation (default: not used)
     """
-    cam_meas = micmac.parse_im_meas(os.path.join(f"Ori-{ori}", 'MeasuresCamera.xml'))
-    img_meas = micmac.parse_im_meas(os.path.join(f"Ori-{ori}", f"MeasuresIm-{fn_img}.xml"))
+    cam_meas = micmac.parse_im_meas(Path(f"Ori-{ori}", 'MeasuresCamera.xml'))
+    img_meas = micmac.parse_im_meas(Path(f"Ori-{ori}", f"MeasuresIm-{fn_img}.xml"))
 
     all_meas = img_meas.set_index('name').join(cam_meas.set_index('name'), lsuffix='_img', rsuffix='_cam')
     all_meas['i_cam'] *= scale
@@ -237,9 +238,9 @@ def _fiducials_wrapper(args):
 
 def _fiducials(fn_img=None, scale=None, fn_cam=None, transform=AffineTransform):
     print(fn_img)
-    meas = micmac.parse_im_meas(os.path.join('Ori-InterneScan', f'MeasuresIm-{fn_img}.xml'))
+    meas = micmac.parse_im_meas(Path('Ori-InterneScan', f'MeasuresIm-{fn_img}.xml'))
     if fn_cam is None:
-        measures_cam = micmac.parse_im_meas(os.path.join('Ori-InterneScan', 'MeasuresCamera.xml'))
+        measures_cam = micmac.parse_im_meas(Path('Ori-InterneScan', 'MeasuresCamera.xml'))
     else:
         measures_cam = micmac.parse_im_meas(fn_cam)
 
