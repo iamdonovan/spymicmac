@@ -13,6 +13,7 @@ import geoutils as gu
 from glob import glob
 import pandas as pd
 from rtree import index
+from scipy import stats
 from shapely.ops import unary_union
 from shapely.geometry.point import Point
 from skimage.measure import ransac
@@ -31,6 +32,16 @@ def nmad(values, nfact=1.4826):
     """
     m = np.nanmedian(values)
     return nfact * np.nanmedian(np.abs(values - m))
+
+
+def rms(values):
+    """
+    Calculate the root mean square (rms) of an array of values.
+
+    :param array-like values: the values to use
+    :returns: rms of the input values
+    """
+    return np.sqrt(np.nanmean(np.asarray(values) ** 2))
 
 
 def _sliding_window_filter(img_shape, pts_df, winsize, stepsize=None, mindist=2000, how='residual', is_ascending=True):
@@ -318,6 +329,55 @@ def _read_gcps(fn_gcp, ref_img):
 
     return gcps
 
+def _resid_subplot(ax, gdf, cols, names, colors, styles):
+    lower = np.floor(min(gdf[cols].min()))
+    upper = np.ceil(max(gdf[cols].max()))
+
+    bins = np.linspace(lower, upper, 100)
+
+    for res, dd, cc, ls in zip(cols, names, colors, styles):
+        density = stats.gaussian_kde(gdf[res])
+        ax.plot(bins, density(bins), label=dd, linewidth=2, color=cc, linestyle=ls)
+
+    ax.legend()
+    ax.set_xlabel('residual (m)')
+    ax.set_ylabel('frequency')
+
+    return ax
+
+
+def _plot_residuals(gdf, res='camp'):
+    fig, axs = plt.subplots(1, 2, figsize=(10, 4), sharey=True)
+
+    if res != '':
+        dcols = [f"{res}_{dd}" for dd in ['xres', 'yres', 'zres']]
+        ecols = ['camp_xy', 'camp_dist']
+    else:
+        dcols = ['xres', 'yres', 'zres']
+        ecols = ['res_xy', 'res_dist']
+
+    _resid_subplot(axs[0], gdf, dcols, ['x', 'y', 'z'], ['0.2', '0.6', 'k'], ['-', '--', '-.'])
+    _resid_subplot(axs[1], gdf, ecols, ['plani', '3d'], ['k', '0.5'], ['--', '-'])
+
+    locs = [(0.05, 0.92), (0.05, 0.85), (0.05, 0.78)]
+    xyz_stats = '\n'.join([f"rms$_{name}$: {rms(gdf[res]):.1f}" for res, name in zip(dcols, 'xyz')])
+
+    axs[0].text(0.05, 0.95, xyz_stats, transform=axs[0].transAxes, fontsize=10, va='top', family='monospace',
+                bbox={'boxstyle': 'round', 'facecolor': 'w', 'alpha': 0.8})
+
+
+    stats_3d = '\n'.join([f"3d mean: {gdf[ecols[-1]].mean():.1f}",
+                          f"3d med : {gdf[ecols[-1]].median():.1f}",
+                          f"3d rms : {rms(gdf[ecols[-1]]):.1f}"])
+
+    axs[1].text(0.05, 0.95, stats_3d, transform=axs[1].transAxes, fontsize=10, va='top', family='monospace',
+                bbox={'boxstyle': 'round', 'facecolor': 'w', 'alpha': 0.8})
+
+
+    axs[1].set_ylabel('')
+
+    return fig
+
 
 def register_relative(dirmec, fn_dem, fn_ref=None, fn_ortho=None, glacmask=None, landmask=None, footprints=None,
                       im_subset=None, block_num=None, subscript=None, ori='Relative', ortho_res=8.,
@@ -593,8 +653,8 @@ def register_relative(dirmec, fn_dem, fn_ref=None, fn_ortho=None, glacmask=None,
         cps.drop(['xres', 'yres', 'zres', 'residual', 'res_dist'], axis=1, inplace=True)
 
         cps = cps.merge(cp_resids, left_on='id', right_on='id')
-        cps['res_dist'] = np.sqrt(cps.xres ** 2 + cps.yres ** 2)
-        cps['residual'] = np.sqrt(cps.xres ** 2 + cps.yres ** 2 + cps.zres ** 2)
+        cps['res_xy'] = np.sqrt(cps.xres ** 2 + cps.yres ** 2)
+        cps['res_dist'] = np.sqrt(cps.xres ** 2 + cps.yres ** 2 + cps.zres ** 2)
 
         cps.to_file(Path(out_dir, f"AutoCPs{subscript}.shp"))
 
@@ -621,6 +681,15 @@ def register_relative(dirmec, fn_dem, fn_ref=None, fn_ortho=None, glacmask=None,
 
     fig2.savefig(Path(out_dir, f"world_gcps{subscript}.png"), bbox_inches='tight', dpi=200)
     plt.close(fig2)
+
+    fig = _plot_residuals(gcps, res='camp')
+    fig.savefig(Path(out_dir, f"gcp_residuals_plot{subscript}.png"), bbox_inches='tight', dpi=200)
+    plt.close(fig)
+
+    if use_cps:
+        fig = _plot_residuals(cps, res='')
+        fig.savefig(Path(out_dir, f"cp_residuals_plot{subscript}.png"), bbox_inches='tight', dpi=200)
+        plt.close(fig)
 
     print('cleaning up.')
 
