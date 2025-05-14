@@ -63,8 +63,8 @@ def combine_block_measures(blocks, meas_out='AutoMeasures', gcp_out='AutoGCPs',
 
     for b in blocks:
         # load dirname/AutoMeasures_block{b}-S2D.xml
-        this_root = ET.parse(os.path.join(dirname, fn_mes + '{}-S2D.xml'.format(b))).getroot()
-        this_gcp = gpd.read_file(os.path.join(dirname, fn_gcp + '{}.shp'.format(b)))
+        this_root = ET.parse(os.path.join(dirname, fn_mes + f"{b}-S2D.xml")).getroot()
+        this_gcp = gpd.read_file(os.path.join(dirname, fn_gcp + f"{b}.shp"))
 
         if share_gcps:
             this_mes_dict = dict()
@@ -181,7 +181,7 @@ def load_orientation(fn_img, ori):
         - **altisol** (*float*) -- the 'AltiSol' value from the xml file.
 
     """
-    ori_root = ET.parse(os.path.join(ori, 'Orientation-{}.xml'.format(fn_img))).getroot()
+    ori_root = ET.parse(os.path.join(ori, f"Orientation-{fn_img}.xml")).getroot()
     if ori_root.tag != 'OrientationConique':
         ori_coniq = ori_root.find('OrientationConique')
     else:
@@ -311,7 +311,7 @@ def update_center(fn_img, ori, new_center):
     :param str ori: the name of the orientation directory (e.g., 'Ori-Relative')
     :param list new_center: a list of the new camera position [x, y, z]
     """
-    ori_root = ET.parse(os.path.join(ori, 'Orientation-{}.xml'.format(fn_img))).getroot()
+    ori_root = ET.parse(os.path.join(ori, f"Orientation-{fn_img}.xml")).getroot()
     if ori_root.tag != 'OrientationConique':
         ori_coniq = ori_root.find('OrientationConique')
     else:
@@ -320,7 +320,7 @@ def update_center(fn_img, ori, new_center):
     ori_coniq.find('Externe').find('Centre').text = ' '.join([str(f) for f in new_center])
 
     tree = ET.ElementTree(ori_root)
-    tree.write(os.path.join(ori, 'Orientation-{}.xml'.format(fn_img)),
+    tree.write(os.path.join(ori, f"Orientation-{fn_img}.xml"),
                encoding="utf-8", xml_declaration=True)
 
 
@@ -332,7 +332,7 @@ def update_pose(fn_img, ori, new_rot):
     :param str ori: the name of the orientation directory (e.g., 'Ori-Relative')
     :param array-like new_rot: the new 3x3 rotation matrix
     """
-    ori_root = ET.parse(os.path.join(ori, 'Orientation-{}.xml'.format(fn_img))).getroot()
+    ori_root = ET.parse(os.path.join(ori, f"Orientation-{fn_img}.xml")).getroot()
     if ori_root.tag != 'OrientationConique':
         ori_coniq = ori_root.find('OrientationConique')
     else:
@@ -340,10 +340,10 @@ def update_pose(fn_img, ori, new_rot):
 
     for ii, row in enumerate(new_rot):
         ori_coniq.find('Externe').find('ParamRotation')\
-            .find('CodageMatr').find('L{}'.format(ii+1)).text = ' '.join([str(f) for f in row])
+            .find('CodageMatr').find(f"L{ii+1}").text = ' '.join([str(f) for f in row])
 
     tree = ET.ElementTree(ori_root)
-    tree.write(os.path.join(ori, 'Orientation-{}.xml'.format(fn_img)),
+    tree.write(os.path.join(ori, f"Orientation-{fn_img}.xml"),
                encoding="utf-8", xml_declaration=True)
 
 
@@ -356,7 +356,7 @@ def update_params(fn_img, ori, profondeur, altisol):
     :param float profondeur: the new profondeur value
     :param float altisol: the new altisol value
     """
-    ori_root = ET.parse(os.path.join(ori, 'Orientation-{}.xml'.format(fn_img))).getroot()
+    ori_root = ET.parse(os.path.join(ori, f"Orientation-{fn_img}.xml")).getroot()
     if ori_root.tag != 'OrientationConique':
         ori_coniq = ori_root.find('OrientationConique')
     else:
@@ -366,7 +366,7 @@ def update_params(fn_img, ori, profondeur, altisol):
     ori_coniq.find('Externe').find('Profondeur').text = str(profondeur)
 
     tree = ET.ElementTree(ori_root)
-    tree.write(os.path.join(ori, 'Orientation-{}.xml'.format(fn_img)),
+    tree.write(os.path.join(ori, f"Orientation-{fn_img}.xml"),
                encoding="utf-8", xml_declaration=True)
 
 
@@ -472,20 +472,20 @@ def fix_orientation(cameras, ori_df, ori, nsig=4):
         print('Unable to estimate transformation. Trying with RANSAC.')
         model, inliers = ransac((join[['xabs', 'yabs']].values, join[['xrel', 'yrel']].values), AffineTransform,
                                 min_samples=10, residual_threshold=10, max_trials=10000)
-        print('transformation found with {} inliers'.format(np.count_nonzero(inliers)))
+        print(f"transformation found with {np.count_nonzero(inliers)} inliers")
 
     res = model.residuals(join[['xabs', 'yabs']].values, join[['xrel', 'yrel']].values)
     outliers = np.abs(res - np.nanmedian(res)) > nsig * register.nmad(res)
 
     if np.count_nonzero(outliers) > 0:
         interp = LinearNDInterpolator(join.loc[~outliers, ['xrel', 'yrel']].values, join.loc[~outliers, 'zrel'])
-        print('found {} outliers using nsig={}'.format(np.count_nonzero(outliers), nsig))
+        print(f"found {np.count_nonzero(outliers)} outliers using nsig={nsig}")
         for name, row in join[outliers].iterrows():
             new_x, new_y = model(row[['xabs', 'yabs']].values)[0]
             new_z = interp(new_x, new_y)
 
-            print('new location for {}: {}, {}, {}'.format(name, new_x, new_y, new_z))
-            print('writing new Orientation file for {}'.format(name))
+            print(f"new location for {name}: {new_x}, {new_y}, {new_z}")
+            print(f"writing new Orientation file for {name}")
             update_center(name, ori, [new_x, new_y, new_z])
 
 
@@ -551,7 +551,7 @@ def transform_centers(rel, ref, imlist, footprints, ori, imgeom=True):
     else:
         model, inliers = _transform(ref_pts, rel_pts)
 
-    print('{} inliers for center transformation'.format(np.count_nonzero(inliers)))
+    print(f"{np.count_nonzero(inliers)} inliers for center transformation")
     return model, inliers, join
 
 

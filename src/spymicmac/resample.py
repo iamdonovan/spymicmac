@@ -36,8 +36,8 @@ def resample_hex(fn_img, scale, ori='InterneScan', alg=gdal.GRA_Bilinear, tps=Tr
     :param bool tps: use a thin plate spline transformer to transform based on reseau grid (default: False)
     :param int order: the order (1-3) of polynomial GCP interpolation (default: not used)
     """
-    cam_meas = micmac.parse_im_meas(os.path.join('Ori-{}'.format(ori), 'MeasuresCamera.xml'))
-    img_meas = micmac.parse_im_meas(os.path.join('Ori-{}'.format(ori), 'MeasuresIm-{}.xml'.format(fn_img)))
+    cam_meas = micmac.parse_im_meas(os.path.join(f"Ori-{ori}", 'MeasuresCamera.xml'))
+    img_meas = micmac.parse_im_meas(os.path.join(f"Ori-{ori}", f"MeasuresIm-{fn_img}.xml"))
 
     all_meas = img_meas.set_index('name').join(cam_meas.set_index('name'), lsuffix='_img', rsuffix='_cam')
     all_meas['i_cam'] *= scale
@@ -58,18 +58,18 @@ def resample_hex(fn_img, scale, ori='InterneScan', alg=gdal.GRA_Bilinear, tps=Tr
     if order is not None:
         options['polynomialOrder'] = order
 
-    out_ds = gdal.Warp('tmp_{}'.format(fn_img), fn_img, **options)
+    out_ds = gdal.Warp(f"tmp_{fn_img}", fn_img, **options)
 
-    meta_shp = '{"shape": ' + '[{}, {}]'.format(out_ds.RasterYSize, out_ds.RasterXSize) + '}'
+    meta_shp = '{"shape": ' + f"[{out_ds.RasterYSize}, {out_ds.RasterXSize}]" + '}'
     out_ds.SetMetadata({'TIFFTAG_IMAGEDESCRIPTION': meta_shp})
     out_ds.FlushCache()
     out_ds = None
 
-    img = io.imread('tmp_{}'.format(fn_img))
-    io.imsave('OIS-Reech_{}'.format(fn_img), np.flipud(img).astype(np.uint8))
+    img = io.imread(f"tmp_{fn_img}")
+    io.imsave(f"OIS-Reech_{fn_img}", np.flipud(img).astype(np.uint8))
 
-    os.remove('tmp_{}'.format(fn_img))
-    os.remove('{}.aux.xml'.format(fn_img))
+    os.remove(f"tmp_{fn_img}")
+    os.remove(f"{fn_img}.aux.xml")
 
 
 def rotate_from_rails(img, rails):
@@ -84,7 +84,7 @@ def rotate_from_rails(img, rails):
     """
     slope, intercept = np.polyfit(rails[:, 1], rails[:, 0], 1)
     angle = np.rad2deg(np.arctan(slope))
-    print('Calculated angle of rotation: {:.4f}'.format(angle))
+    print(f"Calculated angle of rotation: {angle:.4f}")
 
     return ndimage.rotate(img, angle), angle
 

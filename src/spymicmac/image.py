@@ -406,15 +406,15 @@ def join_hexagon(im_pattern, overlap=2000, block_size=None, blend=True, is_rever
     if is_reversed:
         parts.reverse()
 
-    left = io.imread('{}_{}.tif'.format(im_pattern, parts[0]))
+    left = io.imread(f"{im_pattern}_{parts[0]}.tif")
     for part in parts[1:]:
-        right = io.imread('{}_{}.tif'.format(im_pattern, part))
+        right = io.imread(f"{im_pattern}_{part}.tif")
 
         left = join_halves(left, right, overlap, block_size=block_size, blend=blend)
         if len(parts) > 2:
             io.imsave('tmp_left.tif', left.astype(np.uint8))
 
-    io.imsave('{}.tif'.format(im_pattern), left.astype(np.uint8))
+    io.imsave(f"{im_pattern}.tif", left.astype(np.uint8))
 
     if len(parts) > 2:
         os.remove('tmp_left.tif') # clean up after we're done

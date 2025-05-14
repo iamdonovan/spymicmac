@@ -87,7 +87,7 @@ def find_fiducials(fn_img, templates, fn_cam=None, thresh_tol=0.9, npeaks=5, min
     else:
         _, residuals = _get_residuals(coords_all, measures_cam)
 
-    print('Mean residual: {:.2f} pixels'.format(residuals.mean()))
+    print(f"Mean residual: {residuals.mean():.2f} pixels")
 
     # write the measures
     micmac.write_measures_im(coords_all, fn_img)
@@ -199,7 +199,7 @@ def _fix_fiducials(coords, measures_cam):
     coords.set_index('gcp', inplace=True)
 
     for ind, row in measures_cam.loc[missing].iterrows():
-        print('Predicting location of {}'.format(ind))
+        print(f'Predicting location of {ind}')
         x, y = model.inverse(row[['j', 'i']].values).flatten()
         coords.loc[ind, 'im_col'] = x
         coords.loc[ind, 'im_row'] = y
@@ -230,7 +230,7 @@ def fix_measures_xml(fn_img, fn_cam=None):
     missing = ~measures_cam.index.isin(measures_img.index)
 
     for ind, row in measures_cam.loc[missing].iterrows():
-        print('Predicting location of {}'.format(ind))
+        print(f"Predicting location of {ind}")
         x, y = model.inverse(row[['j', 'i']].values).flatten()
         measures_img.loc[ind, 'j'] = x
         measures_img.loc[ind, 'i'] = y
@@ -239,7 +239,7 @@ def fix_measures_xml(fn_img, fn_cam=None):
                    meas[['j_cam', 'i_cam']].values)
     residuals = model.residuals(meas[['j_img', 'i_img']].values,
                                 meas[['j_cam', 'i_cam']].values)
-    print('Mean residual: {:.2f} pixels'.format(residuals.mean()))
+    print(f"Mean residual: {residuals.mean():.2f} pixels")
 
     measures_img.reset_index(inplace=True)
     measures_img.rename(columns={'name': 'gcp', 'j': 'im_col', 'i': 'im_row'}, inplace=True)
@@ -771,7 +771,7 @@ def match_reseau_grid(img, coords, cross):
 
     grid_df = pd.DataFrame()
     for ii, pr in enumerate(list(zip(II, JJ))):
-        grid_df.loc[ii, 'gcp'] = 'GCP_{}_{}'.format(pr[0], pr[1])
+        grid_df.loc[ii, 'gcp'] = f"GCP_{pr[0]}_{pr[1]}"
         grid_df.loc[ii, 'grid_j'] = left + scale * pr[1] + 0.5 * cross.shape[0]
         grid_df.loc[ii, 'grid_i'] = bot - scale * pr[0] - 1.5 * cross.shape[0]
 
@@ -830,7 +830,7 @@ def remove_crosses(fn_img, nproc=1):
     :param str fn_img: the image filename.
     :param int nproc: the number of subprocesses to use (default: 1).
     """
-    fn_meas = os.path.join('Ori-InterneScan', 'MeasuresIm-{}.xml'.format(fn_img))
+    fn_meas = os.path.join('Ori-InterneScan', f"MeasuresIm-{fn_img}.xml")
     img = io.imread(fn_img)
     gcps = micmac.parse_im_meas(fn_meas)
 
@@ -918,7 +918,7 @@ def find_reseau_grid(fn_img, csize=361, return_val=False):
     :param bool return_val: return a pandas DataFrame of the Reseau mark locations (default: False).
     :return: **gcps_df** (*pandas.DataFrame*) -- a DataFrame of the Reseau mark locations (if return_val=True).
     """
-    print('Reading {}'.format(fn_img))
+    print(f"Reading {fn_img}")
     img = io.imread(fn_img)
     img_lowres = resample.downsample(img, fact=10)
 
@@ -929,11 +929,11 @@ def find_reseau_grid(fn_img, csize=361, return_val=False):
 
     fig = plt.figure(figsize=(7, 12))
     ax = fig.add_subplot(111)
-    ax.imshow(img_lowres, cmap='gray', extent=[0, img.shape[1], img.shape[0], 0])
+    ax.imshow(img_lowres, cmap='gray', extent=(0, img.shape[1], img.shape[0], 0))
     ax.set_xticks([])
     ax.set_yticks([])
 
-    print('Finding grid points in {}...'.format(fn_img))
+    print(f"Finding grid points in {fn_img}...")
     grid_df = find_crosses(img, cross)
 
     model, inliers = ransac((grid_df[['grid_j', 'grid_i']].values, grid_df[['match_j', 'match_i']].values),
@@ -980,9 +980,9 @@ def find_reseau_grid(fn_img, csize=361, return_val=False):
     print('Grid points found.')
     os.makedirs('match_imgs', exist_ok=True)
 
-    print('Mean x residual: {:.2f} pixels'.format(grid_df.loc[~outliers, 'dj'].abs().mean()))
-    print('Mean y residual: {:.2f} pixels'.format(grid_df.loc[~outliers, 'di'].abs().mean()))
-    print('Mean residual: {:.2f} pixels'.format(grid_df.loc[~outliers, 'resid'].mean()))
+    print(f"Mean x residual: {grid_df.loc[~outliers, 'dj'].abs().mean():.2f} pixels")
+    print(f"Mean y residual: {grid_df.loc[~outliers, 'di'].abs().mean():.2f} pixels")
+    print(f"Mean residual: {grid_df.loc[~outliers, 'resid'].mean():.2f} pixels")
 
     ax.quiver(grid_df.match_j, grid_df.match_i, grid_df.dj, grid_df.di, color='r')
     ax.plot(grid_df.match_j[outliers], grid_df.match_i[outliers], 'b+')
@@ -1601,5 +1601,5 @@ def match_halves(left, right, overlap, block_size=None):
     model, inliers = ransac((np.array(src_pts), np.array(dst_pts)), EuclideanTransform,
                         min_samples=10, residual_threshold=0.2, max_trials=25000)
 
-    print('{} tie points found'.format(np.count_nonzero(inliers)))
+    print(f"{np.count_nonzero(inliers)} tie points found")
     return model, np.count_nonzero(inliers)

@@ -24,7 +24,7 @@ def main():
     parser = _argparser()
     args = parser.parse_args()
 
-    imlist = [f.split('_a.tif')[0] for f in glob('{}*a.tif'.format(args.pattern))]
+    imlist = [f.split('_a.tif')[0] for f in glob(f"{args.pattern}*a.tif")]
     imlist.sort()
 
     for im in imlist:

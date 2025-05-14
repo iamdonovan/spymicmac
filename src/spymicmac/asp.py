@@ -82,7 +82,7 @@ def optical_bar_cam(fn_img, flavor, out_name, fprint=None, scan_res=7e-6, mean_e
     :param float scan_res: the image scanning resolution, in m per pixel (e.g., 7 microns -> 7.0e-6)
     :param float mean_el: the mean elevation covered by the image
     """
-    assert flavor in sample_params.keys(), "flavor must be one of {}".format(list(sample_params.keys()))
+    assert flavor in sample_params.keys(), f"flavor must be one of {list(sample_params.keys())}"
     ds = gdal.Open(fn_img)
     width, height = ds.RasterXSize, ds.RasterYSize
     cx, cy = width / 2, height / 2

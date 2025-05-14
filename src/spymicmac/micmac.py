@@ -276,10 +276,10 @@ def get_im_meas(points_df, E, name='gcp', x='im_col', y='im_row'):
     :return: **pt_els** (*list*) -- a list of ElementMaker objects corresponding to each GCP image location.
     """
     pt_els = []
-    for ind, row in points_df.iterrows():
+    for row in points_df.itertuples():
         this_mes = E.OneMesureAF1I(
-                        E.NamePt(row[name]),
-                        E.PtIm('{} {}'.format(row[x], row[y]))
+                        E.NamePt(row.name),
+                        E.PtIm(f"{row.x} {row.y}")
                         )
         pt_els.append(this_mes)
     return pt_els
@@ -377,7 +377,7 @@ def generate_measures_files(joined=False):
     with open('id_fiducial.txt', 'w') as f:
         for i, ind in enumerate(gcp_names):
             row, col = ind
-            gcp_name = 'GCP_{}_{}'.format(row, col)
+            gcp_name = f"GCP_{row}_{col}"
             gcp_df.loc[i, 'gcp'] = gcp_name
             gcp_df.loc[i, 'im_row'] = ij[i, 0]
             gcp_df.loc[i, 'im_col'] = ij[i, 1]
@@ -404,7 +404,7 @@ def generate_measures_files(joined=False):
     with open('id_fiducial.txt', 'w') as f:
         for gcp in gcp_names:
             row, col = gcp
-            print('GCP_{}_{}'.format(row, col), file=f)
+            print(f"GCP_{row}_{col}", file=f)
 
 
 def create_measurescamera_xml(fn_csv, ori='InterneScan', translate=False, name='gcp', x='im_col', y='im_row'):
@@ -714,12 +714,12 @@ def init_autocal(imsize=(32200, 15400), framesize=(460, 220), foc=304.8, camname
     outxml = E.ExportAPERO(
         E.CalibrationInternConique(
             E.KnownConv('eConvApero_DistM2C'),
-                E.PP('{} {}'.format(pp[0], pp[1])),
-                E.F('{}'.format(scale * foc)),
-                E.SzIm('{} {}'.format(imsize[0], imsize[1])),
+                E.PP(f"{pp[0]} {pp[1]}"),
+                E.F(f"{scale * foc}"),
+                E.SzIm(f"{imsize[0]} {imsize[1]}"),
                 E.CalibDistortion(
                     E.ModRad(
-                        E.CDist('{} {}'.format(pp[0], pp[1])),
+                        E.CDist(f"{pp[0]} {pp[1]}"),
                         E.CoeffDist('2.74e-11'),
                         E.CoeffDist('-1.13e-21'),
                         E.CoeffDist('4.01e-29'),
@@ -738,7 +738,7 @@ def init_autocal(imsize=(32200, 15400), framesize=(460, 220), foc=304.8, camname
     )
 
     tree = etree.ElementTree(outxml)
-    tree.write(os.path.join('Ori-Init', 'AutoCal_Foc-{}_{}.xml'.format(int(foc*1000), camname)),
+    tree.write(os.path.join('Ori-Init', f"AutoCal_Foc-{int(foc*1000)}_{camname}.xml"),
                pretty_print=True, xml_declaration=True, encoding="utf-8")
 
 
@@ -782,9 +782,9 @@ def write_auto_mesures(gcps, sub, outdir, outname='AutoMeasures'):
     :param str outdir: the output directory to save the files to.
     :param str outname: the base name of the file to create (default: AutoMeasures).
     """
-    with open(os.path.join(outdir, '{}{}.txt'.format(outname, sub)), 'w') as f:
+    with open(os.path.join(outdir, f"{outname}{sub}.txt"), 'w') as f:
         for row in gcps.itertuples():
-            print('{} {} {}'.format(row.rel_x, row.rel_y, row.el_rel), file=f)
+            print(f"{row.rel_x} {row.rel_y} {row.el_rel}", file=f)
 
 
 def get_valid_image_points(shape, pts, pts_nodist):
@@ -845,7 +845,7 @@ def write_image_mesures(imlist, gcps, outdir='.', sub='', ort_dir='Ortho-MEC-Rel
         MesureSet.append(this_im_mes)
 
     tree = etree.ElementTree(MesureSet)
-    tree.write(os.path.join(outdir, '{}{}-S2D.xml'.format(outname, sub)),
+    tree.write(os.path.join(outdir, f"{outname}{sub}-S2D.xml"),
                pretty_print=True, xml_declaration=True, encoding="utf-8")
 
 
@@ -859,14 +859,12 @@ def write_auto_gcps(gcp_df, sub, outdir, utm_zone, outname='AutoGCPs'):
     :param str utm_zone: the UTM zone name (e.g., 8N).
     :param str outname: the name to use for the GCPs file (default: AutoGCPs.txt)
     """
-    with open(os.path.join(outdir, '{}{}.txt'.format(outname, sub)), 'w') as f:
+    with open(os.path.join(outdir, f"{outname}{sub}.txt"), 'w') as f:
         # print('#F= N X Y Z Ix Iy Iz', file=f)
         print('#F= N X Y Z', file=f)
-        print('#Here the coordinates are in UTM {} X=Easting Y=Northing Z=Altitude'.format(utm_zone), file=f)
+        print(f"#Here the coordinates are in UTM {utm_zone} X=Easting Y=Northing Z=Altitude", file=f)
         for row in gcp_df.itertuples():
-            # print('{} {} {} {} {} {} {}'.format(row.id, row.geometry.x, row.geometry.y, row.elevation,
-            #                                        5/row.z_corr, 5/row.z_corr, 1), file=f)
-            print('{} {} {} {}'.format(row.id, row.geometry.x, row.geometry.y, row.elevation), file=f)
+            print(f"{row.id} {row.geometry.x} {row.geometry.y} {row.elevation}", file=f)
 
 
 def remove_measure(fn_meas, name):
@@ -908,7 +906,7 @@ def rename_gcps(root, ngcp=0):
             old_name = mes.find('NamePt').text
 
             if mes.find('NamePt').text not in gcp_dict.keys():
-                gcp_dict[old_name] = 'GCP{}'.format(ngcp)
+                gcp_dict[old_name] = f"GCP{ngcp}"
                 ngcp += 1
 
             mes.find('NamePt').text = gcp_dict[old_name]
@@ -1168,7 +1166,7 @@ def move_bad_tapas(ori):
 
     os.makedirs('bad', exist_ok=True)
     for im in res_df['name'][np.isnan(res_df.residual)]:
-        print('{} -> bad/{}'.format(im, im))
+        print(f"{im} -> bad/{im}")
         shutil.move(im, 'bad')
 
 
@@ -1338,8 +1336,8 @@ def tapas(cam_model, ori_out=None, img_pattern='OIS.*tif', in_cal=None, in_ori=N
         echo = subprocess.Popen('echo', stdout=subprocess.PIPE)
 
     args = ['mm3d', 'Tapas', cam_model, img_pattern,
-            'LibFoc={}'.format(int(lib_foc)), 'LibPP={}'.format(int(lib_pp)),
-            'LibCD={}'.format(int(lib_cd))]
+            f"LibFoc={int(lib_foc)}", f"LibPP={int(lib_pp)}",
+            f"LibCD={int(lib_cd)}"]
 
     if ori_out is not None:
         args.append('Out=' + ori_out)
@@ -1464,8 +1462,8 @@ def tawny(dirmec, radiomegal=False):
     else:
         echo = subprocess.Popen('echo', stdout=subprocess.PIPE)
 
-    p = subprocess.Popen(['mm3d', 'Tawny', 'Ortho-{}'.format(dirmec), 'Out=Orthophotomosaic.tif',
-                          'RadiomEgal={}'.format(int(radiomegal))], stdin=echo.stdout)
+    p = subprocess.Popen(['mm3d', 'Tawny', f"Ortho-{dirmec}", 'Out=Orthophotomosaic.tif',
+                          f"RadiomEgal={int(radiomegal)}"], stdin=echo.stdout)
     return p.wait()
 
 
@@ -1491,11 +1489,11 @@ def block_malt(imlist, nimg=3, ori='Relative', zoomf=8):
     for block, imgs in enumerate(blocklist):
         print(imgs)
 
-        malt(imgs, ori, dirmec='{}_block{}'.format(dirmec, block), zoomf=zoomf)
+        malt(imgs, ori, dirmec=f"{dirmec}_block{block}", zoomf=zoomf)
 
-        tawny('{}_block{}'.format(dirmec, block))
+        tawny(f"{dirmec}_block{block}")
 
-        mosaic_micmac_tiles('Orthophotomosaic', '{}_block{}'.format(dirmec, block))
+        mosaic_micmac_tiles('Orthophotomosaic', f"{dirmec}_block{block}")
 
 
 def bascule(in_gcps, outdir, img_pattern, sub, ori, outori='TerrainRelAuto',
@@ -1529,7 +1527,7 @@ def bascule(in_gcps, outdir, img_pattern, sub, ori, outori='TerrainRelAuto',
                           os.path.join(outdir, fn_meas)], stdin=echo.stdout)
     p.wait()
 
-    out_gcps = get_bascule_residuals(os.path.join('Ori-{}{}'.format(outori, sub),
+    out_gcps = get_bascule_residuals(os.path.join(f"Ori-{outori}{sub}",
                                                   'Result-GCP-Bascule.xml'), in_gcps)
     return out_gcps
 
@@ -1567,16 +1565,12 @@ def campari(in_gcps, outdir, img_pattern, sub, dx, ortho_res, allfree=True,
     p = subprocess.Popen(['mm3d', 'Campari', img_pattern,
                           inori + sub,
                           outori + sub,
-                          'GCP=[{},{},{},{}]'.format(os.path.join(outdir, fn_gcp),
-                                                     np.abs(dx) / 4,  # should be correct within 0.25 pixel
-                                                     os.path.join(outdir, fn_meas),
-                                                     0.5),  # best balance for distortion
-                          'SH={}'.format(homol),
-                          'AllFree={}'.format(int(allfree))], stdin=echo.stdout)
+                          f"GCP=[{Path(outdir, fn_gcp)},{np.abs(dx) / 4},{Path(outdir, fn_meas)},{0.5}]",
+                          f"SH={homol}",
+                          f"AllFree={int(allfree)}"], stdin=echo.stdout)
     p.wait()
 
-    out_gcps = get_campari_residuals('Ori-{}/Residus.xml'.format(outori + sub), in_gcps)
-    # out_gcps.dropna(inplace=True)  # sometimes, campari can return no information for a gcp
+    out_gcps = get_campari_residuals(Path(f"Ori-{outori+sub}", "Residus.xml"), in_gcps)
     return out_gcps
 
 
@@ -1643,7 +1637,7 @@ def remove_worst_mesures(fn_meas, ori):
     :param str fn_meas: the filename for the measures file.
     :param str ori: the orientation directory output from Campari (e.g., Ori-TerrainFinal -> TerrainFinal)
     """
-    camp_root = ET.parse('Ori-{}/Residus.xml'.format(ori)).getroot()
+    camp_root = ET.parse(Path(f"Ori-{ori}", 'Residus.xml')).getroot()
     auto_root = ET.parse(fn_meas).getroot()
 
     last_iter = camp_root.findall('Iters')[-1].findall('OneAppui')
@@ -1755,14 +1749,14 @@ def mask_invalid_els(dir_mec, fn_dem, fn_mask, ori, match_pattern='OIS.*tif', zo
     ind = np.argmax(etapes)
     etape0 = max(etapes)
 
-    fn_auto = os.path.join(dir_mec, 'AutoMask_STD-MALT_Num_{}.tif'.format(etape0 - 1))
+    fn_auto = os.path.join(dir_mec, f"AutoMask_STD-MALT_Num_{etape0 - 1}.tif")
 
     print(fn_auto)
     print(zlist[ind])
 
     dem = gu.Raster(os.path.join(dir_mec, zlist[ind]))
 
-    automask = gu.Raster(os.path.join(dir_mec, 'AutoMask_STD-MALT_Num_{}.tif'.format(etape0 - 1)))
+    automask = gu.Raster(os.path.join(dir_mec, f"AutoMask_STD-MALT_Num_{etape0 - 1}.tif"))
 
     shutil.copy(zlist[ind].replace('tif', 'tfw'),
                 fn_auto.replace('tif', 'tfw'))
@@ -1783,9 +1777,9 @@ def mask_invalid_els(dir_mec, fn_dem, fn_mask, ori, match_pattern='OIS.*tif', zo
     else:
         echo = subprocess.Popen('echo', stdout=subprocess.PIPE)
 
-    p = subprocess.Popen(['mm3d', 'Malt', 'Ortho', match_pattern, ori, 'DirMEC={}'.format(dir_mec),
-                          'NbVI=2', 'MasqImGlob=filtre.tif', 'ZoomF={}'.format(zoomf),
-                          'DefCor=1', 'CostTrans=1', 'EZA=1', 'DoMEC=0', 'DoOrtho=1', 'Etape0={}'.format(etape0)],
+    p = subprocess.Popen(['mm3d', 'Malt', 'Ortho', match_pattern, ori, f"DirMEC={dir_mec}",
+                          'NbVI=2', 'MasqImGlob=filtre.tif', f"ZoomF={zoomf}",
+                          'DefCor=1', 'CostTrans=1', 'EZA=1', 'DoMEC=0', 'DoOrtho=1', f"Etape0={etape0}"],
                          stdin=echo.stdout)
     p.wait()
 
@@ -1874,7 +1868,7 @@ def mosaic_micmac_tiles(filename, dirname='.'):
     :param str filename: MicMac filename to mosaic together
     :param str dirname: Directory containing images to Mosaic (default: .)
     """
-    filelist = glob(os.path.sep.join([dirname, '{}_Tile*'.format(filename)]))
+    filelist = glob(os.path.sep.join([dirname, f"{filename}_Tile*"]))
     if len(filelist) == 0:
         print(f"No tiles found for {Path(dirname, filename)}; exiting.")
         return
@@ -1888,7 +1882,7 @@ def mosaic_micmac_tiles(filename, dirname='.'):
 
     img = np.concatenate(arr_cols, axis=1)
 
-    imsave(os.path.sep.join([dirname, '{}.tif'.format(filename)]), img)
+    imsave(Path(dirname, f"{filename}.tif"), img)
 
 
 def arrange_tiles(flist, filename, dirname='.'):
@@ -1899,7 +1893,7 @@ def arrange_tiles(flist, filename, dirname='.'):
     img_arr = np.array(np.zeros((nrows, ncols)), dtype='object')
     for i in range(nrows):
         for j in range(ncols):
-            img_arr[i, j] = imread(os.path.sep.join([dirname, '{}_Tile_{}_{}.tif'.format(filename, j, i)]))
+            img_arr[i, j] = imread(Path(dirname, f"{filename}_Tile_{j}_{i}.tif"))
     return img_arr
 
 
@@ -1962,14 +1956,14 @@ def post_process(projstr, out_name, dirmec, do_ortho=True, ind_ortho=False):
                       'tmp_mask.tif']).wait()
 
     subprocess.Popen(_gdal_calc() + ['--quiet', '-A', 'tmp_mask.tif', '-B', 'tmp_geo.tif',
-                      '--outfile={}'.format(os.path.join('post_processed', f'{out_name}_Z.tif')),
+                      f"--outfile={Path('post_processed', f"{out_name}_Z.tif")}",
                       '--calc="B*(A>0)"', '--NoDataValue=-9999']).wait()
 
     subprocess.Popen(['gdaldem', 'hillshade', os.path.join('post_processed', f'{out_name}_Z.tif'),
                       os.path.join('post_processed', f'{out_name}_HS.tif')]).wait()
 
     subprocess.Popen(_gdal_calc() + ['--quiet', '-A', 'tmp_corr.tif',
-                      '--outfile={}'.format(os.path.join('post_processed', f'{out_name}_CORR.tif')),
+                      f"--outfile={Path('post_processed', f"{out_name}_CORR.tif")}",
                       '--calc="((A.astype(float)-127)/128)*100"', '--NoDataValue=-9999']).wait()
 
     # clean up the temporary files
@@ -2023,7 +2017,7 @@ def _mask_ortho(fn_img, out_name, dirmec, projstr):
     subprocess.Popen(['gdal_translate', '-a_srs', projstr, fn_mask, 'tmp_mask.tif']).wait()
 
     subprocess.Popen(_gdal_calc() + ['--quiet', '-A', 'tmp_ortho.tif', '-B', 'tmp_mask.tif',
-                     '--outfile={}'.format(os.path.join('post_processed', f'{out_name}_{fn_img}')),
+                     f"--outfile={Path('post_processed', f"{out_name}_{fn_img}")}",
                      '--calc="A*(B>0)"', '--NoDataValue=0', '--type', 'Byte']).wait()
 
     os.remove('tmp_mask.tif')

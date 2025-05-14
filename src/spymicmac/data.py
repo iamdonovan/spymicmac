@@ -76,8 +76,8 @@ def _read_coords(result):
     coords = []
 
     for corner in corner_names:
-        coords.append((corner_dict['{} Corner Long dec'.format(corner)],
-                       corner_dict['{} Corner Lat dec'.format(corner)]))
+        coords.append((corner_dict[f"{corner} Corner Long dec"],
+                       corner_dict[f"{corner} Corner Lat dec"]))
 
     return coords
 
@@ -186,8 +186,8 @@ def download_cop30_vrt(imlist=None, footprints=None, imgsource='DECLASSII', glob
 
     tiles = []
     for pair in pairs:
-        tiles.append(_format_cop30(_lat_prefix(pair[1]) + '{:02d}'.format(abs(pair[1])),
-                                   _lon_prefix(pair[0]) + '{:03d}'.format(abs(pair[0]))))
+        tiles.append(_format_cop30(_lat_prefix(pair[1]) + f"{abs(pair[1]):02d}",
+                                   _lon_prefix(pair[0]) + f"{abs(pair[0]):03d}"))
 
     # now, download the tiles using boto3
     os.makedirs('cop30_dem', exist_ok=True)
