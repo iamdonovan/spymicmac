@@ -167,22 +167,24 @@ def clean_homol(img_pattern='OIS*.tif', dir_homol='Homol', min_size=None, remove
         dat_sizes.loc[ind, 'symmetric'] = row['image'] + '.dat' in dat_sizes.loc[
             dat_sizes['image'] == row['filename'].split('.dat')[0], 'filename'].to_list()
 
-    if return_df:
-        return dat_sizes
+    if not return_df:
+        for fn_img, sizes in dat_sizes.groupby('image'):
+            if min_size is None:
+                ind = (sizes.sort_values('cumulative')['cumulative'] > 0.95).idxmax()
+                this_cutoff = min(250, sizes.loc[ind, 'size'] + 1)
+            else:
+                this_cutoff = min_size
 
-    for fn_img, sizes in dat_sizes.groupby('image'):
-        if min_size is None:
-            ind = (sizes.sort_values('cumulative')['cumulative'] > 0.95).idxmax()
-            this_cutoff = min(250, sizes.loc[ind, 'size'] + 1)
-        else:
-            this_cutoff = min_size
-
-        for fn in sizes.loc[sizes['size'] < this_cutoff, 'filename']:
-            os.remove(Path(dir_homol, f"Pastis{fn_img}", fn))
-
-        if remove_asymmetric:
-            for fn in sizes.loc[(~sizes['symmetric']) & (sizes['size'] > this_cutoff), 'filename']:
+            for fn in sizes.loc[sizes['size'] < this_cutoff, 'filename']:
                 os.remove(Path(dir_homol, f"Pastis{fn_img}", fn))
+
+            if remove_asymmetric:
+                for fn in sizes.loc[(~sizes['symmetric']) & (sizes['size'] > this_cutoff), 'filename']:
+                    os.remove(Path(dir_homol, f"Pastis{fn_img}", fn))
+
+        return None
+    else:
+        return dat_sizes
 
 
 def write_xml(fn_img, fn_mask='./MEC-Malt/Masq_STD-MALT_DeZoom1.tif', fn_xml=None, geomname='eGeomMNTEuclid'):
@@ -278,8 +280,8 @@ def get_im_meas(points_df, E, name='gcp', x='im_col', y='im_row'):
     pt_els = []
     for row in points_df.itertuples():
         this_mes = E.OneMesureAF1I(
-                        E.NamePt(row.name),
-                        E.PtIm(f"{row.x} {row.y}")
+                        E.NamePt(getattr(row, name)),
+                        E.PtIm(f"{getattr(row, x)} {getattr(row, y)}")
                         )
         pt_els.append(this_mes)
     return pt_els
@@ -2004,7 +2006,7 @@ def _mask_ortho(fn_img, out_name, dirmec, projstr):
     fn_incid = Path('-'.join(['Ortho', dirmec]), '_'.join(['Incid', fn_img]))
     fn_mask = Path('-'.join(['Ortho', dirmec]), '_'.join(['Mask', fn_img]))
 
-    shutil.copy(fn_ortho.replace('tif', 'tfw'), fn_mask.replace('tif', 'tfw'))
+    shutil.copy(str(fn_ortho).replace('tif', 'tfw'), str(fn_mask).replace('tif', 'tfw'))
 
     mask = imread(fn_incid) < 1
     oy, ox = imread(fn_ortho).shape
