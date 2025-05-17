@@ -376,6 +376,8 @@ def _plot_residuals(gdf, res='camp'):
 
     axs[1].set_ylabel('')
 
+    fig.suptitle(f"$n={len(gdf)}$ gcps", x=0.5, y=0.9, va='bottom')
+
     return fig
 
 
