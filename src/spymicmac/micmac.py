@@ -727,12 +727,6 @@ def init_autocal(imsize=(32200, 15400), framesize=(460, 220), foc=304.8, camname
                         E.CoeffDist('4.01e-29'),
                         E.CoeffDist('1.28e-38'),
                         E.CoeffDist('-4.32e-46'),
-                        E.CeoffDistInv('2.74e-11'),
-                        E.CeoffDistInv('3.88e-21'),
-                        E.CeoffDistInv('-4.79e-29'),
-                        E.CeoffDistInv('3.82e-38'),
-                        E.CeoffDistInv('2.13e-46'),
-                        E.CeoffDistInv('4.47e-55'),
                         E.PPaEqPPs('true')
                     )
                 )
