@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 import argparse
 import shutil
 import tarfile
@@ -93,6 +94,8 @@ def _argparser():
                         help='Use LibPP=1 for mm3d Tapas [LibPP=0]')
     parser.add_argument('--lib_cd', action='store_true',
                         help='Use LibCD=1 for mm3d Tapas [LibCD=0]')
+    parser.add_argument('--add_params', action='store_true',
+                        help='Add decentric and affine parameters to the camera model')
     parser.add_argument('-n', '--nproc', type=int, default=1, help='number of sub-processes to use [1].')
     return parser
 
@@ -218,6 +221,12 @@ def main():
                                  lib_pp=args.lib_pp, lib_cd=args.lib_cd)
         if exit_code != 0:
             raise RuntimeError('Error in mm3d Tapas - check Tapas output for details.')
+
+    if args.add_params:
+        cam_xmls = glob('AutoCal*.xml', root_dir='Ori-Relative')
+        for fn_cam in cam_xmls:
+            cam = micmac.load_cam_xml(Path('Ori-Relative', fn_cam))
+            micmac.write_cam_xml(Path('Ori-Relative', fn_cam), cam)
 
     # run apericloud
     if do['aperi']:
