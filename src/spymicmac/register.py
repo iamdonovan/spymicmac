@@ -559,6 +559,10 @@ def register_relative(dirmec, fn_dem, fn_ref=None, fn_ortho=None, glacmask=None,
         elif strategy == 'chebyshev':
             gridpts = _chebyshev_grid(reg_img, density, model)
             gcps = pd.DataFrame(data=gridpts, columns=['search_j', 'search_i'])
+            interior = np.logical_and.reduce([0 <= gcps.search_j, gcps.search_j <= reg_img.shape[1],
+                                              0 <= gcps.search_i, gcps.search_i <= reg_img.shape[0]])
+            gcps = gcps.loc[interior]
+
             masked = mask_full.data.data[gcps.search_i.astype(int), gcps.search_j.astype(int)] == 0
             gcps = gcps.loc[~masked]
 
