@@ -33,6 +33,8 @@ def _argparser():
                          help='approx. ground sampling distance (pixel resolution) of ortho image. [8 m]')
     _parser.add_argument('-imgsource', action='store', type=str, default='DECLASSII',
                          help='USGS dataset name for images [DECLASSII]')
+    _parser.add_argument('-strategy', action='store', type=str, default='grid',
+                         help="strategy for generating GCPs. Must be one of 'grid', 'random', or 'chebyshev' [grid]")
     _parser.add_argument('-density', action='store', type=int, default=200,
                          help='pixel spacing to look for GCPs [200]')
     _parser.add_argument('-no_allfree', action='store_false',
@@ -73,6 +75,7 @@ def main():
                       ori=args.ori,
                       ortho_res=args.ortho_res,
                       imgsource=args.imgsource,
+                      strategy=args.strategy,
                       density=args.density,
                       allfree=args.no_allfree,
                       useortho=args.useortho,
