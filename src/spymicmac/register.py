@@ -605,6 +605,19 @@ def register_relative(dirmec, fn_dem, fn_ref=None, fn_ortho=None, glacmask=None,
 
     Mref, inliers_ref = ransac((gcps[['search_j', 'search_i']].values, gcps[['match_j', 'match_i']].values),
                                AffineTransform, min_samples=6, residual_threshold=thresh, max_trials=25000)
+
+    num_inliers = np.count_nonzero(inliers_ref)
+    niter = 0
+
+    while num_inliers < 10 and niter < 10:
+        Mref, inliers_ref = ransac((gcps[['search_j', 'search_i']].values, gcps[['match_j', 'match_i']].values),
+                                   AffineTransform, min_samples=6, residual_threshold=thresh, max_trials=25000)
+        num_inliers = np.count_nonzero(inliers_ref)
+        niter += 1
+
+    if num_inliers < 10:
+        raise ValueError("Unable to estimate valid transformation using matches found.")
+
     gcps['aff_resid'] = Mref.residuals(gcps[['search_j', 'search_i']].values,
                                        gcps[['match_j', 'match_i']].values)
 
@@ -710,8 +723,12 @@ def register_relative(dirmec, fn_dem, fn_ref=None, fn_ortho=None, glacmask=None,
     xmin, ymin, xmax, ymax = ref_img.bounds
     ax2.imshow(ref_img.data[::10, ::10], cmap='gray', extent=(xmin, xmax, ymin, ymax))
     ax2.plot(gcps.geometry.x, gcps.geometry.y, 'r+')
+    footprints.to_crs(ref_img.crs).boundary.plot(ax=ax2, color='b')
     if use_cps:
         ax2.plot(cps.geometry.x, cps.geometry.y, 'bs')
+
+    ax2.set_xlim(xmin, xmax)
+    ax2.set_ylim(ymin, ymax)
 
     fig2.savefig(Path(out_dir, f"world_gcps{subscript}.png"), bbox_inches='tight', dpi=200)
     plt.close(fig2)
