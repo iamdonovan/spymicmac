@@ -604,7 +604,7 @@ def register_relative(dirmec, fn_dem, fn_ref=None, fn_ortho=None, glacmask=None,
     thresh = np.ceil(min(20, gcps['offset'].median() + 4 * nmad(gcps['offset'])))
 
     Mref, inliers_ref = ransac((gcps[['search_j', 'search_i']].values, gcps[['match_j', 'match_i']].values),
-                               AffineTransform, min_samples=6, residual_threshold=thresh, max_trials=5000)
+                               AffineTransform, min_samples=6, residual_threshold=thresh, max_trials=25000)
     gcps['aff_resid'] = Mref.residuals(gcps[['search_j', 'search_i']].values,
                                        gcps[['match_j', 'match_i']].values)
 
