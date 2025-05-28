@@ -559,8 +559,8 @@ def register_relative(dirmec, fn_dem, fn_ref=None, fn_ortho=None, glacmask=None,
         elif strategy == 'chebyshev':
             gridpts = _chebyshev_grid(reg_img, density, model)
             gcps = pd.DataFrame(data=gridpts, columns=['search_j', 'search_i'])
-            interior = np.logical_and.reduce([0 <= gcps.search_j, gcps.search_j <= reg_img.shape[1],
-                                              0 <= gcps.search_i, gcps.search_i <= reg_img.shape[0]])
+            interior = np.logical_and.reduce([0 <= gcps.search_j, gcps.search_j <= ref_img.shape[1],
+                                              0 <= gcps.search_i, gcps.search_i <= ref_img.shape[0]])
             gcps = gcps.loc[interior]
 
             masked = mask_full.data.data[gcps.search_i.astype(int), gcps.search_j.astype(int)] == 0
@@ -601,7 +601,7 @@ def register_relative(dirmec, fn_dem, fn_ref=None, fn_ortho=None, glacmask=None,
     # run ransac to find the matches between the transformed image and the master image make a coherent transformation
     # residual_threshold is 20 pixels to allow for some local distortions, but get rid of the big blunders
     gcps['offset'] = np.sqrt(gcps['dj'] ** 2 + gcps['di'] ** 2)
-    thresh = min(20, gcps['offset'].median() + 4 * nmad(gcps['offset']))
+    thresh = np.ceil(min(20, gcps['offset'].median() + 4 * nmad(gcps['offset'])))
 
     Mref, inliers_ref = ransac((gcps[['search_j', 'search_i']].values, gcps[['match_j', 'match_i']].values),
                                AffineTransform, min_samples=6, residual_threshold=thresh, max_trials=5000)
