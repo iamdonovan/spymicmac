@@ -715,6 +715,8 @@ def register_relative(dirmec, fn_dem, fn_ref=None, fn_ortho=None, glacmask=None,
     if use_cps:
         ax1.plot(cps.orig_j, cps.orig_i, 'bs')
         ax1.quiver(cps.orig_j, cps.orig_i, cps.xres, cps.yres, color='b')
+    ax1.set_xticks([])
+    ax1.set_yticks([])
 
     fig1.savefig(Path(out_dir, f"relative_gcps{subscript}.png"), bbox_inches='tight', dpi=200)
     plt.close(fig1)
@@ -729,6 +731,9 @@ def register_relative(dirmec, fn_dem, fn_ref=None, fn_ortho=None, glacmask=None,
 
     ax2.set_xlim(xmin, xmax)
     ax2.set_ylim(ymin, ymax)
+
+    ax2.set_xticks([])
+    ax2.set_yticks([])
 
     fig2.savefig(Path(out_dir, f"world_gcps{subscript}.png"), bbox_inches='tight', dpi=200)
     plt.close(fig2)
