@@ -48,17 +48,23 @@ def _authenticate():
     Use the credentials stored in the user's .netrc file to authenticate the user on earthexplorer.usgs.gov
     """
     creds = _get_login_creds()
-    user, _, pwd = creds.authenticators('earthexplorer.usgs.gov')
+    user, _, _ = creds.authenticators('earthexplorer.usgs.gov')
+
+    if os.path.exists(os.path.expanduser('~/.usgs_token')):
+        with open(os.path.expanduser('~/.usgs_token'), 'r') as f:
+            token = f.read().strip()
+    else:
+        raise FileExistsError("Please ensure that your USGS M2M token is saved to ~/.usgs_token.")
 
     try:
-        login = api.login(user, pwd)
+        login = api.login(user, token)
     except USGSAuthExpiredError as e:
         print('API key has expired. Attempting to remove .usgs from home directory.')
         os.remove(os.path.expanduser('~/.usgs'))
 
-        login = api.login(user, pwd)
+        login = api.login(user, token)
 
-    del user, pwd, creds
+    del user, token, creds
 
     return login
 
