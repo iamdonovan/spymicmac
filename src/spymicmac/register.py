@@ -376,13 +376,32 @@ def _plot_residuals(gdf, res='camp'):
 
     axs[1].set_ylabel('')
 
+    fig.suptitle(f"$n={len(gdf)}$ gcps", x=0.5, y=0.9, va='bottom')
+
     return fig
+
+
+def _chebyshev_grid(img, spacing, tfm):
+    rady, radx = img.shape
+
+    xx = np.cos(np.arange(0, int(radx / spacing)) * np.pi / int(radx / spacing))
+    yy = np.cos(np.arange(0, int(rady / spacing)) * np.pi / int(rady / spacing))
+
+    xx += 1
+    yy += 1
+
+    xx *= radx / 2
+    yy *= rady / 2
+
+    XX, YY = np.meshgrid(xx, yy)
+
+    return tfm.inverse(np.array([XX.flatten(), YY.flatten()]).T)
 
 
 def register_relative(dirmec, fn_dem, fn_ref=None, fn_ortho=None, glacmask=None, landmask=None, footprints=None,
                       im_subset=None, block_num=None, subscript=None, ori='Relative', ortho_res=8.,
-                      imgsource='DECLASSII', density=200, out_dir=None, allfree=True, useortho=False, max_iter=5,
-                      use_cps=False, cp_frac=0.2, use_orb=False, fn_gcps=None):
+                      imgsource='DECLASSII', strategy='grid', density=200, out_dir=None, allfree=True, useortho=False,
+                      max_iter=5, use_cps=False, cp_frac=0.2, use_orb=False, fn_gcps=None):
     """
     Register a relative DEM or orthoimage to a reference DEM and/or orthorectified image.
 
@@ -399,6 +418,9 @@ def register_relative(dirmec, fn_dem, fn_ref=None, fn_ortho=None, glacmask=None,
     :param str ori: name of orientation directory (after Ori-) (default: Relative)
     :param float ortho_res: approx. ground sampling distance (pixel resolution) of ortho image (default: 8 m)
     :param str imgsource: USGS dataset name for images (default: DECLASSII)
+    :param str strategy: strategy for generating GCPs. Must be one of 'grid', 'random', or 'chebyshev'. Note that if
+        'random' is used, density is the approximate number of points, rather than the distance between
+        grid points (default: grid)
     :param int density: pixel spacing to look for GCPs (default: 200)
     :param str out_dir: output directory to save auto GCP files to (default: auto_gcps)
     :param bool allfree: run Campari setting all parameters free (default: True)
@@ -412,6 +434,7 @@ def register_relative(dirmec, fn_dem, fn_ref=None, fn_ortho=None, glacmask=None,
     :param str fn_gcps: (optional) shapefile or CSV of GCP coordinates to use. Column names should be [(name | id),
         (z | elevation), x, y]. If CSV is used, x,y should have the same CRS as the reference image.
     """
+    assert strategy in ['grid', 'random', 'chebyshev'], f"{strategy} must be one of [grid, random, chebyshev]"
     print('start.')
 
     if fn_ortho is not None or useortho:
@@ -533,9 +556,20 @@ def register_relative(dirmec, fn_dem, fn_ref=None, fn_ortho=None, glacmask=None,
             gcps = pd.DataFrame(data=keypoints, columns=['search_i', 'search_j'])
             gcps = matching.find_matches(rough_tfm, ref_img, mask_full.data.data, points=gcps, initM=model,
                                          dstwin=_search_size(rough_tfm.shape))
+        elif strategy == 'chebyshev':
+            gridpts = _chebyshev_grid(reg_img, density, model)
+            gcps = pd.DataFrame(data=gridpts, columns=['search_j', 'search_i'])
+            interior = np.logical_and.reduce([0 <= gcps.search_j, gcps.search_j <= ref_img.shape[1],
+                                              0 <= gcps.search_i, gcps.search_i <= ref_img.shape[0]])
+            gcps = gcps.loc[interior]
 
+            masked = mask_full.data.data[gcps.search_i.astype(int), gcps.search_j.astype(int)] == 0
+            gcps = gcps.loc[~masked]
+
+            gcps = matching.find_matches(rough_tfm, ref_img, mask_full.data.data, points=gcps, initM=model,
+                                         dstwin=_search_size(rough_tfm.shape))
         else:
-            gcps = matching.find_matches(rough_tfm, ref_img, mask_full.data.data, initM=model,
+            gcps = matching.find_matches(rough_tfm, ref_img, mask_full.data.data, initM=model, strategy=strategy,
                                          spacing=density, dstwin=_search_size(rough_tfm.shape))
 
     x, y = ref_img.ij2xy(gcps['search_i'], gcps['search_j'])
@@ -567,10 +601,23 @@ def register_relative(dirmec, fn_dem, fn_ref=None, fn_ortho=None, glacmask=None,
     # run ransac to find the matches between the transformed image and the master image make a coherent transformation
     # residual_threshold is 20 pixels to allow for some local distortions, but get rid of the big blunders
     gcps['offset'] = np.sqrt(gcps['dj'] ** 2 + gcps['di'] ** 2)
-    thresh = gcps['offset'].median() + 4 * nmad(gcps['offset'])
+    thresh = np.ceil(min(20, gcps['offset'].median() + 4 * nmad(gcps['offset'])))
 
     Mref, inliers_ref = ransac((gcps[['search_j', 'search_i']].values, gcps[['match_j', 'match_i']].values),
-                               AffineTransform, min_samples=6, residual_threshold=thresh, max_trials=5000)
+                               AffineTransform, min_samples=6, residual_threshold=thresh, max_trials=25000)
+
+    num_inliers = np.count_nonzero(inliers_ref)
+    niter = 0
+
+    while num_inliers < 10 and niter < 10:
+        Mref, inliers_ref = ransac((gcps[['search_j', 'search_i']].values, gcps[['match_j', 'match_i']].values),
+                                   AffineTransform, min_samples=6, residual_threshold=thresh, max_trials=25000)
+        num_inliers = np.count_nonzero(inliers_ref)
+        niter += 1
+
+    if num_inliers < 10:
+        raise ValueError("Unable to estimate valid transformation using matches found.")
+
     gcps['aff_resid'] = Mref.residuals(gcps[['search_j', 'search_i']].values,
                                        gcps[['match_j', 'match_i']].values)
 
@@ -668,6 +715,8 @@ def register_relative(dirmec, fn_dem, fn_ref=None, fn_ortho=None, glacmask=None,
     if use_cps:
         ax1.plot(cps.orig_j, cps.orig_i, 'bs')
         ax1.quiver(cps.orig_j, cps.orig_i, cps.xres, cps.yres, color='b')
+    ax1.set_xticks([])
+    ax1.set_yticks([])
 
     fig1.savefig(Path(out_dir, f"relative_gcps{subscript}.png"), bbox_inches='tight', dpi=200)
     plt.close(fig1)
@@ -676,8 +725,15 @@ def register_relative(dirmec, fn_dem, fn_ref=None, fn_ortho=None, glacmask=None,
     xmin, ymin, xmax, ymax = ref_img.bounds
     ax2.imshow(ref_img.data[::10, ::10], cmap='gray', extent=(xmin, xmax, ymin, ymax))
     ax2.plot(gcps.geometry.x, gcps.geometry.y, 'r+')
+    footprints.to_crs(ref_img.crs).boundary.plot(ax=ax2, color='b')
     if use_cps:
         ax2.plot(cps.geometry.x, cps.geometry.y, 'bs')
+
+    ax2.set_xlim(xmin, xmax)
+    ax2.set_ylim(ymin, ymax)
+
+    ax2.set_xticks([])
+    ax2.set_yticks([])
 
     fig2.savefig(Path(out_dir, f"world_gcps{subscript}.png"), bbox_inches='tight', dpi=200)
     plt.close(fig2)

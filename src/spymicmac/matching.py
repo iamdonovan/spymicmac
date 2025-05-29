@@ -1293,6 +1293,17 @@ def find_gcp_match(img, template, method=cv2.TM_CCORR_NORMED):
     return res, maxi + i_off + sp_dely, maxj + j_off + sp_delx
 
 
+def _random_points(mask, npts):
+    pctmask = np.count_nonzero(mask) / mask.size
+
+    xx = np.random.uniform(0, mask.shape[1], int(npts / pctmask)).astype(int)
+    yy = np.random.uniform(0, mask.shape[0], int(npts / pctmask)).astype(int)
+
+    masked = mask[yy, xx] == 0
+
+    return xx[~masked], yy[~masked]
+
+
 def _match_grid(refgeo, spacing, srcwin):
 
     jj, ii = np.meshgrid(np.arange(srcwin, spacing * np.ceil((refgeo.shape[1]-srcwin) / spacing) + 1, spacing),
@@ -1301,26 +1312,37 @@ def _match_grid(refgeo, spacing, srcwin):
     return jj.astype(int).flatten(), ii.astype(int).flatten()
 
 
-def find_matches(tfm_img, refgeo, mask, points=None, initM=None, spacing=200, srcwin=60, dstwin=600):
+def find_matches(tfm_img, refgeo, mask, points=None, initM=None, strategy='grid', spacing=200, srcwin=60, dstwin=600):
     """
-    Find matches between two images on a grid using normalized cross-correlation template matching.
+    Find matches between two images using normalized cross-correlation template matching. If point locations are not
+    given, generates a two-dimensional grid of evenly spaced points.
 
     :param array-like tfm_img: the image to use for matching.
     :param Raster refgeo: the reference image to use for matching.
     :param array-like mask: a mask indicating areas that should be used for matching.
-    :param GeoDataFrame points: a GeoDataFrame of GCP locations
+    :param GeoDataFrame points: a GeoDataFrame of point locations
     :param initM: the model used for transforming the initial, non-georeferenced image.
+    :param str strategy: strategy for generating points. Must be one of 'grid' or 'random'. Note that if
+        'random' is used, density is the approximate number of points, rather than the distance between
+        grid points (default: grid)
     :param int spacing: the grid spacing, in pixels (default: 200 pixels)
     :param int srcwin: the half-size of the template window.
     :param int dstwin: the half-size of the search window.
     :return: **gcps** (*pandas.DataFrame*) -- a DataFrame with GCP locations, match strength, and other information.
     """
+    assert strategy in ['grid', 'random', 'chebyshev'], f"{strategy} must be one of [grid, random]"
+
     match_pts = []
     z_corrs = []
     peak_corrs = []
 
     if points is None:
-        jj, ii = np.array(_match_grid(refgeo, spacing, srcwin))
+        if strategy == 'grid':
+            jj, ii = np.array(_match_grid(refgeo, spacing, srcwin))
+        elif strategy == 'random':
+            jj, ii = _random_points(mask, spacing)
+        elif strategy == 'chebyshev':
+            pass
     else:
         jj, ii = points.search_j, points.search_i
 

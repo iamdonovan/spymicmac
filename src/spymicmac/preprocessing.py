@@ -32,13 +32,13 @@ def initialize_kh9_mc(add_sfs=False, cam_csv='camera_defs.csv', overwrite=False)
     :param bool overwrite: overwrite existing files [False]
     """
     # first, check whether we have multiple cameras
-    is_multicam = os.path.exists('camera_defs.csv')
+    is_multicam = os.path.exists(cam_csv)
 
     if is_multicam:
-        cameras = pd.read_csv('camera_defs.csv')
+        cameras = pd.read_csv(cam_csv)
 
         if not os.path.exists('MicMac-LocalChantierDescripteur.xml'):
-            micmac.create_localchantier_xml(add_sfs=add_sfs, cam_csv='camera_defs.csv')
+            micmac.create_localchantier_xml(add_sfs=add_sfs, cam_csv=cam_csv)
 
         for cam in cameras.itertuples():
             foc = int(cam.focal * 1000)
