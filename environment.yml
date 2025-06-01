@@ -7,8 +7,6 @@ dependencies:
   - scikit-image
   - geopandas
   - geoutils
-  - matplotlib
-  - sphinx
   - opencv<4.9.0
   - lxml
   - gdal
@@ -19,8 +17,9 @@ dependencies:
   - exiftool
   - pillow>9.1.0
   - rtree
+  - sphinx
+  - sphinx-argparse
+  - sphinx-book-theme
   - pip
   - pip:
-      - sphinx-argparse
-      - sphinx-rtd-theme
       - usgs
