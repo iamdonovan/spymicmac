@@ -14,7 +14,7 @@ To begin, run :doc:`../../spymicmac/scripts/generate_micmac_measures` to generat
 Next, create a new directory, ``Ori-InterneScan``, and move ``MeasuresCamera.xml`` into it.
 
 Finally, run :py:meth:`spymicmac.micmac.create_localchantier_xml` to create ``MicMac-LocalChantierDescripteur.xml``,
-or :download:`download <../examples/MicMac-LocalChantierDescripteur.xml>` the example provided.
+or :download:`download <examples/MicMac-LocalChantierDescripteur.xml>` the example provided.
 
 .. note::
 

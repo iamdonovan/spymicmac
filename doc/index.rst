@@ -13,6 +13,7 @@ page. If you found any of the tools helpful, let me know!
    :maxdepth: 2
 
    setup
+   tealdeer
    tutorials/index
    spymicmac/index
 
