@@ -1,5 +1,5 @@
-initial setup files
-===================
+initial setup
+==============
 
 There are a number of files that you will need to process your images using MicMac, which are detailed below.
 
