@@ -1,4 +1,4 @@
-historic air photo preprocessing
+radiometric pre-processing
 =================================
 
 It may be worthwhile to perform some different pre-processing steps on scanned historic air images. For example,
@@ -9,7 +9,7 @@ image de-striping
 ------------------
 Occasionally, scanned images will have artefacts, such as the prominent striping shown here:
 
-.. image:: ../../../img/stripe.png
+.. image:: img/stripe.png
     :width: 600
     :align: center
     :alt: a scanned aerial image with prominent striping
@@ -28,7 +28,7 @@ these stripes - note the use of ``scan_axis=1`` to indicate a scan from left to 
 
 The result shows a significant reduction in the striping:
 
-.. image:: ../../../img/destripe.png
+.. image:: img/destripe.png
     :width: 600
     :align: center
     :alt: a scanned aerial image with striping removed
@@ -42,9 +42,9 @@ contrast enhancement
 Another common issue with scanned aerial images is that they can have inconsistent brightness between different
 images:
 
-.. image:: ../../../img/destripe.png
+.. image:: img/destripe.png
     :width: 49%
-.. image:: ../../../img/bright.png
+.. image:: img/bright.png
     :width: 49%
 
 |br| ``spymicmac`` has two main functions available for enhancing contrast: :py:meth:`spymicmac.image.stretch_image`
@@ -57,7 +57,7 @@ stretched image.
 For the image on the left above, here is the result of applying ``stretch_image()`` clipped to (0.01, 0.99) -
 that is, 1% and 99% of the image values:
 
-.. image:: ../../../img/stretch.png
+.. image:: img/stretch.png
     :width: 600
     :align: center
     :alt: a scanned aerial image
@@ -65,7 +65,7 @@ that is, 1% and 99% of the image values:
 |br| And here is the result using ``contrast_enhance()`` (note that this also enhances the residual striping
 that was not corrected earlier):
 
-.. image:: ../../../img/enhanced.png
+.. image:: img/enhanced.png
     :width: 600
     :align: center
     :alt: a scanned aerial image with striping removed

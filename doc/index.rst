@@ -13,7 +13,6 @@ page. If you found any of the tools helpful, let me know!
    :maxdepth: 2
 
    setup
-   examples/index
    tutorials/index
    spymicmac/index
 

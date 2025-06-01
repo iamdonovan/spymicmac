@@ -132,7 +132,7 @@ The MicMac program for inputting fiducial mark locations is ``SaisieAppuisInitQT
 
 This will open a window like the following:
 
-.. image:: ../../../img/saisieappuisinit.png
+.. image:: img/saisieappuisinit.png
     :width: 600
     :align: center
     :alt: the SaisieAppuisInitQT window
@@ -189,4 +189,4 @@ remaining images using template matching, to try to find their locations automat
 Note that it does not always work, especially for images where the fiducial mark is a dot rather than a crosshair or
 target.
 
-Once you have all of the image points, you can move on to the next step: re-sampling the images using ``ReSampFid``.
+Once you have all of the image points, you can move on to the next step: re-sampling the images.

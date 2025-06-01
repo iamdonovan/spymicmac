@@ -17,7 +17,7 @@ look like, and the approximate coordinates of the fiducial marks that you can us
 Fairchild F224, K17B (Metrogon Lens)
 ------------------------------------
 
-.. image:: ../../../img/fairchild.png
+.. image:: img/fairchild.png
     :width: 400
     :align: center
     :alt: a diagram of a Fairchild F224 K17B with fiducial markers labeled
@@ -46,7 +46,7 @@ Fairchild KC-1, KC-1B, T-11 (Metrogon Lens)
 
 .. _fairchild t11d:
 
-.. image:: ../../../img/fairchild_kc1b.png
+.. image:: img/fairchild_kc1b.png
     :width: 400
     :align: center
     :alt: a diagram of a Fairchild KC-1B with fiducial markers labeled
@@ -71,7 +71,7 @@ Fairchild KC-1, KC-1B, T-11 (Metrogon Lens)
 
     .. _fairchild t11s:
 
-    .. image:: ../../../img/fairchild_t11.png
+    .. image:: img/fairchild_t11.png
         :width: 400
         :align: center
         :alt: a diagram of a Fairchild T-11 with fiducial markers labeled
@@ -82,7 +82,7 @@ Fairchild KC-1, KC-1B, T-11 (Metrogon Lens)
 Wild RC5, RC8 (Aviogon Lens)
 -----------------------------
 
-.. image:: ../../../img/wild_rc5.png
+.. image:: img/wild_rc5.png
     :width: 400
     :align: center
     :alt: a diagram of a Wild RC5 with fiducial markers labeled
@@ -106,7 +106,7 @@ Wild RC5, RC8 (Aviogon Lens)
 Wild RC10 (Aviogon Lens)
 -------------------------
 
-.. image:: ../../../img/wild_rc10.png
+.. image:: img/wild_rc10.png
     :width: 400
     :align: center
     :alt: a diagram of a Wild RC10 with fiducial markers labeled
@@ -138,7 +138,7 @@ Wild RC10 (Aviogon Lens)
 Zeiss RMK 15/23 (Pleogon Lens)
 -------------------------------
 
-.. image:: ../../../img/zeiss.png
+.. image:: img/zeiss.png
     :width: 400
     :align: center
     :alt: a diagram of a Zeiss RMK with fiducial markers labeled
@@ -166,7 +166,7 @@ Zeiss RMK 15/23 (Pleogon Lens)
 Zeiss RMK A 15/23 (Pleogon Lens)
 ---------------------------------
 
-.. image:: ../../../img/zeiss_rmka.png
+.. image:: img/zeiss_rmka.png
     :width: 400
     :align: center
     :alt: a diagram of a Zeiss RMK with fiducial markers labeled

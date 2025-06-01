@@ -1,8 +1,14 @@
-re-sampling the images
-======================
+image resampling
+================
 
-air photos
-------------
+declassified images
+-------------------
+
+
+aerial images
+-------------
+
+
 
 After you have found each of the fiducial marks in each image and generated a MeasuresIm file for each image, either by
 hand or using ``mm3d Kugelhupf``, you can run ``ReSampFid``:
@@ -41,7 +47,7 @@ kh-9 hexagon mapping camera
 -----------------------------
 
 To resample KH-9 Hexagon Mapping Camera images, use either :py:meth:`spymicmac.resample.resample_hex` or
-:doc:`../../spymicmac/scripts/resample_hexagon`.
+:doc:`../../../spymicmac/scripts/resample_hexagon`.
 
 
 next step
