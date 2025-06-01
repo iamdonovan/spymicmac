@@ -7,7 +7,7 @@ photos.
 The basic workflow looks like this:
 
 .. image:: ../img/workflow.png
-    :width: 600
+    :width: 720
     :align: center
     :alt: a flow diagram showing the steps involved in spymicmac processing
 
