@@ -8,8 +8,8 @@ Once you have successfully run :py:meth:`spymicmac.register.register_relative`, 
 
     mm3d Malt Ortho "OIS.*tif" TerrainFirstPass DirMEC=MEC-Malt NbVI=2 MasqImGlob=filtre.tif ZoomF=1 DefCor=0 CostTrans=1 EZA=1
 
-Just like with the :doc:`relative` step, once this command finishes, you will have two new directories: ``MEC-Malt``
-and ``Ortho-MEC-Malt``. The DEM and associated correlation masks are found in ``MEC-Malt``, while the
+Just like with the :doc:`../relative/malt` step, once this command finishes, you will have two new directories:
+``MEC-Malt`` and ``Ortho-MEC-Malt``. The DEM and associated correlation masks are found in ``MEC-Malt``, while the
 orthophotos are found in ``Ortho-MEC-Malt``.
 
 Depending on the scale of your images and how many you are using, you will probably need to mosaic the tiles
@@ -26,7 +26,7 @@ to the DEM.
 
 creating the orthomosaic using Tawny
 ------------------------------------
-Just like with the :doc:`relative` step, the orthoimages are not mosaicked - they are just the individual images
+Just like with the :doc:`../relative/malt` step, the orthoimages are not mosaicked - they are just the individual images
 orthorectified using the extracted DEM - you'll need to run ``Tawny`` again to mosaic the images:
 
 .. code-block:: sh

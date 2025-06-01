@@ -58,7 +58,8 @@ You can then open the ``.ply`` file using, for example, `Cloud Compare <https://
 
 fixing the orientation
 ------------------------
-If your `Tapas` output looks okay, you can move on to the next step, :doc:`relative`.
+
+If your ``Tapas`` output looks okay, you can move on to the next step, :doc:`malt`.
 
 If you are unlucky, however, there are some tools in :py:meth:`spymicmac.orientation` to help manipulate the orientation
 files to help ``Tapas`` converge. For example, occasionally cameras will be positioned in an incorrect location,

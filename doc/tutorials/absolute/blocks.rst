@@ -6,12 +6,13 @@ combining image blocks
     For "small" (<500) numbers of images, you can usually run all of the processing steps using all of the images. With
     more and more images, however, it can be advantageous to divide the images into sub-blocks.
 
-    The :doc:`tapas` step should be run with all of the images, in order to get the best possible relative orientation,
-    especially when working with areas with poor tie point coverage (for example, large glaciers or ice fields).
+    The :doc:`../relative/tapas` step should be run with all of the images, in order to get the best possible relative
+    orientation, especially when working with areas with poor tie point coverage (for example, large glaciers or
+    ice fields).
 
-If you divide the study area into smaller sub-blocks, you should run the previous steps (:doc:`relative`, :doc:`register`)
-on each sub-block individually. Unfortunately, this can often lead to issues in the areas where the blocks overlap,
-as seen below.
+If you divide the study area into smaller sub-blocks, you should run the previous steps (:doc:`../relative/malt`,
+:doc:`register`) on each sub-block individually. Unfortunately, this can often lead to issues in the areas where the
+blocks overlap, as seen below.
 
 .. image:: ../../img/overlap.png
     :width: 400
@@ -37,6 +38,6 @@ The screenshot below shows the point cloud file for a set of 1455 historic image
     :align: center
     :alt: the absolute orientation estimated by re-combining individual sub-blocks
 
-|br| The images were divided into 4 overlapping blocks of roughly equal size for the :doc:`relative` and :doc:`register`
-steps, before being re-combined into a single orientation used to extract DEMs and Orthophotos. This has resulted in
-relatively smooth overlaps between the different DEM blocks, as illustrated in the image below:
+|br| The images were divided into 4 overlapping blocks of roughly equal size for the :doc:`../relative/malt` and
+:doc:`register` steps, before being re-combined into a single orientation used to extract DEMs and Orthophotos. This
+has resulted in relatively smooth overlaps between the different DEM blocks, as illustrated in the image below:
