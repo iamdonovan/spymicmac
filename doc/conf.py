@@ -39,7 +39,7 @@ def setup(app):
 
 # -- Project information -----------------------------------------------------
 project = 'spymicmac'
-copyright = '2023, Robert McNabb'
+copyright = '2025, Robert McNabb'
 author = 'Robert McNabb'
 
 # The short X.Y version
@@ -98,18 +98,23 @@ pygments_style = None
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
 #
-html_theme = 'sphinx_rtd_theme'
+html_theme = 'sphinx_book_theme'
 
 # Theme options are theme-specific and customize the look and feel of a theme
 # further.  For a list of options available for each theme, see the
 # documentation.
 #
-# html_theme_options = {}
+html_theme_options = {
+    'repository_url': 'https://github.com/iamdonovan/spymicmac',
+    'use_repository_button': True,
+    'use_issues_button': True,
+    'use_edit_page_button': True
+}
 
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
-html_static_path = ['_static']
+# html_static_path = ['_static']
 
 # Custom sidebar templates, must be a dictionary that maps document names
 # to template names.
@@ -152,7 +157,7 @@ latex_elements = {
 # (source start file, target name, title,
 #  author, documentclass [howto, manual, or own class]).
 latex_documents = [
-    (master_doc, 'sPyMicMac.tex', 'sPyMicMac Documentation',
+    (master_doc, 'spymicmac.tex', 'spymicmac Documentation',
      'Robert McNabb', 'manual'),
 ]
 
@@ -162,7 +167,7 @@ latex_documents = [
 # One entry per manual page. List of tuples
 # (source start file, name, description, authors, manual section).
 man_pages = [
-    (master_doc, 'sPyMicMac', 'sPyMicMac Documentation',
+    (master_doc, 'spymicmac', 'spymicmac Documentation',
      [author], 1)
 ]
 
@@ -173,8 +178,8 @@ man_pages = [
 # (source start file, target name, title, author,
 #  dir menu entry, description, category)
 texinfo_documents = [
-    (master_doc, 'sPyMicMac', 'sPyMicMac Documentation',
-     author, 'sPyMicMac', 'One line description of project.',
+    (master_doc, 'spymicmac', 'spymicmac Documentation',
+     author, 'spymicmac', 'Photogrammetric processing of historic satellite and aerial images.',
      'Miscellaneous'),
 ]
 
