@@ -69,7 +69,7 @@ Then, use :py:meth:`spymicmac.micmac.create_measurescamera_xml` to create ``Ori-
 .. code-block:: python
 
     from spymicmac import micmac
-    micmac.create_measurescamera_xml(translate=True)
+    micmac.create_measurescamera_xml(fn_csv, translate=True)
 
 This will generate the following XML file:
 
