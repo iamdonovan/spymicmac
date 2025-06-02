@@ -8,14 +8,21 @@ have very many images, you can use ``Tapioca`` to find the tie points by matchin
 
     mm3d Tapioca MulScale "OIS.*tif" 400 1200
 
-kh-9 hexagon mapping camera
+KH-9 Hexagon mapping camera
 -----------------------------
 
-When working with KH-9 images, the single ``Tapioca`` call will usually be sufficient, and you can move on to the
-next step: :doc:`tapas`.
+Because of the small number of images used in processing KH-9 Hexagon mapping camera images, the basic ``Tapioca`` call
+will usually be sufficient, and you can move on to the next step: :doc:`tapas`.
 
-air photos
------------
+Occasionally, it might be necessary to re-run this step at a higher resolution, to generate a more dense coverage
+of tie points - for example:
+
+.. code-block:: sh
+
+    mm3d Tapioca MulScale "OIS.*tif" 800 8000
+
+aerial images
+--------------
 
 the neighbours file
 .....................
