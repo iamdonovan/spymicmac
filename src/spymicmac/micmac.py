@@ -1314,16 +1314,16 @@ def batch_saisie_fids(imlist, flavor='qt', fn_cam=None, clean=True, gamma=None):
 
     if os.path.exists(fn_cam):
         measures_cam = parse_im_meas(fn_cam)
-        with open('id_fiducials.txt', 'w') as f:
+        with open('id_fiducial.txt', 'w') as f:
             for fid in measures_cam['name']:
                 print(fid, file=f)
-        _generate_glob('id_fiducials.txt')
+        _generate_glob('id_fiducial.txt')
     else:
         try:
-            _generate_glob('id_fiducials.txt')
+            _generate_glob('id_fiducial.txt')
         except FileNotFoundError as e:
-            raise FileNotFoundError('id_fiducials.txt not found. Please specify fn_cam, '
-                                    'or ensure that id_fiducials.txt exists in the current directory.')
+            raise FileNotFoundError('id_fiducial.txt not found. Please specify fn_cam, '
+                                    'or ensure that id_fiducial.txt exists in the current directory.')
 
     if flavor == 'qt':
         saisie = 'SaisieAppuisInitQT'
@@ -1343,7 +1343,7 @@ def batch_saisie_fids(imlist, flavor='qt', fn_cam=None, clean=True, gamma=None):
             shutil.copy('Tmp-SL-Glob.xml',
                         Path('Tmp-SaisieAppuis', f'Tmp-SL-Glob-MeasuresIm-{fn_img}.xml'))
 
-        saisie_args = ['mm3d', saisie, fn_img, 'NONE', 'id_fiducials.txt', f'MeasuresIm-{fn_img}.xml']
+        saisie_args = ['mm3d', saisie, fn_img, 'NONE', 'id_fiducial.txt', f'MeasuresIm-{fn_img}.xml']
 
         if gamma is not None:
             saisie_args.append(f"Gama={gamma}")
