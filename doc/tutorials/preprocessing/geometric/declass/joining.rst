@@ -29,4 +29,6 @@ has the option to blend the two halves over the overlap by averaging the values 
 100% of the value of image 'a', linearly increasing to 100% of the value of image 'b' at the end of the
 overlapping part.
 
-Once you have joined the image scans together, you can move on to finding the
+Once you have joined the image scans together, you can move on to finding the :doc:`réseau marks <reseau>` (or the
+:doc:`image border <panoramic>`, if using panoramic images), to be able to resample the images to a consistent
+geometry.
