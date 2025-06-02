@@ -65,22 +65,27 @@ The first step in :py:meth:`spymicmac.register.register_relative` to use :py:met
 to transform between the relative and absolute spaces, using the centroids of the footprint polygons and the camera
 positions estimated by ``mm3d Tapas``.
 
-.. image:: ../../img/relative_ply.png
+The initial transformation is plotted for review:
+
+.. image:: img/initial_transformation.png
     :width: 600
     :align: center
-    :alt: diagram showing the transformation of the relative orthophoto to absolute space, using the camera positions
+    :alt: the initial transformation of the relative image, plotted next to the reference image
 
-|br| Because the footprints are most likely approximate, especially for historic datasets, this step uses
+|br| and the relative image, re-projected to the extent and CRS of the reference image, is also saved for checking.
+
+Because the footprints are most likely approximate, especially for historic datasets, this step uses
 `RANSAC <https://scikit-image.org/docs/dev/api/skimage.measure.html#skimage.measure.ransac>`_ with a fairly large
 residual threshold. The goal is to create a rough transformation of the relative orthophoto that can be used for
 the gridded template matching step.
 
-gridded template matching
---------------------------
+template matching
+------------------
+
 Once the relative orthophoto has been roughly transformed to absolute space,
-:py:meth:`spymicmac.register.register_relative` find matches between the orthophoto and the reference image using
-:py:meth:`spymicmac.matching.find_grid_matches`. The size of each search window is set by ``dstwin``, and the templates
-(of size 121x121 pixels) are taken from a grid with spacing determined by the ``density`` parameter.
+:py:meth:`spymicmac.register.register_relative` finds matches between the orthophoto and the reference image using
+:py:meth:`spymicmac.matching.find_grid_matches`. The size of each template is 121x121 pixels, while the size of the
+search window is set by ``dstwin``.
 
 Each template and search image are first run through :py:meth:`spymicmac.image.highpass_filter`, to help minimize
 radiometric differences between the two images (and maximizing the high-frequency variation). After that, the
@@ -91,40 +96,122 @@ The correlation value of each potential match is then compared to the standard d
 values from the search image. This value (``z_corr``) is then used to filter out poor matches later on, as higher
 quality matches are more likely to represent larger departures from the background correlation value:
 
-.. image:: ../../img/correlation_match.png
-    :width: 600
+.. image:: img/correlation_match.png
+    :width: 720
     :align: center
     :alt: a comparison of (a) the template, (b) the search space (with match indicated by a red plus), and (c) the correlation between the template and search image
 
-|br|
-
 iterative outlier removal
 --------------------------
+
 After the potential matches are found, a number of filtering steps are used to refine the results. First, any matches
 where the DEM does not have a value are removed. Then, an affine transformation between the relative orthoimage
 and reference orthoimage locations is estimated using RANSAC, to help remove obvious blunders.
 
 Next, `mm3d GCPBascule <https://micmac.ensg.eu/index.php/GCPBascule>`_ is called, which transforms the camera locations
-to the absolute space. The residuals for each GCP are then calculated, and outliers more than 2 normalized median
+to the absolute space. The residuals for each GCP are then calculated, and outliers more than 3 normalized median
 absolute deviations (NMAD) from the median residual value are discarded, and ``mm3d GCPBascule`` is called again.
 
 This is followed by a call to `mm3d Campari <https://micmac.ensg.eu/index.php/Campari>`_ using
-:py:meth:`spymicmac.micmac.campari`, and again residuals more than 2 NMAD from the median residual value are discarded.
+:py:meth:`spymicmac.micmac.campari`, and again residuals more than 3 NMAD from the median residual value are discarded.
 
-After this, this process (``mm3d GCPBascule`` -> ``mm3d Campari`` -> outlier removal) is run up to 4 more times,
+After this, this process (``mm3d GCPBascule`` -> ``mm3d Campari`` -> outlier removal) is run up to 5 more times,
 until there are no further outliers found.
 
 final result
 -------------
+
 Once the outliers have been removed, the final GCP locations are stored in a number of files:
 
-    - auto_gcps/AutoGCPs.xml
-    - auto_gcps/AutoGCPs.txt
-    - auto_gcps/AutoGCPs.shp (+ other files)
-    - AutoMeasures.xml -- the GCP locations in each of the individual images
+- auto_gcps/AutoGCPs.xml
+- auto_gcps/AutoGCPs.txt
+- auto_gcps/AutoGCPs.shp (+ other files)
+- AutoMeasures.xml -- the GCP locations in each of the individual images
 
-If there are still problematic GCPs, you can manually delete them from ``AutoMeasures.xml`` and re-run
+The final location of the GCPs is shown in both the relative image space:
+
+.. image:: img/relative_gcps.png
+    :width: 600
+    :align: center
+    :alt: the relative gcp locations plotted as red crosses, with the offset plotted as red arrows
+
+|br| as well as the absolute space:
+
+.. image:: img/world_gcps_cheb.png
+    :width: 400
+    :align: center
+    :alt: the absolute gcp locations plotted as red crosses, with the image footprints shown as blue outlines
+
+|br| And, the distribution of residuals is plotted for each of the x, y, and z dimensions, as well as the planimetric
+and three-dimensional residuals:
+
+.. image:: img/gcp_residuals_plot.png
+    :width: 600
+    :align: center
+    :alt: the distribution of the gcp residuals
+
+|br| If there are still problematic GCPs, you can manually delete them from ``AutoMeasures.xml`` and re-run
 ``mm3d GCPBascule`` and ``mm3d Campari``.
 
 The next step will be to run `mm3d Malt <https://micmac.ensg.eu/index.php/Malt>`_ using the ``Ori-TerrainFirstPass``
 directory, to produce the absolute orthophoto and DEM.
+
+using check points
+------------------
+
+To evaluate the results of the registration and bundle block adjustment, you can also use check points
+(``use_cps=True``). This will randomly select a proprotion of the initial match points (``cp_frac=0.2``), and evaluate
+the residuals of these check points after the iterative bundle block adjustment is finished.
+
+Check points are plotted as blue squares in the GCP location plots:
+
+.. image:: img/world_gcps_withcps.png
+    :width: 400
+    :align: center
+    :alt: the absolute gcp locations plotted as red crosses, with the checkpoint locations shown as blue squares
+
+|br| As with the GCPs, the distribution of residuals is also plotted:
+
+.. image:: img/cp_residuals_plot.png
+    :width: 600
+    :align: center
+    :alt: the distribution of the checkpoint residuals
+
+|br| Note that because the check points are randomly selected from the initial matches, it is possible that there will
+be large residuals due to spurious matches or other issues with the points.
+
+search strategies
+------------------
+
+Five different strategies for template matching are available:
+
+- regular grid (``strategy='grid'``) - a regular grid of points, spaced by ``density`` pixels (default value: 200),
+  is used to register the relative image to the reference image. This is the default option.
+- random points (``strategy='random'``) - potential points are generated randomly throughout the image. In this case,
+  ``density`` is the approximate total number of points desired, rather than the spacing.
+- `Chebyshev <https://en.wikipedia.org/wiki/Chebyshev_nodes>`__ nodes (``strategy='chebyshev'``). A grid is generated
+  by using the formula for the :math:`n` Chebyshev nodes of the second kind, where :math:`n` is calculated for each
+  image dimension by dividing the dimension by ``density`` and taking the integer value. This has the benefit of
+  increasing the density of search points at the border of the image domain and decreasing the density in the center,
+  which can help to lessen the effects of doming in the bundle block adjustment.
+- manually identified points (``fn_gcps``) - template matching is performed using the point locations passed through
+  either a CSV or shapefile/geopackage.
+- orb (``use_orb=True``) - potential points are identified within a grid (spaced by ``density`` pixels) using
+  `skimage.feature.ORB <https://scikit-image.org/docs/stable/api/skimage.feature.html#skimage.feature.ORB>`__. This
+  has the benefit of selecting clear/obvious features, though it may also be more time intensive owing to the higher
+  number of potential matches generated.
+
+The plots below illustrate the difference in distributions between the regular grid (left), random points (center),
+and chebyshev (right) strategies, run using the same initial parameters:
+
+.. image:: img/world_gcps.png
+    :width: 32%
+
+.. image:: img/world_gcps_rdm.png
+    :width: 32%
+
+.. image:: img/world_gcps_cheb.png
+    :width: 32%
+
+|br| With the chebyshev strategy, the GCPs are more dense along the edges of the image overlap, and less densely spaced
+towards the middle of the overlapping area.
