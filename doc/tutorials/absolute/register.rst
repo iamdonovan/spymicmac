@@ -206,12 +206,20 @@ and chebyshev (right) strategies, run using the same initial parameters:
 
 .. image:: img/world_gcps.png
     :width: 32%
+    :alt: the regular grid gcp locations plotted as red crosses
 
 .. image:: img/world_gcps_rdm.png
     :width: 32%
+    :alt: the random gcp locations plotted as red crosses
 
 .. image:: img/world_gcps_cheb.png
     :width: 32%
+    :alt: the chebyshev grid gcp locations plotted as red crosses
 
-|br| With the chebyshev strategy, the GCPs are more dense along the edges of the image overlap, and less densely spaced
-towards the middle of the overlapping area.
+|br| With ``strategy='chebyshev'``, the GCPs are more dense along the edges of the image overlap, and less densely spaced
+towards the middle of the overlapping area:
+
+.. image:: img/cheb_example.png
+    :width: 700
+    :align: center
+    :alt: the relative dem, with the generated chebyshev points plotted as red crosses
