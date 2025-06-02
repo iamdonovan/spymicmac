@@ -174,6 +174,8 @@ most likely need to modify them as explained above.
 - :download:`MeasuresCamera.xml <../examples/MeasuresCamera.xml>`
 - :download:`MicMac-LocalChantierDescripteur.xml <../examples/MicMac-LocalChantierDescripteur.xml>`
 
+.. _multicam:
+
 multiple cameras
 ----------------
 
