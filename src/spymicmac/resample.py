@@ -34,7 +34,7 @@ def resample_hex(fn_img, scale, ori='InterneScan', alg=gdal.GRA_Bilinear, tps=Tr
     :param int scale: the number of pixels per mm of the scanned image
     :param str ori: the Ori directory that contains both MeasuresCamera.xml and MeasuresIm (default: InterneScan)
     :param alg: the gdal resampling algorithm to use (default: gdal.GRA_Bilinear)
-    :param bool tps: use a thin plate spline transformer to transform based on reseau grid (default: False)
+    :param bool tps: use a thin plate spline transformer to transform based on reseau grid (default: True)
     :param int order: the order (1-3) of polynomial GCP interpolation (default: not used)
     """
     cam_meas = micmac.parse_im_meas(Path(f"Ori-{ori}", 'MeasuresCamera.xml'))
