@@ -21,7 +21,7 @@ from shapely.ops import nearest_points
 from shapely.geometry import LineString, MultiPoint, Point
 import geopandas as gpd
 import geoutils as gu
-from spymicmac import image, micmac, resample, register
+from . import image, micmac, resample, register
 from numpy.typing import NDArray
 from typing import Union
 

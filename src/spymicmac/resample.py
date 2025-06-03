@@ -11,7 +11,7 @@ from skimage.transform import AffineTransform, SimilarityTransform, warp
 from skimage.morphology import disk
 from scipy import ndimage
 import numpy as np
-from spymicmac import image, micmac, matching
+from . import image, micmac, matching
 
 
 def downsample(img, fact=4):

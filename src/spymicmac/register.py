@@ -18,7 +18,7 @@ from shapely.ops import unary_union
 from shapely.geometry.point import Point
 from skimage.measure import ransac
 from skimage.transform import AffineTransform, warp
-from spymicmac import data, image, matching, micmac, orientation
+from . import data, image, matching, micmac, orientation
 
 
 def nmad(values, nfact=1.4826):

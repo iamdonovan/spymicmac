@@ -24,7 +24,7 @@ from shapely.geometry import LineString, MultiPoint
 from skimage.io import imread, imsave
 from skimage.transform import AffineTransform
 import geoutils as gu
-from spymicmac import data, register, resample
+from . import data, register, resample
 
 
 ######################################################################################################################

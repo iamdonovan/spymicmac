@@ -103,3 +103,6 @@ def check_reseau() -> bool:
         # check that each image file has a matching measuresim file
         return all([any([im in meas for meas in measlist]) for im in imlist])
 
+
+def preprocess_kh9mc():
+    pass

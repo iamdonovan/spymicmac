@@ -12,7 +12,7 @@ from scipy import ndimage
 from scipy.ndimage.filters import generic_filter
 import numpy as np
 from numba import jit
-from spymicmac import matching, resample
+from . import matching, resample
 from numpy.typing import NDArray, DTypeLike
 from typing import Union
 

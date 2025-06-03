@@ -11,7 +11,7 @@ import geopandas as gpd
 from osgeo import gdal
 from shapely.ops import split, orient
 from shapely.geometry import LineString, Point, Polygon
-from spymicmac import data, declass
+from . import data, declass
 from typing import Union
 
 
