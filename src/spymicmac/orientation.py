@@ -8,6 +8,7 @@ from collections import defaultdict
 import numpy as np
 import pandas as pd
 import geopandas as gpd
+import geoutils as gu
 import matplotlib.pyplot as plt
 import lxml.etree as etree
 import lxml.builder as builder
@@ -19,13 +20,16 @@ from shapely.geometry import LineString, MultiPoint
 from skimage.transform import AffineTransform
 from skimage.measure import ransac
 from . import register, micmac
+from typing import Union
+from numpy.typing import NDArray
+from mpl_toolkits.mplot3d.axes3d import Axes3D
 
 
-def plot_camera_centers(ori, ax=None):
+def plot_camera_centers(ori: str, ax: Union[Axes3D, None] = None) -> Axes3D:
     """
     Plot camera center locations in a 3D axis using matplotlib.
 
-    :param str ori: the name of the orientation directory (e.g., Ori-Relative).
+    :param ori: the name of the orientation directory (e.g., Ori-Relative).
     :param ax: an existing 3d matplotlib axis. If None, one will be created.
     :return: **ax** -- a matplotlib axis with the camera centers plotted
     """
@@ -40,20 +44,19 @@ def plot_camera_centers(ori, ax=None):
     return ax
 
 
-
-def combine_block_measures(blocks, meas_out='AutoMeasures', gcp_out='AutoGCPs',
-                           fn_mes='AutoMeasures_block', fn_gcp='AutoGCPs_block', dirname='auto_gcps',
-                           share_gcps=False):
+def combine_block_measures(blocks: list, meas_out: str = 'AutoMeasures', gcp_out: str = 'AutoGCPs',
+                           fn_mes: str = 'AutoMeasures_block', fn_gcp: str = 'AutoGCPs_block',
+                           dirname: str ='auto_gcps', share_gcps: bool = False) -> None:
     """
     Combine GCPs and Measures files from multiple sub-blocks into a single file.
 
-    :param list blocks: a list of the sub-block numbers to combine
-    :param str meas_out: the output filename for the Measures file (no extension). (default: AutoMeasures)
-    :param str gcp_out: the output filename for the GCP file (no extension). (default: AutoGCPs)
-    :param str fn_mes: the name pattern of the measures files to combine (default: AutoMeasures_block)
-    :param str fn_gcp: the name pattern of the GCP files to combine (default: AutoGCPs_block)
-    :param str dirname: the output directory where the files are saved (default: auto_gcps)
-    :param bool share_gcps: GCPs are shared between blocks (default: False)
+    :param blocks: a list of the sub-block numbers to combine
+    :param meas_out: the output filename for the Measures file (no extension).
+    :param gcp_out: the output filename for the GCP file (no extension).
+    :param fn_mes: the name pattern of the measures files to combine.
+    :param fn_gcp: the name pattern of the GCP files to combine.
+    :param dirname: the output directory where the files are saved.
+    :param share_gcps: GCPs are shared between blocks.
     """
     ngcp = 0 # keep track of the number of GCPs
 
@@ -129,28 +132,29 @@ def combine_block_measures(blocks, meas_out='AutoMeasures', gcp_out='AutoGCPs',
     tree.write(Path(dirname, meas_out + '-S2D.xml'), pretty_print=True, xml_declaration=True, encoding="utf-8")
 
 
-def block_orientation(blocks, meas_out='AutoMeasures', gcp_out='AutoGCPs',
-                      fn_mes='AutoMeasures_block', fn_gcp='AutoGCPs_block', dirname='auto_gcps',
-                      rel_ori='Relative', outori='TerrainFinal', homol='Homol',
-                      ref_dx=15, ortho_res=8, allfree=True, max_iter=1, share_gcps=False):
+def block_orientation(blocks: list, meas_out: str = 'AutoMeasures', gcp_out: str = 'AutoGCPs',
+                      fn_mes: str = 'AutoMeasures_block', fn_gcp: str = 'AutoGCPs_block', dirname: str = 'auto_gcps',
+                      rel_ori: str = 'Relative', outori: str = 'TerrainFinal', homol: str = 'Homol',
+                      ref_dx: Union[int, float] = 15, ortho_res: Union[int, float] = 8, allfree: bool = True,
+                      max_iter: int = 1, share_gcps: bool = False) -> gpd.GeoDataFrame:
     """
     Combine GCPs, Measures files, and Ori directories from multiple sub-blocks into a single file and orientation.
 
-    :param list blocks: a list of the sub-block numbers to combine
-    :param str meas_out: the output filename for the Measures file (no extension). (default: AutoMeasures)
-    :param str gcp_out: the output filename for the GCP file (no extension). (default: AutoGCPs)
-    :param str fn_mes: the name pattern of the measures files to combine (default: AutoMeasures_block)
-    :param str fn_gcp: the name pattern of the GCP files to combine (default: AutoGCPs_block)
-    :param str dirname: the output directory where the files are saved (default: auto_gcps)
-    :param str rel_ori: the name of the relative orientation to input to GCPBascule (default: Relative -> Ori-Relative)
-    :param str outori: the output orientation from Campari (default: TerrainFinal -> Ori-TerrainFinal)
-    :param str homol: the Homologue directory to use (default: Homol)
-    :param int|float ref_dx: the pixel resolution of the reference image, in meters. (default: 15)
-    :param int|float ortho_res: the pixel resolution of the orthoimage being used, in meters. (default: 8)
-    :param bool allfree: run Campari with AllFree=1 (True), or AllFree=0 (False). (default: True)
-    :param int max_iter: the maximum number of iterations to run. (default: 1)
-    :param bool share_gcps: GCPs are shared between blocks (default: False)
-    :return: **gcps** (*GeoDataFrame*) -- the combined GCPs output from spymicmac.micmac.iterate_campari
+    :param blocks: a list of the sub-block numbers to combine
+    :param meas_out: the output filename for the Measures file (no extension).
+    :param gcp_out: the output filename for the GCP file (no extension).
+    :param fn_mes: the name pattern of the measures files to combine.
+    :param fn_gcp: the name pattern of the GCP files to combine.
+    :param dirname: the output directory where the files are saved.
+    :param rel_ori: the name of the relative orientation to input to GCPBascule (default: Relative -> Ori-Relative)
+    :param outori: the output orientation from Campari (default: TerrainFinal -> Ori-TerrainFinal).
+    :param homol: the Homologue directory to use.
+    :param ref_dx: the pixel resolution of the reference image, in meters.
+    :param ortho_res: the pixel resolution of the orthoimage being used, in meters.
+    :param allfree: run Campari with AllFree=1 (True), or AllFree=0 (False).
+    :param max_iter: the maximum number of iterations to run.
+    :param share_gcps: GCPs are shared between blocks
+    :return: **gcps** -- the combined GCPs output from spymicmac.micmac.iterate_campari
     """
     combine_block_measures(blocks, meas_out=meas_out, gcp_out=gcp_out,
                            fn_mes=fn_mes, fn_gcp=fn_gcp, dirname=dirname, share_gcps=share_gcps)
@@ -166,19 +170,19 @@ def block_orientation(blocks, meas_out='AutoMeasures', gcp_out='AutoGCPs',
 ######################################################################################################################
 # orientation tools - used for visualizing, manipulating camera orientation files
 ######################################################################################################################
-def load_orientation(fn_img, ori):
+def load_orientation(fn_img: str, ori: str) -> tuple[list, list, list, list, float, float]:
     """
     Read camera position and rotation information from an Orientation xml file.
 
-    :param str fn_img: the name of the image to read the orientation file for.
-    :param str ori: the name of the orientation directory (e.g., Ori-Relative).
+    :param fn_img: the name of the image to read the orientation file for.
+    :param ori: the name of the orientation directory (e.g., Ori-Relative).
     :return:
-        - **centre** (*list*) -- the camera position (x, y, z)
-        - **l1** (*list*) -- the L1 orientation parameters
-        - **l2** (*list*) -- the L2 orientation parameters
-        - **l3** (*list*) -- the L3 orientation parameters
-        - **prof** (*float*) -- the 'Profondeur' value from the xml file.
-        - **altisol** (*float*) -- the 'AltiSol' value from the xml file.
+        - **centre** -- the camera position (x, y, z)
+        - **l1** -- the L1 orientation parameters
+        - **l2** -- the L2 orientation parameters
+        - **l3** -- the L3 orientation parameters
+        - **prof** -- the 'Profondeur' value from the xml file.
+        - **altisol** -- the 'AltiSol' value from the xml file.
 
     """
     ori_root = ET.parse(Path(ori, f"Orientation-{fn_img}.xml")).getroot()
@@ -213,13 +217,13 @@ def load_orientation(fn_img, ori):
     return centre, l1, l2, l3, prof, altisol
 
 
-def load_all_orientation(ori, imlist=None):
+def load_all_orientation(ori: str, imlist: Union[list, None] = None) -> pd.DataFrame:
     """
     Load all of the orientation parameters for a set of images from a given directory.
 
-    :param str ori: the orientation directory to read
-    :param list imlist: the images to load. If not set, loads all orientation files from the given directory.
-    :return: **ori_df** (*pandas.DataFrame*) -- a DataFrame containing the orientation parameters for each image
+    :param ori: the orientation directory to read
+    :param imlist: the images to load. If not set, loads all orientation files from the given directory.
+    :return: **ori_df** -- a DataFrame containing the orientation parameters for each image
     """
     df = pd.DataFrame()
     points = []
@@ -257,14 +261,14 @@ def load_all_orientation(ori, imlist=None):
     return gpd.GeoDataFrame(df)
 
 
-def extend_line(df, first, last):
+def extend_line(df: pd.DataFrame, first: str, last: str) -> Point:
     """
     Extend a flightline using existing camera positions.
 
-    :param GeoDataFrame df: a GeoDataFrame containing the camera positions and image names
-    :param str first: the name of the image to start interpolating from.
-    :param str last: the name of the image to end interpolating at.
-    :return: **outpt** (*shapely.Point*) -- the new point along the flightline.
+    :param df: a GeoDataFrame containing the camera positions and image names
+    :param first: the name of the image to start interpolating from.
+    :param last: the name of the image to end interpolating at.
+    :return: **outpt** -- the new point along the flightline.
     """
     firstImg = df.loc[df.name.str.contains(first), 'geometry'].values[0]
     lastImg = df.loc[df.name.str.contains(last), 'geometry'].values[0]
@@ -276,16 +280,17 @@ def extend_line(df, first, last):
     return outpt
 
 
-def interp_line(df, first, last, nimgs=None, pos=None):
+def interp_line(df: pd.DataFrame, first: str, last: str,
+                nimgs: Union[int, None] = None, pos: Union[int, None] = None) -> Union[list, Point]:
     """
     Interpolate camera positions along a flightline.
 
     :param GeoDataFrame df: a GeoDataFrame containing the camera positions and image names
-    :param str first: the name of the image to start interpolating from.
-    :param str last: the name of the image to end interpolating at.
-    :param int nimgs: the number of images to interpolate (default: calculated based on the image numbers)
-    :param int pos: which image position to return (default: all images between first and last)
-    :return: **ptList** (*list*) -- a list containing the interpolated camera positions (or, a tuple of the requested
+    :param first: the name of the image to start interpolating from.
+    :param last: the name of the image to end interpolating at.
+    :param nimgs: the number of images to interpolate (default: calculated based on the image numbers)
+    :param pos: which image position to return (default: all images between first and last)
+    :return: **ptList** -- a list containing the interpolated camera positions (or, a tuple of the requested
       position).
     """
     if nimgs is None:
@@ -303,13 +308,13 @@ def interp_line(df, first, last, nimgs=None, pos=None):
         return ptList
 
 
-def update_center(fn_img, ori, new_center):
+def update_center(fn_img: str, ori: str, new_center: list[float, float, float]) -> None:
     """
     Update the camera position in an Orientation file.
 
-    :param str fn_img: the name of the image to update the orientation for (e.g., 'OIS-Reech_ARCSEA000590122.tif')
-    :param str ori: the name of the orientation directory (e.g., 'Ori-Relative')
-    :param list new_center: a list of the new camera position [x, y, z]
+    :param fn_img: the name of the image to update the orientation for (e.g., 'OIS-Reech_ARCSEA000590122.tif')
+    :param ori: the name of the orientation directory (e.g., 'Ori-Relative')
+    :param new_center: a list of the new camera position [x, y, z]
     """
     ori_root = ET.parse(Path(ori, f"Orientation-{fn_img}.xml")).getroot()
     if ori_root.tag != 'OrientationConique':
@@ -324,13 +329,13 @@ def update_center(fn_img, ori, new_center):
                encoding="utf-8", xml_declaration=True)
 
 
-def update_pose(fn_img, ori, new_rot):
+def update_pose(fn_img: str, ori: str, new_rot: NDArray) -> None:
     """
     Update the camera pose (rotation matrix) in an Orientation file.
 
-    :param str fn_img: the name of the image to update the orientation for (e.g., 'OIS-Reech_ARCSEA000590122.tif')
-    :param str ori: the name of the orientation directory (e.g., 'Ori-Relative')
-    :param array-like new_rot: the new 3x3 rotation matrix
+    :param fn_img: the name of the image to update the orientation for (e.g., 'OIS-Reech_ARCSEA000590122.tif')
+    :param ori: the name of the orientation directory (e.g., 'Ori-Relative')
+    :param new_rot: the new 3x3 rotation matrix
     """
     ori_root = ET.parse(Path(ori, f"Orientation-{fn_img}.xml")).getroot()
     if ori_root.tag != 'OrientationConique':
@@ -347,14 +352,14 @@ def update_pose(fn_img, ori, new_rot):
                encoding="utf-8", xml_declaration=True)
 
 
-def update_params(fn_img, ori, profondeur, altisol):
+def update_params(fn_img: str, ori: str, profondeur: float, altisol: float) -> None:
     """
     Update the profondeur and altisol parameters in an orientation file.
 
-    :param str fn_img: the name of the image to update the orientation for (e.g., 'OIS-Reech_ARCSEA000590122.tif')
-    :param str ori: the name of the orientation directory (e.g., 'Ori-Relative')
-    :param float profondeur: the new profondeur value
-    :param float altisol: the new altisol value
+    :param fn_img: the name of the image to update the orientation for (e.g., 'OIS-Reech_ARCSEA000590122.tif')
+    :param ori: the name of the orientation directory (e.g., 'Ori-Relative')
+    :param profondeur: the new profondeur value
+    :param altisol: the new altisol value
     """
     ori_root = ET.parse(Path(ori, f"Orientation-{fn_img}.xml")).getroot()
     if ori_root.tag != 'OrientationConique':
@@ -370,14 +375,15 @@ def update_params(fn_img, ori, profondeur, altisol):
                encoding="utf-8", xml_declaration=True)
 
 
-def write_orientation(ori_df, dir_ori, calfile, known_conv='eConvApero_DistM2C'):
+def write_orientation(ori_df: pd.DataFrame, dir_ori: str, calfile: Union[str, Path],
+                      known_conv: str = 'eConvApero_DistM2C'):
     """
     Write orientation xml files for a set of images
 
     :param pd.DataFrame ori_df: a pandas DataFrame like the kind output by load_all_orientation()
     :param str dir_ori: the name of the output orientation directory (e.g., Ori-Relative)
     :param str calfile: the path to the calibration file for this orientation
-    :param str known_conv: the name of a conversion used by MicMac (default: eConvApero_DistM2C)
+    :param str known_conv: the name of a conversion used by MicMac
     """
 
     os.makedirs(dir_ori, exist_ok=True)
@@ -397,19 +403,19 @@ def write_orientation(ori_df, dir_ori, calfile, known_conv='eConvApero_DistM2C')
                       )
 
 
-def write_ind_ori(fn_img, center, codage_mat, profondeur, altisol, dir_ori,
-                  calfile, known_conv='eConvApero_DistM2C'):
+def write_ind_ori(fn_img: str, center: list, codage_mat: NDArray, profondeur: float, altisol: float, dir_ori: str,
+                  calfile: Union[str, Path], known_conv: str = 'eConvApero_DistM2C'):
     """
     Write an orientation xml file for an individual image.
 
-    :param str fn_img: the name of the image
-    :param list center: the camera center position (x, y, z)
-    :param array-like codage_mat: the rotation matrix for the image
-    :param float profondeur: the camera depth parameter
-    :param float altisol: the camera altisol parameter
-    :param str dir_ori: the name of the output orientation directory (e.g., Ori-Relative)
-    :param str calfile: the filename of the camera calibration file for this image
-    :param str known_conv: the name of a conversion used by MicMac (default: eConvApero_DistM2C)
+    :param fn_img: the name of the image
+    :param center: the camera center position (x, y, z)
+    :param codage_mat: the rotation matrix for the image
+    :param profondeur: the camera depth parameter
+    :param altisol: the camera altisol parameter
+    :param dir_ori: the name of the output orientation directory (e.g., Ori-Relative)
+    :param calfile: the filename of the camera calibration file for this image
+    :param known_conv: the name of a conversion used by MicMac
     """
     fn_out = Path(dir_ori, f"Orientation-{fn_img}.xml")
 
@@ -444,7 +450,7 @@ def write_ind_ori(fn_img, center, codage_mat, profondeur, altisol, dir_ori,
     tree.write(fn_out, pretty_print=True, xml_declaration=True, encoding="utf-8")
 
 
-def fix_orientation(cameras, ori_df, ori, nsig=4):
+def fix_orientation(cameras: pd.DataFrame, ori_df: pd.DataFrame, ori: str, nsig: Union[int, float] = 4) -> None:
     """
     Correct erroneous Tapas camera positions using an estimated affine transformation between the absolute camera
     locations and the relative locations read from the orientation directory.
@@ -454,13 +460,13 @@ def fix_orientation(cameras, ori_df, ori, nsig=4):
 
         mm3d Tapas RadialBasic "OIS.*tif" InOri=Relative Out=Relative LibFoc=0
 
-    :param pandas.DataFrame cameras: A DataFrame containing camera positions (x, y, z) and a 'name' column that contains
+    :param cameras: A DataFrame containing camera positions (x, y, z) and a 'name' column that contains
         the image names.
-    :param pandas.DataFrame ori_df: A DataFrame output from sPyMicMac.micmac.load_all_orientations, or that contains
+    :param ori_df: A DataFrame output from sPyMicMac.micmac.load_all_orientations, or that contains
         a 'name' column and camera positions in relative space (x, y, z)
-    :param str ori: the Orientation directory to update (e.g., Ori-Relative)
-    :param int|float nsig: the number of normalized absolute deviations from the median residual value to consider
-        a camera an outlier (default: 4)
+    :param ori: the Orientation directory to update (e.g., Ori-Relative)
+    :param nsig: the number of normalized absolute deviations from the median residual value to consider
+        a camera an outlier
     """
     join = cameras.set_index('name').join(ori_df.set_index('name'), lsuffix='abs', rsuffix='rel')
     join.dropna(subset=['xabs', 'yabs', 'zabs', 'xrel', 'yrel', 'zrel'], inplace=True)
@@ -489,22 +495,23 @@ def fix_orientation(cameras, ori_df, ori, nsig=4):
             update_center(name, ori, [new_x, new_y, new_z])
 
 
-def transform_centers(rel, ref, imlist, footprints, ori, imgeom=True):
+def transform_centers(rel: gu.Raster, ref: gu.Raster, imlist: list, footprints: gpd.GeoDataFrame,
+                      ori: str, imgeom: bool = True) -> tuple[AffineTransform, NDArray, gpd.GeoDataFrame]:
     """
     Use the camera centers in relative space provided by MicMac Orientation files, along with camera centers or
     footprints, to estimate a transformation between the relative coordinate system and the absolute coordinate system.
 
-    :param Raster rel: the relative image
-    :param Raster ref: the reference image to use to determine the output image shape
-    :param list imlist: a list of the images that were used for the relative orthophoto
-    :param GeoDataFrame footprints: the (approximate) image footprints or camera centers. If geom_type is Polygon, the
+    :param rel: the relative image
+    :param ref: the reference image to use to determine the output image shape
+    :param imlist: a list of the images that were used for the relative orthophoto
+    :param footprints: the (approximate) image footprints or camera centers. If geom_type is Polygon, the
         centroid will be used for the absolute camera positions.
-    :param str ori: name of orientation directory
-    :param bool imgeom: calculate a transformation between image ij locations (True)
+    :param ori: name of orientation directory
+    :param imgeom: calculate a transformation between image ij locations, rather than real-world coordinates
     :return:
-        - **model** (*AffineTransform*) -- the estimated Affine Transformation between relative and absolute space
-        - **inliers** (*array-like*) -- a list of the inliers returned by skimage.measure.ransac
-        - **join** (*GeoDataFrame*) -- the joined image footprints and relative orientation files
+        - **model** -- the estimated Affine Transformation between relative and absolute space
+        - **inliers** -- a list of the inliers returned by skimage.measure.ransac
+        - **join** -- the joined image footprints and relative orientation files
     """
 
     rel_ori = load_all_orientation(ori, imlist=imlist)
@@ -555,17 +562,18 @@ def transform_centers(rel, ref, imlist, footprints, ori, imgeom=True):
     return model, inliers, join
 
 
-def transform_points(ref, ref_pts, rel, rel_pts):
+def transform_points(ref: gu.Raster, ref_pts: NDArray,
+                     rel: gu.Raster, rel_pts: NDArray) -> tuple[AffineTransform, NDArray]:
     """
     Given x,y points and two "geo"-referenced images, finds an affine transformation between the two images.
 
-    :param Raster ref: the reference image
-    :param np.array ref_pts: an Mx2 array of the x,y points in the reference image
-    :param Raster rel: the second image
-    :param np.array rel_pts: an Mx2 array of the x,y points in the second image.
+    :param ref: the reference image
+    :param ref_pts: an Mx2 array of the x,y points in the reference image
+    :param rel: the second image
+    :param rel_pts: an Mx2 array of the x,y points in the second image.
     :return:
-        - **model** (*AffineTransform*) -- the estimated Affine Transformation between relative and absolute space
-        - **inliers** (*array-like*) -- a list of the inliers returned by skimage.measure.ransac
+        - **model** -- the estimated Affine Transformation between relative and absolute space
+        - **inliers** -- an array of the inliers returned by skimage.measure.ransac
     """
     ref_ij = np.array(ref.xy2ij(ref_pts[:, 0], ref_pts[:, 1])).T
 
