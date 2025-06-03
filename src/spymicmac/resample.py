@@ -12,30 +12,33 @@ from skimage.morphology import disk
 from scipy import ndimage
 import numpy as np
 from . import image, micmac, matching
+from numpy.typing import NDArray
+from typing import Union
 
 
-def downsample(img, fact=4):
+def downsample(img: NDArray, fact: Union[int, float] = 4) -> NDArray:
     """
     Rescale an image using Lanczos resampling
 
-    :param array-like img: the image to rescale
-    :param numeric fact: the number by which to divide the image width and height (default: 4)
-    :return: **rescaled** (*array-like*) -- the rescaled image
+    :param img: the image to rescale
+    :param fact: the number by which to divide the image width and height
+    :return: **rescaled** -- the rescaled image
     """
     _img = PIL.Image.fromarray(img)
     return np.array(_img.resize((np.array(_img.size) / fact).astype(int), PIL.Image.Resampling.LANCZOS))
 
 
-def resample_hex(fn_img, scale, ori='InterneScan', alg=gdal.GRA_Bilinear, tps=True, order=None):
+def resample_hex(fn_img: Union[str, Path], scale: int, ori: str = 'InterneScan',
+                 alg=gdal.GRA_Bilinear, tps: bool = True, order: Union[int, None] = None) -> None:
     """
     Resample a KH-9 Mapping Camera image based on the reseau grid, using gdal.Warp
 
-    :param str fn_img: the filename of the image to resample
-    :param int scale: the number of pixels per mm of the scanned image
-    :param str ori: the Ori directory that contains both MeasuresCamera.xml and MeasuresIm (default: InterneScan)
+    :param fn_img: the filename of the image to resample
+    :param scale: the number of pixels per mm of the scanned image
+    :param ori: the Ori directory that contains both MeasuresCamera.xml and MeasuresIm
     :param alg: the gdal resampling algorithm to use (default: gdal.GRA_Bilinear)
-    :param bool tps: use a thin plate spline transformer to transform based on reseau grid (default: True)
-    :param int order: the order (1-3) of polynomial GCP interpolation (default: not used)
+    :param tps: use a thin plate spline transformer to transform based on reseau grid
+    :param order: the order (1-3) of polynomial GCP interpolation (default: not used)
     """
     cam_meas = micmac.parse_im_meas(Path(f"Ori-{ori}", 'MeasuresCamera.xml'))
     img_meas = micmac.parse_im_meas(Path(f"Ori-{ori}", f"MeasuresIm-{fn_img}.xml"))
@@ -73,15 +76,15 @@ def resample_hex(fn_img, scale, ori='InterneScan', alg=gdal.GRA_Bilinear, tps=Tr
     os.remove(f"{fn_img}.aux.xml")
 
 
-def rotate_from_rails(img, rails):
+def rotate_from_rails(img: NDArray, rails: NDArray) -> tuple[NDArray, float]:
     """
     Use the rail marks or other horizontal points in an image to rotate the image.
 
-    :param array-like img: the image to rotate.
-    :param array-like rails: an Nx2 array of (row, col) points
+    :param img: the image to rotate.
+    :param rails: an Nx2 array of (row, col) points
     :return:
-        - **rotated** (*array-like*) -- the rotated image
-        - **angle** (*float*) -- the calculated angle of rotation, in degrees
+        - **rotated** -- the rotated image
+        - **angle** -- the calculated angle of rotation, in degrees
     """
     slope, intercept = np.polyfit(rails[:, 1], rails[:, 0], 1)
     angle = np.rad2deg(np.arctan(slope))
@@ -90,19 +93,20 @@ def rotate_from_rails(img, rails):
     return ndimage.rotate(img, angle), angle
 
 
-def crop_panoramic(fn_img, flavor, marker_size=31, fact=None, return_vals=False):
+def crop_panoramic(fn_img: Union[str, Path], flavor: str, marker_size: int = 31, fact: Union[int, None] = None,
+                   return_vals: bool = False) -> Union[None, tuple[tuple, float]]:
     """
     Crop a declassified panoramic (KH4 or KH9) image, after rotating based on horizontal rail markers or "wagon wheel"
     fiducial markers.
 
-    :param str fn_img: the filename of the image to rotate and crop
-    :param str flavor: the camera type (KH4 or KH9)
-    :param int marker_size: The approximate size of the wagon wheels to identify in the image (default: 31 pixels)
-    :param int fact: the number by which to divide the image width and height to scale the image (default: do not scale)
-    :param bool return_vals: Return estimated image border and rotation angle (default: False)
+    :param fn_img: the filename of the image to rotate and crop
+    :param flavor: the camera type (KH4 or KH9)
+    :param marker_size: The approximate size of the wagon wheels to identify in the image (default: 31 pixels)
+    :param fact: the number by which to divide the image width and height to scale the image (default: do not scale)
+    :param return_vals: Return estimated image border and rotation angle (default: False)
     :returns:
-        - **border** (*tuple*) -- the estimated image border (left, right, top, bot)
-        - **angle**  (*float*) -- the estimated rotation angle.
+        - **border** -- the estimated image border (left, right, top, bot)
+        - **angle** -- the estimated rotation angle.
           Only returned if **return_vals** is True.
 
     """
@@ -155,16 +159,19 @@ def crop_panoramic(fn_img, flavor, marker_size=31, fact=None, return_vals=False)
 
     if return_vals:
         return (left, right, top, bot), angle
+    else:
+        return None
 
 
-def crop_from_extent(fn_img, border, angle=None, fact=None):
+def crop_from_extent(fn_img: Union[str, Path], border: NDArray,
+                     angle: Union[float, None] = None, fact: Union[int, None] = None) -> None:
     """
     Crop an image given the coordinates of the image border.
 
-    :param str fn_img: the filename of the image to rotate and crop
-    :param array-like border: the estimated image border coordinates (left, right, top, bot)
-    :param float angle: the angle by which to rotate the image (default: None)
-    :param int fact: the number by which to divide the image width and height to scale the image (default: do not scale)
+    :param fn_img: the filename of the image to rotate and crop
+    :param border: the estimated image border coordinates (left, right, top, bot)
+    :param angle: the angle by which to rotate the image (default: None)
+    :param fact: the number by which to divide the image width and height to scale the image (default: do not scale)
     """
     img = io.imread(fn_img)
 
@@ -204,16 +211,17 @@ def align_image_borders(fn_left, fn_right, border):
     mask_right = _border_mask(right, border)
 
 
-def resample_fiducials(fn_img, scale, transform=AffineTransform(), fn_cam=None, nproc=1):
+def resample_fiducials(fn_img: Union[str, Path, list[str], list[Path]],
+                       scale: float, transform=AffineTransform(),
+                       fn_cam: Union[str, Path, None] = None, nproc: int = 1) -> None:
     """
     Resample image(s) using fiducial markers.
 
-    :param str|list fn_img: the filename, or a list of filenames, of the image(s)
-    :param float scale: the image scale (in mm/pixel) to use
+    :param fn_img: the filename, or a list of filenames, of the image(s)
+    :param scale: the image scale (in mm/pixel) to use
     :param transform: the type of transformation to use. Should be an instance of skimage.transform (default: AffineTransform)
-    :param str fn_cam: the filename for the MeasuresCamera.xml file (default: Ori-InterneScan/MeasuresCamera.xml)
-    :param int nproc: the number of processors to use (default: 1)
-    :return:
+    :param fn_cam: the filename for the MeasuresCamera.xml file (default: Ori-InterneScan/MeasuresCamera.xml)
+    :param nproc: the number of processors to use (default: 1)
     """
     if type(fn_img) is str:
         _fiducials(fn_img=fn_img, scale=scale, fn_cam=fn_cam, transform=transform)
