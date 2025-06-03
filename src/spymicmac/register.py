@@ -16,47 +16,51 @@ from rtree import index
 from scipy import stats
 from shapely.ops import unary_union
 from shapely.geometry.point import Point
+from shapely.geometry.polygon import Polygon
 from skimage.measure import ransac
 from skimage.transform import AffineTransform, warp
 from . import data, image, matching, micmac, orientation
+from numpy.typing import NDArray
+from typing import Union
+from skimage.transform._geometric import _GeometricTransform
 
 
-def nmad(values, nfact=1.4826):
+def nmad(values: NDArray, nfact: Union[float, int] = 1.4826) -> NDArray:
     """
     Calculate the normalized median absolute deviation (NMAD) of an array.
 
-    :param array-like values: input data
-    :param float nfact: normalization factor for the data; default is 1.4826
-
-    :returns nmad: (normalized) median absolute deviation of data.
+    :param values: input data
+    :param nfact: normalization factor for the data
+    :returns: **nmad** -- (normalized) median absolute deviation of data.
     """
     m = np.nanmedian(values)
     return nfact * np.nanmedian(np.abs(values - m))
 
 
-def rms(values):
+def rms(values: NDArray) -> NDArray:
     """
     Calculate the root mean square (rms) of an array of values.
 
-    :param array-like values: the values to use
+    :param values: the values to use
     :returns: rms of the input values
     """
     return np.sqrt(np.nanmean(np.asarray(values) ** 2))
 
 
-def _sliding_window_filter(img_shape, pts_df, winsize, stepsize=None, mindist=2000, how='residual', is_ascending=True):
+def _sliding_window_filter(img_shape: NDArray, pts_df: pd.DataFrame, winsize: int, stepsize: Union[int, None] = None,
+                           mindist: int = 2000, how: str = 'residual', is_ascending: bool = True) -> NDArray:
     """
     Given a DataFrame of indices representing points, use a sliding window filter to keep only the 'best' points within
     a given window and separation distance.
 
-    :param array-like img_shape: The shape of the image to filter indices from.
-    :param DataFrame pts_df: A DataFrame that contains the pixel locations of points (column: orig_j, row: orig_i)
-    :param int winsize: the size of the window to use for the filter.
-    :param int stepsize: how large of a step size to use for the sliding window (default: winsize/2)
-    :param int mindist: the minimum distance (in pixels) to use between points (default: 2000)
-    :param str how: how to sort pts_df to determine the 'best' points to keep (default: 'residual')
-    :param bool is_ascending: whether the column named in 'how' should be sorted ascending or descending (default: True)
-    :return: **out_inds** (*array-like*) -- an array with the filtered indices
+    :param img_shape: The shape of the image to filter indices from.
+    :param pts_df: A DataFrame that contains the pixel locations of points (column: orig_j, row: orig_i)
+    :param winsize: the size of the window to use for the filter.
+    :param stepsize: how large of a step size to use for the sliding window (default: winsize/2)
+    :param mindist: the minimum distance (in pixels) to use between points
+    :param how: how to sort pts_df to determine the 'best' points to keep
+    :param is_ascending: whether the column named in 'how' should be sorted ascending or descending
+    :return: **out_inds** -- an array with the filtered indices
     """
     if stepsize is None:
         stepsize = winsize / 2
@@ -97,15 +101,16 @@ def _sliding_window_filter(img_shape, pts_df, winsize, stepsize=None, mindist=20
     return np.array(_out_inds)
 
 
-def _get_imlist(im_subset, dirname='.', strip_text=None):
+def _get_imlist(im_subset: Union[list, str, None]) -> tuple[list, str]:
     """
     Given either a list of filenames or a regex match pattern, return a list of filenames and a pattern to provide
     to MicMac.
 
-    :param list|str im_subset: a list of filenames or a match pattern (e.g., ['OIS.*tif']) representing filenames
+    :param im_subset: a list of filenames or a match pattern (e.g., ['OIS.*tif']) representing filenames. If None,
+        returns all images matching "OIS.*tif"
     :return:
-        - **imlist** (*list*) -- the list of filenames matching the provided pattern.
-        - **match_pattern** (*str*) -- the match pattern to be provided to MicMac.
+        - **imlist** -- the list of filenames matching the provided pattern.
+        - **match_pattern** -- the match pattern to be provided to MicMac.
     """
     if im_subset is None:
         imlist = glob('OIS*.tif')
@@ -124,7 +129,7 @@ def _get_imlist(im_subset, dirname='.', strip_text=None):
     return imlist, match_pattern
 
 
-def _get_utm_str(epsg):
+def _get_utm_str(epsg: Union[int, str]) -> str:
     """
     Return a UTM zone name based on a 5-digit EPSG code.
 
@@ -132,8 +137,8 @@ def _get_utm_str(epsg):
         - get_utm_str(32608) -> 'UTM Zone 8N'
         - get_utm_str(32708) -> 'UTM Zone 8S'
 
-    :param int|str epsg: a str or int representing an EPSG Code
-    :return: **utm_str** (*str*) -- the UTM string representation
+    :param epsg: a str or int representing an EPSG Code
+    :return: **utm_str** -- the UTM string representation
     """
     epsg_str = str(epsg)
     hemi_dict = {'6': 'N', '7': 'S'}
@@ -153,17 +158,17 @@ def _split_cps_gcps(gcps, frac):
     return gcps.sort_index(), cps.sort_index()
 
 
-def warp_image(model, ref, img):
+def warp_image(model: _GeometricTransform, ref: gu.Raster, img: gu.Raster) -> tuple[NDArray, AffineTransform, NDArray]:
     """
     Given a transformation model between two coordinate systems, warp an image to a reference image
 
-    :param GeometricTransform model: the transformation model between the coordinate systems
-    :param Raster ref: the reference Raster
-    :param Raster img: the Raster to be transformed
+    :param model: the transformation model between the coordinate systems
+    :param ref: the reference Raster
+    :param img: the Raster to be transformed
     :return:
-        - **tfm_img** (*np.array*) -- the input image transformed to the same extent as the reference image
-        - **this_model** (*AffineTransform*) -- the estimated Affine Transformation between the two images
-        - **inliers** (*array-like*) -- a list of the inliers returned by skimage.measure.ransac
+        - **tfm_img** -- the input image transformed to the same extent as the reference image
+        - **this_model** -- the estimated Affine Transformation between the two images
+        - **inliers** -- an array of the inliers returned by skimage.measure.ransac
     """
 
     # get image points in rel coords
@@ -189,12 +194,12 @@ def _to_tfw(gt):
     return [gt[1], gt[2], gt[4], gt[5], gt[0], gt[3]]
 
 
-def _get_footprint_overlap(fprints):
+def _get_footprint_overlap(fprints: gpd.GeoDataFrame) -> Polygon:
     """
     Return the area where image footprints overlap.
 
-    :param GeoDataFrame fprints: a GeoDataFrame of image footprints
-    :return: **intersection** (*shapely.Polygon*) -- the overlapping area (unary union) of the images.
+    :param fprints: a GeoDataFrame of image footprints
+    :return: **intersection** -- the overlapping area (unary union) of the images.
     """
     if fprints.shape[0] == 1:
         return fprints.geometry.values[0]
@@ -216,17 +221,18 @@ def _get_footprint_overlap(fprints):
     return intersection
 
 
-def _get_footprint_mask(shpfile, rast, filelist, fprint_out=False):
+def _get_footprint_mask(shpfile: Union[gpd.GeoDataFrame, str], rast: gu.Raster,
+                        filelist: list, fprint_out: bool = False) -> Union[gu.Mask, tuple]:
     """
     Return a footprint mask for an image.
 
-    :param str|GeoDataFrame shpfile: a filename or a GeoDataFrame representation of the footprints.
-    :param Raster rast: the image to create a mask for.
-    :param list filelist: a list of image names to use to create the footprint mask.
-    :param bool fprint_out: return the polygon representation of the footprint mask.
+    :param shpfile: a filename or a GeoDataFrame representation of the footprints.
+    :param rast: the image to create a mask for.
+    :param filelist: a list of image names to use to create the footprint mask.
+    :param fprint_out: return the polygon representation of the footprint mask.
     :return:
-        - **mask** (*array-like*) -- the footprint mask
-        - **fprint** (*shapely.Polygon*) -- the footprint polygon, if requested.
+        - **mask** -- the footprint mask
+        - **fprint** -- the footprint polygon, if requested.
     """
     imlist = [im.split('OIS-Reech_')[-1].split('.tif')[0] for im in filelist]
     if isinstance(shpfile, str):
@@ -252,20 +258,21 @@ def _get_footprint_mask(shpfile, rast, filelist, fprint_out=False):
         return maskout
 
 
-def _get_mask(footprints, img, imlist, landmask=None, glacmask=None):
+def _get_mask(footprints: gpd.GeoDataFrame, img: gu.Raster, imlist: list, landmask: Union[str, Path, None] = None,
+              glacmask: Union[str, Path, None] = None) -> tuple[gu.Mask, gu.Raster, gu.Raster]:
     """
     Create a mask for an image from different sources.
 
-    :param GeoDataFrame footprints: vector data representing image footprints
-    :param Raster img: the Raster to create a mask for
-    :param array-like imlist: a list of image names
-    :param str landmask: path to file of land outlines (i.e., an inclusion mask)
-    :param str glacmask: path to file of glacier outlines (i.e., an exclusion mask)
+    :param footprints: vector data representing image footprints
+    :param img: the Raster to create a mask for
+    :param imlist: a list of image names
+    :param landmask: path to file of land outlines (i.e., an inclusion mask)
+    :param glacmask: path to file of glacier outlines (i.e., an exclusion mask)
 
     :returns:
-        - **mask** (*array-like*) -- the mask
-        - **fmask** (*Raster*) -- the georeferenced footprint mask
-        - **img** (*Raster*) -- the input Raster, cropped to a buffer around the image footprints
+        - **mask** -- the mask
+        - **fmask** -- the georeferenced footprint mask
+        - **img** -- the input Raster, cropped to a buffer around the image footprints
     """
     fmask, fprint = _get_footprint_mask(footprints, img, imlist, fprint_out=True)
 
@@ -398,38 +405,43 @@ def _chebyshev_grid(img, spacing, tfm):
     return tfm.inverse(np.array([XX.flatten(), YY.flatten()]).T)
 
 
-def register_relative(dirmec, fn_dem, fn_ref=None, fn_ortho=None, glacmask=None, landmask=None, footprints=None,
-                      im_subset=None, block_num=None, subscript=None, ori='Relative', ortho_res=8.,
-                      imgsource='DECLASSII', strategy='grid', density=200, out_dir=None, allfree=True, useortho=False,
-                      max_iter=5, use_cps=False, cp_frac=0.2, use_orb=False, fn_gcps=None):
+def register_relative(dirmec: str, fn_dem: Union[str, Path], fn_ref: Union[str, Path, None] = None,
+                      fn_ortho: Union[str, Path, None] = None, glacmask: Union[str, Path, None] = None,
+                      landmask: Union[str, Path, None] = None, footprints: Union[str, Path, None] = None,
+                      im_subset: Union[str, None] = None, block_num: Union[str, None] = None,
+                      subscript: Union[str, None] = None, ori: str ='Relative', ortho_res: Union[float, int] = 8.,
+                      imgsource: str = 'DECLASSII', strategy: str = 'grid', density: int = 200,
+                      out_dir: Union[str, Path, None] = None, allfree: bool = True, useortho: bool = False,
+                      max_iter: int = 5, use_cps: bool = False, cp_frac: float = 0.2, use_orb: bool = False,
+                      fn_gcps: Union[str, Path, None] = None) -> None:
     """
     Register a relative DEM or orthoimage to a reference DEM and/or orthorectified image.
 
-    :param str dirmec: the name of the MEC directory to read the relative DEM from (e.g., MEC-Relative)
-    :param str fn_dem: path to reference DEM
-    :param str fn_ref: path to reference orthorectified image (optional)
-    :param str fn_ortho: path to relative orthoimage (optional)
-    :param str glacmask: path to file of glacier outlines (i.e., an exclusion mask)
-    :param str landmask: path to file of land outlines (i.e., an inclusion mask)
-    :param str footprints: path to shapefile of image outlines. If not set, will download from USGS.
-    :param str im_subset: subset of raw images to work with
-    :param str block_num: block number to use if processing multiple image blocks
-    :param str subscript: optional subscript to use for output filenames (default: None)
-    :param str ori: name of orientation directory (after Ori-) (default: Relative)
-    :param float ortho_res: approx. ground sampling distance (pixel resolution) of ortho image (default: 8 m)
-    :param str imgsource: USGS dataset name for images (default: DECLASSII)
-    :param str strategy: strategy for generating GCPs. Must be one of 'grid', 'random', or 'chebyshev'. Note that if
+    :param dirmec: the name of the MEC directory to read the relative DEM from (e.g., MEC-Relative)
+    :param fn_dem: path to reference DEM
+    :param fn_ref: path to reference orthorectified image (optional)
+    :param fn_ortho: path to relative orthoimage (optional)
+    :param glacmask: path to file of glacier outlines (i.e., an exclusion mask)
+    :param landmask: path to file of land outlines (i.e., an inclusion mask)
+    :param footprints: path to shapefile of image outlines. If not set, will download from USGS.
+    :param im_subset: subset of raw images to work with
+    :param block_num: block number to use if processing multiple image blocks
+    :param subscript: optional subscript to use for output filenames
+    :param ori: name of orientation directory (after Ori-)
+    :param ortho_res: approx. ground sampling distance (pixel resolution) of ortho image
+    :param imgsource: USGS dataset name for images
+    :param strategy: strategy for generating GCPs. Must be one of 'grid', 'random', or 'chebyshev'. Note that if
         'random' is used, density is the approximate number of points, rather than the distance between
-        grid points (default: grid)
-    :param int density: pixel spacing to look for GCPs (default: 200)
-    :param str out_dir: output directory to save auto GCP files to (default: auto_gcps)
-    :param bool allfree: run Campari setting all parameters free (default: True)
-    :param bool useortho: use the orthomosaic in Ortho-{dirmec} rather than the DEM (default: False). If fn_ortho is
+        grid points.
+    :param density: pixel spacing to look for GCPs
+    :param out_dir: output directory to save auto GCP files to
+    :param allfree: run Campari setting all parameters free
+    :param useortho: use the orthomosaic in Ortho-{dirmec} rather than the DEM. If fn_ortho is
         set, uses that file instead.
-    :param int max_iter: the maximum number of Campari iterations to run. (default: 5)
-    :param bool use_cps: split the GCPs into GCPs and CPs, to quantify the uncertainty of the camera model (default: False)
-    :param float cp_frac: the fraction of GCPs to use when splitting into GCPs and CPs (default: 0.2)
-    :param bool use_orb: use skimage.feature.ORB to identify GCP locations in the reference image
+    :param max_iter: the maximum number of Campari iterations to run.
+    :param use_cps: split the GCPs into GCPs and CPs, to quantify the uncertainty of the camera model
+    :param cp_frac: the fraction of GCPs to use when splitting into GCPs and CPs
+    :param use_orb: use skimage.feature.ORB to identify GCP locations in the reference image
         (default: use regular grid for matching)
     :param str fn_gcps: (optional) shapefile or CSV of GCP coordinates to use. Column names should be [(name | id),
         (z | elevation), x, y]. If CSV is used, x,y should have the same CRS as the reference image.
