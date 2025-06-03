@@ -2,26 +2,24 @@
 spymicmac.asp is a collection of tools for interfacing with Ames Stereo Pipeline
 """
 import os
+from pathlib import Path
 import subprocess
 import numpy as np
 import pyproj
 import geoutils as gu
+import geopandas as gpd
 from osgeo import gdal
 from shapely.ops import split, orient
 from shapely.geometry import LineString, Point, Polygon
 from spymicmac import data, declass
+from typing import Union
 
 
-sample_params = {
-    'KH4': {'f': 0.61, 'tilt': np.deg2rad(15), 'scan_time': 0.36, 'speed': 7700},
-    'KH9': {'f': 1.5, 'tilt': np.deg2rad(10), 'scan_time': 0.7, 'speed': 8000}
-}
-
-def _isaft(fn_img):
+def _isaft(fn_img: str) -> bool:
     return os.path.splitext(fn_img)[0][-4] == 'A'
 
 
-def _parse_cam(fn_cam):
+def _parse_cam(fn_cam: str) -> dict:
     with open(fn_cam, 'r') as f:
         cam_lines = [l.strip() for l in f.readlines()]
 
@@ -46,7 +44,7 @@ def _parse_cam(fn_cam):
     return cam
 
 
-def _init_center(fprint):
+def _init_center(fprint: Polygon) -> tuple[float, float, float]:
     cx, cy = fprint.centroid.x, fprint.centroid.y
     alt = 180000  # very rough estimated altitude of 180 km
 
@@ -59,37 +57,46 @@ def _init_center(fprint):
     return x, y, z
 
 
-def add_motion_comp(cam, params):
+def add_motion_comp(cam: str, params: dict) -> dict:
     """
     Add a default motion compensation factor value to write to an ASP camera.
+
+    :param cam: the panoramic camera flavor to use. Must be
+    :param params: the dict describing the camera attributes
+    :returns: the updated parameter dict
     """
     # values based on reported results from Ghuffar et al. 2022
     imc_params = {'KH4': 0.014, 'KH4A': 0.014, 'KH4B': 1e-4}
+
+    assert cam in imc_params.keys(), f"{cam} not recognized as a valid camera [{imc_params.keys()}]"
 
     params['motion_comp'] = imc_params[cam]
     return params
 
 
-def optical_bar_cam(fn_img, flavor, out_name, fprint=None, scan_res=7e-6, mean_el=1000):
+def optical_bar_cam(fn_img: str, flavor: str, out_name: str,
+                    fprint: Union[Polygon, None] = None,
+                    scan_res: float = 7e-6,
+                    mean_el: Union[float, int] = 1000) -> None:
     """
     Generate a sample ASP camera file for a KH-4 Optical Bar camera.
 
-    :param str fn_img: the filename of the image. Used to read the image size, and determine whether the image is from
+    :param fn_img: the filename of the image. Used to read the image size, and determine whether the image is from
         the aft or forward camera.
-    :param str flavor: what type of camera the image came from - currently either KH4 or KH9
-    :param str out_name: the filename to write the camera file to.
-    :param Polygon fprint: an optional image, footprint used to estimate the initial camera position
-    :param float scan_res: the image scanning resolution, in m per pixel (e.g., 7 microns -> 7.0e-6)
-    :param float mean_el: the mean elevation covered by the image
+    :param flavor: what type of camera the image came from - currently either KH4 or KH9
+    :param out_name: the filename to write the camera file to.
+    :param fprint: an optional image, footprint used to estimate the initial camera position
+    :param scan_res: the image scanning resolution, in m per pixel (e.g., 7 microns -> 7.0e-6)
+    :param mean_el: the mean elevation covered by the image
     """
-    assert flavor in sample_params.keys(), f"flavor must be one of {list(sample_params.keys())}"
+    assert flavor in declass.sample_params.keys(), f"flavor must be one of {list(declass.sample_params.keys())}"
     ds = gdal.Open(fn_img)
     width, height = ds.RasterXSize, ds.RasterYSize
     cx, cy = width / 2, height / 2
 
     ds = None  # close the image
 
-    params = sample_params[flavor]
+    params = declass.sample_params[flavor]
 
     if flavor == 'KH4':
         cam = declass.get_declass_camera(fn_img)
@@ -132,18 +139,19 @@ def optical_bar_cam(fn_img, flavor, out_name, fprint=None, scan_res=7e-6, mean_e
             print('scan_dir = right', file=f)
 
 
-def cam_from_footprint(fn_img, flavor, scan_res, fn_dem, north_up=True, footprints=None, mean_el=1000):
+def cam_from_footprint(fn_img: str, flavor: str, scan_res: float, fn_dem: Union[str, Path],
+                       north_up: bool=True, footprints: gpd.GeoDataFrame=None, mean_el: Union[float, int]=1000):
     """
     Generate a camera (.tsai) file from an image footprint.
 
-    :param str fn_img: the filename of the image to generate a camera for.
-    :param str flavor: what type of camera the image came from - currently either KH4 or KH9
-    :param float scan_res: the scanning resolution of the image
-    :param str fn_dem: the filename of the reference DEM
-    :param bool north_up: whether the top of the image corresponds to North or not (default: True)
-    :param GeoDataFrame footprints: a GeoDataFrame containing image footprints and an ID field with image names. If not
+    :param fn_img: the filename of the image to generate a camera for.
+    :param flavor: what type of camera the image came from - currently either KH4 or KH9
+    :param scan_res: the scanning resolution of the image
+    :param fn_dem: the filename of the reference DEM
+    :param north_up: whether the top of the image corresponds to North or not
+    :param footprints: a GeoDataFrame containing image footprints and an ID field with image names. If not
         provided, will attempt to download from USGS.
-    :param float|str mean_el: the mean surface elevation covered by the image. If None, uses DEM and footprint to
+    :param mean_el: the mean surface elevation covered by the image. If None, uses DEM and footprint to
         calculate the value.
     :return:
     """
@@ -183,16 +191,16 @@ def cam_from_footprint(fn_img, flavor, scan_res, fn_dem, north_up=True, footprin
 
 
 # helper functions to help sort polygons from north to south and east to west
-def _cenlat(poly):
+def _cenlat(poly: Polygon) -> float:
     return poly.centroid.y
 
 
-def _cenlon(poly):
+def _cenlon(poly: Polygon) -> float:
     return poly.centroid.x
 
 
 # return the upper left, upper right, lower right, lower left coordinates for an image
-def _stanrogers(fprint, north_up):
+def _stanrogers(fprint: Polygon, north_up: bool) -> tuple[tuple[float, float], ...]:
 
     # oriented_envelope (mrr) goes lr, ur, ul, ll
     # use orient to ensure that it is properly oriented - for some reason this isn't always the case with mrr?
@@ -229,7 +237,7 @@ def _stanrogers(fprint, north_up):
     return (ul.x, ul.y), (ur.x, ur.y), (lr.x, lr.y), (ll.x, ll.y)
 
 
-def bundle_adjust_from_gcp(fn_img, fn_cam, fn_out, fn_gcp):
+def bundle_adjust_from_gcp(fn_img: str, fn_cam: str, fn_out: str, fn_gcp: str) -> None:
     """
     Use an ASP GCP file to refine a camera position
 
