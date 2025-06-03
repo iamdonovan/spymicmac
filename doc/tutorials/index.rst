@@ -23,7 +23,7 @@ This can be divided into four main steps: initial setup, pre-processing, relativ
   (e.g., principal point, radial distortion, affine/decentric correction) and the relative external orientation of
   the images.
 - :doc:`absolute <absolute/index>` geometry covers all of the steps taken to process the images in an absolute
-  ("real-world") geometry: registration, camera refinement, dense matching and orthorectification.
+  ("real-world") geometry: registration and bundle block adjustment (BBA), dense matching and orthorectification.
 
 If you don't want to read more about the different processing steps, there is also a :doc:`../tealdeer` which runs through
 the different tools and commands used in the workflow with minimal explanation. :)
