@@ -1,5 +1,5 @@
-shell scripts
-=================================
+command line tools
+===================
 
 .. toctree::
    :glob:

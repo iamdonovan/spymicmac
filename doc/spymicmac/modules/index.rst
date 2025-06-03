@@ -1,5 +1,5 @@
-python modules
-=================================
+modules
+=========
 
 .. toctree::
    :glob:
