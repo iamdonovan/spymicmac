@@ -35,11 +35,11 @@ def write_neighbour_images(imlist=None, fprints=None, name_field='ID', prefix='O
     Write an xml file containing image pairs for processing with Tapioca, using either image footprints or a homologue
     directory.
 
-    :param list imlist: a list of (original) image names to use (e.g., without 'OIS-Reech_')
+    :param list imlist: a list of (original) image names to use (e.g., without 'OIS-Reech\\_')
     :param GeoDataFrame fprints: a vector dataset of footprint polygons. If not provided, will attempt to download
         metadata from USGS for the images.
     :param str name_field: the field in fprints table that contains the image name
-    :param str prefix: the prefix attached to the image name read by Tapioca (default: 'OIS-Reech_')
+    :param str prefix: the prefix attached to the image name read by Tapioca (default: 'OIS-Reech\\_')
     :param str file_ext: the file extension for the images read by Tapioca (default: .tif)
     :param str dataset: the USGS dataset name to search if no footprints are provided (default: AERIAL_COMBIN)
     :param bool from_homol: get a list of pairs based on homologue files (default: False)
@@ -72,11 +72,11 @@ def pairs_from_footprints(imlist, fprints=None, name_field='ID', prefix='OIS-Ree
     Using a list of images and a collection of image footprints, return a list of potential image pairs for processing
     with Tapioca.
 
-    :param list imlist: a list of (original) image names to use (e.g., without 'OIS-Reech_')
+    :param list imlist: a list of (original) image names to use (e.g., without 'OIS-Reech\\_')
     :param GeoDataFrame fprints: a vector dataset of footprint polygons. If not provided, will attempt to download
         metadata from USGS for the images.
     :param str name_field: the field in fprints table that contains the image name
-    :param str prefix: the prefix attached to the image name read by Tapioca (default: 'OIS-Reech_')
+    :param str prefix: the prefix attached to the image name read by Tapioca (default: 'OIS-Reech\\_')
     :param str file_ext: the file extension for the images read by Tapioca (default: .tif)
     :param str dataset: the USGS dataset name to search if no footprints are provided (default: AERIAL_COMBIN)
     :return: **pairs** (*list*) -- a list of tuples representing image pairs
@@ -548,7 +548,7 @@ def generate_multicam_csv(patterns=None, prefix='OIS-Reech_', fn_out='camera_def
     arguments.
 
     :param patterns: a list of filename patterns corresponding to each camera [None]
-    :param str prefix: an optional prefix to add to the matching patterns [OIS-Reech_]
+    :param str prefix: an optional prefix to add to the matching patterns [OIS-Reech\\_]
     :param str fn_out: the name of the CSV file to create [camera_defs.csv]
     :param str|list name: the name to give each camera. Must be unique.
     :param str|list short_name: the "short name" description of each camera. Does not need to be unique.
