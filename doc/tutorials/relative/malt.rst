@@ -6,12 +6,28 @@ a relative DEM and orthoimages:
 
 .. code-block:: sh
 
-    mm3d Malt Ortho "OIS.*tif" Relative DirMEC=MEC-Relative NbVI=2 ZoomF=4 DefCor=0 CostTrans=1 EZA=1
+    mm3d Malt Ortho "OIS.*tif" Relative DirMEC=MEC-Relative NbVI=2 ZoomF=4 DefCor=0 CostTrans=4 EZA=1 SzW=3 Regul=0.1
 
-This will run ``Malt`` on all of the images, using the orientation described in ``Ori-Relative``. ``Malt`` defaults
-to only running where 3 or more images are visible (``NbVI=3``), but it is usually fine to go with 2 images. At this
-stage, we don't necessarily need the DEM to be processed to full resolution - a lower-resolution version (``ZoomF=4``
-or ``ZoomF=8``) will suffice. The ``EZA=1`` argument ensures that the values in the DEM are in the correct units.
+This will run ``Malt`` on all of the images, using the orientation described in ``Ori-Relative``. The DEM and
+correlation models will be output to ``MEC-Relative``, and the orthophotos will be output to ``Ortho-MEC-Relative``.
+
+The other parameters used here are:
+
+- **NbVI** (number of visible images): ``Malt`` defaults to only running where 3 or more images are visible
+  (``NbVI=3``), but it is usually fine to go with 2 images.
+- **ZoomF** (final zoom level): At this stage, we don't necessarily need the DEM to be processed to full resolution -
+  a lower-resolution version (``ZoomF=4`` or ``ZoomF=8``) will suffice.
+- **DefCor** (default correlation value): the default correlation value to use in pixels that are uncorrelated.
+- **CostTrans** (transition cost): the cost to transition from correlation to decorrelation. Higher values means that
+  more areas are included (because it is 'harder' to transition to decorrelation), though it may also increase the
+  noise in the final result.
+- **EZA** (export Z absolute): ``EZA=1`` argument ensures that the values in the DEM are absolute (in the units of
+  the coordinate system), rather than scaled.
+- **SzW** (correlation window size): the half-size of the window of the correlation window. ``SzW=3`` means using a
+  7x7 correlation window; larger window sizes increase the likelihood of finding matches in areas with poor contrast
+  (i.e., over glaciers), but also tend to smooth out the elevation.
+- **Regul** (regularization factor): the regularization factor (penalty) to use for the transition term. Higher values
+  tend to smooth out the terrain.
 
 Alternatively, using :py:meth:`spymicmac.micmac.malt`:
 
@@ -21,7 +37,9 @@ Alternatively, using :py:meth:`spymicmac.micmac.malt`:
     micmac.malt('OIS.*tif', 'Relative',
         zoomf=4,
         dirmec='MEC-Relative',
-        cost_trans=1
+        cost_trans=4,
+        szw=3,
+        regul=0.1
     )
 
 Once this command finishes, you will have two new directories: ``MEC-Relative`` and ``Ortho-MEC-Relative``. The DEM
