@@ -9,7 +9,7 @@ As this is a (non-exhaustive) set of instructions, it may not work 100% with you
 We are happy to try to provide guidance/support, **but we make no promises**.
 
 Installing MicMac
-#################
+-----------------
 
 Detailed installation instructions for MicMac on multiple platforms can be found `here <https://micmac.ensg.eu/index.php/Install/>`_,
 but we've added a short summary to help guide through the process.
@@ -65,11 +65,12 @@ installed by running the following:
 In a nutshell, the basic idea is: clone the MicMac git repository, then build the source code. Simple!
 
 Installing spymicmac
-#####################
+--------------------
 spymicmac is available in a number of ways - either installing from source or packaged via PyPI or conda-forge.
 
 via PyPI
-------------
+^^^^^^^^
+
 As of version 0.1, spymicmac is available via PyPI. To install the latest packaged version into your python environment,
 simply run:
 
@@ -78,7 +79,8 @@ simply run:
     pip install spymicmac
 
 via conda-forge
------------------
+^^^^^^^^^^^^^^^
+
 As of version 0.1.1, spymicmac is available via conda-forge. To install the latest version, run:
 
 .. code-block:: sh
@@ -87,7 +89,8 @@ As of version 0.1.1, spymicmac is available via conda-forge. To install the late
 
 
 from source
--------------
+^^^^^^^^^^^
+
 To get started, clone the repository, then navigate to the directory where the repository is downloaded:
 
 .. code-block:: sh
@@ -95,7 +98,7 @@ To get started, clone the repository, then navigate to the directory where the r
     git clone https://github.com/iamdonovan/spymicmac.git
 
 Optional: Preparing a python environment
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+""""""""""""""""""""""""""""""""""""""""
 If you like, you can set up a dedicated python environment for your spymicmac needs. This can be handy, in case any
 packages required by spymicmac clash with packages in your default environment. Our personal preference
 is `conda <https://docs.conda.io/en/latest/>`_, but your preferences may differ.
@@ -118,7 +121,7 @@ And you should be ready to go. Note that you will have to activate this environm
 spymicmac scripts and tools, if it is not already activated in your terminal.
 
 Installing via pip
-^^^^^^^^^^^^^^^^^^^^
+""""""""""""""""""
 Once you have the environment prepared (or not), run pip from inside the ``spymicmac`` directory:
 
 .. code-block:: sh
@@ -133,7 +136,8 @@ or your own tinkering) without having to re-install each time. To install a deve
     pip install -e .
 
 Checking the installation
---------------------------
+^^^^^^^^^^^^^^^^^^^^^^^^^
+
 Assuming that you haven't run into any errors, you should be set up. You can verify this by running:
 
 .. code-block:: sh
@@ -145,8 +149,10 @@ From the command line. You should see the following output (or something very si
 .. code-block:: text
 
     usage: register_relative [-h] [-ort FN_ORTHO] [-ref FN_REF] [-glacmask GLACMASK] [-landmask LANDMASK]
-                             [-footprints FOOTPRINTS] [-im_subset IM_SUBSET [IM_SUBSET ...]] [-b BLOCK_NUM] [-ori ORI]
-                             [-ortho_res ORTHO_RES] [-imgsource IMGSOURCE] [-density DENSITY] [-no_allfree] [-useortho]
+                             [-footprints FOOTPRINTS] [-im_subset IM_SUBSET [IM_SUBSET ...]] [-b BLOCK_NUM]
+                             [--subscript SUBSCRIPT] [-ori ORI] [-ortho_res ORTHO_RES] [-imgsource IMGSOURCE]
+                             [-strategy STRATEGY] [-density DENSITY] [-no_allfree] [-useortho] [-max_iter MAX_ITER]
+                             [-use_cps] [-cp_frac CP_FRAC] [-o] [-fn_gcps FN_GCPS]
                              dirmec fn_dem
 
     Register a relative DEM or orthoimage to a reference DEM and/or orthorectified image.
@@ -169,10 +175,74 @@ From the command line. You should see the following output (or something very si
                             subset of raw images to work with (default all)
       -b BLOCK_NUM, --block_num BLOCK_NUM
                             Block number to use if multiple image blocks exist in directory.
+      --subscript SUBSCRIPT
+                            Optional subscript to add to filenames.
       -ori ORI              name of orientation directory (after Ori-) [Relative]
       -ortho_res ORTHO_RES  approx. ground sampling distance (pixel resolution) of ortho image. [8 m]
       -imgsource IMGSOURCE  USGS dataset name for images [DECLASSII]
+      -strategy STRATEGY    strategy for generating GCPs. Must be one of 'grid', 'random', or 'chebyshev' [grid]
       -density DENSITY      pixel spacing to look for GCPs [200]
       -no_allfree           run Campari with AllFree set to False
-      -useortho             use the orthomosaic in Ortho-{dirmec} rather than the DEM (default: False). If fn_ortho
-                            is set, uses that file instead.
+      -useortho             use the orthomosaic in Ortho-{dirmec} rather than the DEM [False]. If fn_ortho is set,
+                            uses that file instead.
+      -max_iter MAX_ITER    the maximum number of Campari iterations to run [5]
+      -use_cps              split the GCPs into GCPs and CPs, to quantify the uncertainty of the camera model [False]
+      -cp_frac CP_FRAC      the fraction of GCPs to use when splitting into GCPs and CPs [0.2]
+      -o, --use_orb         use skimage.feature.ORB to identify GCP locations in the reference image (default: use
+                            regular grid for matching)
+      -fn_gcps FN_GCPS      (optional) shapefile or CSV of GCP coordinates to use. Column names should be [(name | id),
+                            (z | elevation), x, y]. If CSV is used, x,y should have the same CRS as the reference image.
+
+using the USGS M2M API
+----------------------
+
+:py:mod:`spymicmac.data` is set up to provide a way to search for image footprints using the USGS M2M API, through
+the `usgs <http://kapadia.github.io/usgs/>`__ python package.
+
+.. note::
+
+    Because of recent changes to the USGS API, you will need to install ``usgs`` from github
+    (https://github.com/kapadia/usgs), rather than from PyPI.
+
+In order for this two work, you will need to do the following things:
+
+- create a free USGS EarthExplorer account: https://earthexplorer.usgs.gov/
+- add your EarthExplorer login credentials to a ``.netrc`` (or ``_netrc``) file in your ``$home`` directory.
+- create a USGS M2M access token (https://m2m.cr.usgs.gov/), and save the token to a file, ``.usgs_token``, in your
+  ``$home`` directory.
+
+Once you have done this, you can check access:
+
+.. code-block:: python
+
+    from spymicmac import data
+    data._authenticate()
+
+If this prints something like the following:
+
+.. code-block:: text
+
+    {'requestId': 2011843395,
+     'version': 'stable',
+     'data': 'eyJjaWQiOjMyNDc5MCwicyI6IjE3NDg5NDQwNDYiLCJyIjo2MTgsInAiOlsidXNlciJdfQ==',
+     'errorCode': None,
+     'errorMessage': None,
+     'sessionId': 316673291}
+
+You have successfully authenticated. On the other hand, if you see something like:
+
+.. code-block:: python
+
+    Traceback (most recent call last):
+      File "<string>", line 1, in <module>
+      File "/home/bob/software/spymicmac/src/spymicmac/data.py", line 60, in _authenticate
+        login = api.login(user, token)
+                ^^^^^^^^^^^^^^^^^^^^^^
+      File "/home/bob/software/usgs/usgs/api.py", line 159, in login
+        _check_for_usgs_error(response)
+      File "/home/bob/software/usgs/usgs/api.py", line 38, in _check_for_usgs_error
+        raise USGSError('%s: %s' % (error_code, error))
+    usgs.USGSError: AUTH_INVALID: User credential verification failed
+
+it means that you have not successfully authenticated, and will need to check that your credentials are correct and
+in the right place.
