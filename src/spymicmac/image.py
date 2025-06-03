@@ -13,6 +13,8 @@ from scipy.ndimage.filters import generic_filter
 import numpy as np
 from numba import jit
 from spymicmac import matching, resample
+from numpy.typing import NDArray, DTypeLike
+from typing import Union
 
 
 np.seterr(divide='ignore', invalid='ignore')
@@ -20,11 +22,11 @@ np.seterr(divide='ignore', invalid='ignore')
 # image filtering tools
 ######################################################################################################################
 @jit(nopython=True)
-def nanstd(a):
+def nanstd(a: NDArray) -> NDArray:
     return np.nanstd(a)
 
 
-def nanmedian_filter(img, **kwargs):
+def nanmedian_filter(img: NDArray, **kwargs: tuple) -> NDArray:
     """
     Calculate a multi-dimensional median filter that respects NaN values
     and masked arrays.
@@ -51,12 +53,12 @@ def nanmedian_filter(img, **kwargs):
     return generic_filter(img, nanmed, **kwargs)
 
 
-def highpass_filter(img):
+def highpass_filter(img: NDArray) -> NDArray:
     """
     Subtract a low-pass from an image, to return a highpass filter.
 
-    :param array-like img: the image to filter.
-    :return: **highpass** (*array-like*) -- the highpass-filtered image
+    :param img: the image to filter.
+    :return: the highpass-filtered image
     """
     v = img.copy()
     v[np.isnan(img)] = 0
@@ -71,18 +73,18 @@ def highpass_filter(img):
     return tmphi
 
 
-def splitter(img, nblocks, overlap=0):
+def splitter(img: NDArray, nblocks: tuple[int, int], overlap: int = 0) -> tuple[list, list, list]:
     """
     Split an image into (m, n) blocks with a given overlap.
 
-    :param array-like img: the image to split
-    :param tuple nblocks: the number of blocks to create along each axis (m, n)
-    :param int overlap: the number of pixels to overlap each block. (default: 0)
+    :param img: the image to split
+    :param nblocks: the number of blocks to create along each axis (m, n)
+    :param overlap: the number of pixels to overlap each block.
 
     :return:
-        - **blocks** (*list*) -- a list of the image blocks created
-        - **top_inds** (*list*) -- a list of the original row index of the top edge of each block
-        - **left_inds** (*list*) -- a list of the original column index of the left edge of each block
+        - **blocks** -- a list of the image blocks created
+        - **top_inds** -- a list of the original row index of the top edge of each block
+        - **left_inds** -- a list of the original column index of the left edge of each block
     """
     new_width = int(np.floor(img.shape[1]/nblocks[1]))
     new_height = int(np.floor(img.shape[0]/nblocks[0]))
@@ -123,18 +125,20 @@ def _subimg_offsets(split, shape, overlap=0):
     return rel_x.astype(int), rel_y.astype(int)
 
 
-def stretch_image(img, scale=(0.0, 1.0), mult=255, imgmin=0, outtype=np.uint8, mask=None):
+def stretch_image(img: NDArray, scale: tuple[float, float] = (0.0, 1.0),
+                  mult: Union[int, float] = 255, imgmin: Union[int, float] = 0,
+                  outtype: DTypeLike = np.uint8, mask: Union[NDArray, None] = None) -> NDArray:
     """
     Apply a linear stretch to an image by clipping and stretching to quantiles.
 
-    :param array-like img: the image to stretch.
-    :param tuple scale: the minimum and maximum quantile to stretch to. (default: (0, 1) - the minimum/maximum values
-        of the image)
-    :param int|float mult: a multiplier to scale the result to. (default: 255)
-    :param int|float imgmin: the minimum value in the output image (default: 0)
-    :param numpy.dtype outtype: the numpy datatype to return the stretched image as. (default: np.uint8)
-    :param array-like mask: a mask of pixels to ignore when calculating quantiles.
-    :return: **stretched** (*array-like*) -- the stretched image.
+    :param img: the image to stretch.
+    :param scale: the minimum and maximum quantile to stretch to. Defaults to the minimum/maximum values
+        of the image.
+    :param mult: a multiplier to scale the result to.
+    :param imgmin: the minimum value in the output image
+    :param outtype: the numpy datatype to return the stretched image as.
+    :param mask: a mask of pixels to ignore when calculating quantiles.
+    :return: the stretched image.
     """
     if mask is None:
         maxval = np.nanquantile(img, max(scale))
@@ -149,13 +153,13 @@ def stretch_image(img, scale=(0.0, 1.0), mult=255, imgmin=0, outtype=np.uint8, m
     return (mult * (img - minval) / (maxval - minval + imgmin)).astype(outtype)
 
 
-def remove_scanner_stripes(img, dtype=np.uint8, scan_axis=1):
+def remove_scanner_stripes(img: NDArray, dtype: DTypeLike = np.uint8, scan_axis: int = 1) -> NDArray:
     """
     Remove horizontal (or vertical) stripes from an image.
 
-    :param array-like img: the image to remove stripes from.
-    :param numpy.dtype dtype: the original datatype of the image.
-    :param int scan_axis: the axis corresponding to the direction of the stripes. A scan_axis of 1 corresponds to
+    :param img: the image to remove stripes from.
+    :param dtype: the original datatype of the image.
+    :param scan_axis: the axis corresponding to the direction of the stripes. A scan_axis of 1 corresponds to
         horizontal stripes (the default), while a scan_axis of 0 corresponds to vertical stripes.
 
     :return: **destriped**: the original image with the stripes (mostly) removed.
@@ -171,19 +175,21 @@ def remove_scanner_stripes(img, dtype=np.uint8, scan_axis=1):
     return stretch_image(outimg, outtype=dtype)
 
 
-def contrast_enhance(fn_img, mask_value=None, qmin=0.02, qmax=0.98, gamma=1.25, disksize=3, imgmin=0):
+def contrast_enhance(fn_img: str, mask_value: Union[int, float, None] = None,
+                     qmin: float = 0.02, qmax: float = 0.98, gamma: float = 1.25,
+                     disksize: int = 3, imgmin: Union[int, float] = 0) -> NDArray:
     """
     Enhance image contrast in a three-step process. First, the image is processed with a median filter to reduce
     noise. Next, a linear contrast stretch is applied, and finally, a gamma adjustment is applied.
 
-    :param str fn_img: the image filename.
-    :param int|float mask_value: a mask value to use when filtering the image.
-    :param float qmin: the minimum quantile to use for the linear contrast stretch (default: 0.02)
-    :param float qmax: the maximum quantile to use for the linear contrast stretch (default: 0.98)
-    :param float gamma: the value to use for the gamma adjustment
-    :param int disksize: the filter disk size (input to skimage.morphology.disk; default: 3)
-    :param int|float imgmin: the minimum value in the output image (default: 0)
-    :return: **enhanced** (*array-like*) -- the contrast-enhanced image.
+    :param fn_img: the image filename.
+    :param mask_value: a mask value to use when filtering the image.
+    :param qmin: the minimum quantile to use for the linear contrast stretch
+    :param qmax: the maximum quantile to use for the linear contrast stretch
+    :param gamma: the value to use for the gamma adjustment
+    :param disksize: the filter disk size (input to skimage.morphology.disk)
+    :param imgmin: the minimum value in the output image
+    :return: **enhanced** -- the contrast-enhanced image.
     """
     img = io.imread(fn_img)
     if mask_value is not None:
@@ -201,16 +207,17 @@ def contrast_enhance(fn_img, mask_value=None, qmin=0.02, qmax=0.98, gamma=1.25, 
     return gamma
 
 
-def make_binary_mask(img, mult_value=255, erode=0, mask_value=0):
+def make_binary_mask(img: NDArray, mult_value: Union[int, float] = 255,
+                     erode: int = 0, mask_value: int = 0) -> NDArray:
     """
     Create a binary mask for an image based on a given mask value. Values equal to mask_value will be given a value
     of 0 in the mask, while all other values will be set equal to mult_value.
 
-    :param array-like img: the image to create a mask for.
-    :param int|float mult_value: the value indicating a non-masked value (default: 255).
-    :param int erode: the size of the erosion operation to apply (default: 0).
-    :param int mask_value: the value to mask in the image (default: 0).
-    :return: **mask** (*array-like*) the binary mask.
+    :param img: the image to create a mask for.
+    :param mult_value: the value indicating a non-masked value
+    :param erode: the size of the erosion operation to apply
+    :param mask_value: the value to mask in the image
+    :return: the binary mask.
     """
     _mask = mult_value * np.ones(img.shape, dtype=np.uint8)
     if np.isfinite(mask_value):
@@ -225,12 +232,12 @@ def make_binary_mask(img, mult_value=255, erode=0, mask_value=0):
     return _mask
 
 
-def balance_image(img):
+def balance_image(img: NDArray) -> NDArray:
     """
     Apply contrast-limited adaptive histogram equalization (CLAHE) on an image, then apply a de-noising filter.
 
-    :param array-like img: the image to balance.
-    :return: **img_filt** (*array-like*) -- the balanced, filtered image.
+    :param img: the image to balance.
+    :return: **img_filt** -- the balanced, filtered image.
     """
     img_eq = (255 * exposure.equalize_adapthist(img)).astype(np.uint8)
     img_filt = filters.median(img_eq, footprint=disk(1))
@@ -239,14 +246,14 @@ def balance_image(img):
 
 # thanks to SO user Jamie for this answer
 # https://stackoverflow.com/a/14314054
-def _moving_average(a, n=5):
+def _moving_average(a: NDArray, n: int = 5) -> NDArray:
     ret = np.cumsum(a)
     ret[n:] = ret[n:] - ret[:-n]
     return ret[n - 1:] / n
 
 
 # because sometimes, usgs adds a border with a bright white line on it
-def _spike_filter(img, axis):
+def _spike_filter(img: NDArray, axis: int) -> NDArray:
     img_mean = img.mean(axis=axis)
 
     otsu = img > filters.threshold_otsu(img)
@@ -265,13 +272,13 @@ def _spike_filter(img, axis):
     return img_mean
 
 
-def get_rough_frame(img, fact=10):
+def get_rough_frame(img: NDArray, fact: int = 10) -> tuple[float, float, float, float]:
     """
     Find the rough location of an image frame/border.
 
-    :param array-like img: the image to find a border for
-    :param int fact: the scaling factor for the low-resolution image (default: 10)
-    :return: **xmin**, **xmax**, **ymin**, **ymax** (*float*) -- the left, right, top, and bottom indices for the rough border.
+    :param img: the image to find a border for
+    :param fact: the scaling factor for the low-resolution image
+    :return: **xmin**, **xmax**, **ymin**, **ymax** -- the left, right, top, and bottom indices for the rough border.
     """
     img_lowres = filters.gaussian(resample.downsample(img, fact=fact), 4)
     aspect = min(img.shape) / max(img.shape)
@@ -378,12 +385,12 @@ def _maximum_sep(peaks, troughs):
     return min(best), max(best)
 
 
-def get_parts_list(im_pattern):
+def get_parts_list(im_pattern: str) -> list[str]:
     """
     Find all of the parts of a scanned image that match a given filename pattern
 
-    :param str im_pattern: the image pattern to match
-    :return: **parts_list** (*list*) -- a list of all parts of the image that match the pattern.
+    :param im_pattern: the image pattern to match
+    :return: **parts_list** -- a list of all parts of the image that match the pattern.
     """
     imlist = glob(im_pattern + '*.tif')
     imlist.sort()
@@ -391,7 +398,8 @@ def get_parts_list(im_pattern):
     return [os.path.splitext(fn_img.split('_')[-1])[0] for fn_img in imlist]
 
 
-def join_hexagon(im_pattern, overlap=2000, block_size=None, blend=True, is_reversed=False):
+def join_hexagon(im_pattern: str, overlap: int = 2000, block_size: Union[int, None] = None,
+                 blend: bool = True, is_reversed: bool = False) -> None:
     """
     Join multiple parts of a scanned image.
 
@@ -433,16 +441,18 @@ def _blend(_left, _right, left_shape):
     return alpha * _left + (1 - alpha) * _right
 
 
-def join_halves(left, right, overlap, block_size=None, blend=True, trim=None):
+def join_halves(left: NDArray, right: NDArray, overlap: int,
+                block_size: Union[int, None] = None, blend: bool = True, trim: Union[int, None] = None) -> NDArray:
     """
     Join two halves of a scanned image together.
 
-    :param array-like left: the left half of the image
-    :param array-like right: the right half of the image
-    :param int overlap: the amount of overlap, in pixels, between the two halves.
-    :param int block_size: the number of rows each sub-block should cover. Defaults to overlap.
-    :param bool blend: apply a linear blend between the two scanned halves (default: True).
-    :param int trim: the amount to trim the right side of the image by. (default: None).
+    :param left: the left half of the image
+    :param right: the right half of the image
+    :param overlap: the amount of overlap, in pixels, between the two halves.
+    :param block_size: the number of rows each sub-block should cover. Defaults to same value as overlap.
+    :param blend: apply a linear blend between the two scanned halves.
+    :param trim: the amount to trim the right side of the image by. Default is no trimming.
+    :return: the joined image.
     """
     M, num_inliers = matching.match_halves(left, right, overlap=overlap, block_size=block_size)
 
