@@ -16,6 +16,7 @@ page. If you found any of the tools helpful, let me know!
    tealdeer
    tutorials/index
    spymicmac/index
+   citations
 
 Indices and tables
 ==================
