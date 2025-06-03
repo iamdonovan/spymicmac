@@ -14,15 +14,81 @@ necessary files
 
 reference orthoimage and DEM
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-At the risk of stating the obvious, the reference orthoimage and DEM should cover your study area. The reference
-orthoimage can be a high-resolution orthomosaic, or it can be a comparatively low-resolution satellite image.
-:py:meth:`spymicmac.register.register_relative` has been tested on both Landsat-8 and Sentinel-2 images, with
+At the risk of stating the obvious, the reference DEM (or orthoimage, if using one) should cover your study area.
+
+The reference orthoimage can be a high-resolution orthomosaic, or it can be a comparatively low-resolution satellite
+image. :py:meth:`spymicmac.register.register_relative` has been tested on both Landsat-8 and Sentinel-2 images, with
 satisfactory results for both.
 
 In general, the results will depend in part on the accuracy of the control points - so if your reference orthoimage
 is highly accurate and of a similar resolution to your air photos, the more accurate the result will be.
 
 Similar rules apply for the reference DEM - the more accurate the DEM, the better the final result.
+
+:py:mod:`spymicmac.data` has methods available for accessing high-quality, publicly available DEMs from the following
+sources:
+
+Copernicus Global 30m DSM
+"""""""""""""""""""""""""
+
+:py:meth:`spymicmac.data.download_cop30_vrt`, will download and create a VRT of the
+`Copernicus Global 30m DSM <https://doi.org/10.5270/ESA-c5d3d65>`__ tiles that intersect the footprints of the images:
+
+.. code-block:: python
+
+    from spymicmac import data
+    data.download_cop30_vrt()
+
+With no arguments, this will use the images in the current folder, download the footprints from the corresponding
+USGS dataset, and intersect this with the Copernicus DSM tiles. If you are using a non-USGS dataset, or you have already
+downloaded the footprints for your images, or you have a rough study area outline, you can pass this using the
+``footprints`` argument.
+
+Because the vertical datum for the Copernicus DSM is height above the EGM2008 Geoid, you will need to convert
+the VRT to height above the WGS84 ellipsoid, using :py:meth:`spymicmac.data.to_wgs84_ellipsoid`:
+
+.. code-block:: python
+
+    from spymicmac import data
+    data.to_wgs84_ellipsoid('Copernicus_DSM.tif')
+
+This will create a file ``Copernicus_DSM_ell.tif``, which represents the elevations referenced to the WGS84 ellipsoid.
+
+.. note::
+
+    Before converting the vertical datum, it is recommended to first re-project the DSM to a local coordinate reference
+    system, using for example ``gdalwarp``:
+
+    .. code-block:: sh
+
+        gdalwarp -t_srs EPSG:32629 -tr 30 30 -r bilinear Copernicus_DSM.vrt Copernicus_DSM.tif
+
+
+Polar Geospatial Center DEMs
+""""""""""""""""""""""""""""
+
+If you are working in polar regions, you can use :py:meth:`spymicmac.data.download_pgc_mosaic` to download and create
+a VRT of mosaic tiles from the `Polar Geospatial Center <https://www.pgc.umn.edu>`__ using one of two flavors:
+
+- **adem**: the `ArcticDEM <https://www.pgc.umn.edu/data/arcticdem/>`__, covering most areas north of 60°N.
+- **rema**: the `Reference Elevation Model of Antarctica (REMA) <https://www.pgc.umn.edu/data/rema/>`__, covering
+  Antarctica and some sub-Antarctic islands.
+
+Both the ArcticDEM and REMA mosaics are available at resolutions of 2, 10, or 32m. The default (``res=2``) is 2m, but
+because of the size of the files you may wish to specify a lower resolution:
+
+.. code-block:: python
+
+    from spymicmac import data
+    data.download_pgc_mosaic('adem')
+
+As with the Copernicus DSM, with no arguments this will use the images in the current folder, download the footprints
+from the corresponding USGS dataset, and intersect this with the corresponding tile boundaries.
+
+If you are using a non-USGS dataset, or you have already downloaded the footprints for your images, or you have a
+rough study area outline, you can pass this using the ``footprints`` argument.
+
+Both the ArcticDEM and REMA are given as height above the WGS84 ellipsoid, so no conversion is required here.
 
 image footprints
 ^^^^^^^^^^^^^^^^^^
