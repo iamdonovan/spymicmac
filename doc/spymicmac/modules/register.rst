@@ -2,4 +2,4 @@ spymicmac.register
 =================================
 
 .. automodule:: spymicmac.register
-    :members:
+    :members: register_relative
