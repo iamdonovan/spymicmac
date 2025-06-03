@@ -103,7 +103,8 @@ def crop_panoramic(fn_img, flavor, marker_size=31, fact=None, return_vals=False)
     :returns:
         - **border** (*tuple*) -- the estimated image border (left, right, top, bot)
         - **angle**  (*float*) -- the estimated rotation angle.
-        Only returned if **return_vals** is True.
+          Only returned if **return_vals** is True.
+
     """
     assert flavor in ['KH4', 'KH9'], "flavor must be one of [KH4, KH9]"
 
