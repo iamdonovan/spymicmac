@@ -52,7 +52,7 @@ def main():
     parser = _argparser()
     args = parser.parse_args()
 
-    preprocess_pan(**args)
+    preprocess_pan(**vars(args))
 
 
 if __name__ == "__main__":

@@ -77,7 +77,7 @@ def main():
     parser = _argparser()
     args = parser.parse_args()
 
-    preprocess_kh9_mc(**args)
+    preprocess_kh9_mc(**vars(args))
 
 
 if __name__ == "__main__":
