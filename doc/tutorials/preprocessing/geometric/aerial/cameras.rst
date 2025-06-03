@@ -1,9 +1,9 @@
 example camera models
 =======================
 
-This section is a list of different camera models that have acquired historical aerial photos, what their fiducial marks
-look like, and the approximate coordinates of the fiducial marks that you can use to populate the
-``MeasuresCamera.xml`` file.
+This page contains example diagrams for different camera models that have acquired historical aerial photos, including
+what their fiducial marks look like, and the approximate coordinates of the fiducial marks that you can use to populate
+the ``MeasuresCamera.xml`` file.
 
 .. note::
 
@@ -11,11 +11,21 @@ look like, and the approximate coordinates of the fiducial marks that you can us
 
     The information provided here is for those cases where a calibration report does not exist, or has been lost to time.
 
+Fairchild Cameras
+-----------------
+
+"wing-type" fiducials
+^^^^^^^^^^^^^^^^^^^^^
+
+These cameras tend to have 4 mid-side fiducial markers with varying patterns. Some examples of these patterns are shown
+here:
+
+
 
 .. _fairchild k17:
 
-Fairchild F224, K17B (Metrogon Lens)
-------------------------------------
+F224, K17B (Metrogon lens)
+""""""""""""""""""""""""""
 
 .. image:: img/fairchild.png
     :width: 400
@@ -41,10 +51,13 @@ Fairchild F224, K17B (Metrogon Lens)
     These are the approximate coordinates for the corners of the fiducial marker, as these tend to be more stable
     than the tips of the "wings"
 
-Fairchild KC-1, KC-1B, T-11 (Metrogon Lens)
--------------------------------------------
+notch-type fiducials
+^^^^^^^^^^^^^^^^^^^^
 
 .. _fairchild t11d:
+
+KC-1, KC-1B, T-11 (Metrogon Lens)
+"""""""""""""""""""""""""""""""""
 
 .. image:: img/fairchild_kc1b.png
     :width: 400
@@ -65,27 +78,48 @@ Fairchild KC-1, KC-1B, T-11 (Metrogon Lens)
 | P4 | 120 | 235   |
 +----+-----+-------+
 
-.. note::
+check-type fiducials
+^^^^^^^^^^^^^^^^^^^^
 
-    These cameras may have different fiducial patterns - for example, they may have a checked pattern like this:
+.. _fairchild t11s:
 
-    .. _fairchild t11s:
+T-11
+""""
 
-    .. image:: img/fairchild_t11.png
-        :width: 400
-        :align: center
-        :alt: a diagram of a Fairchild T-11 with fiducial markers labeled
+These cameras may have different fiducial patterns - for example, they may have a checked pattern like this:
 
+.. image:: img/fairchild_t11.png
+    :width: 400
+    :align: center
+    :alt: a diagram of a Fairchild T-11 with fiducial markers labeled
+
++----+-----+-------+
+|    | x   | y     |
++----+-----+-------+
+| P1 | 0   | 117.5 |
++----+-----+-------+
+| P2 | 238 | 117.5 |
++----+-----+-------+
+| P3 | 120 | 0     |
++----+-----+-------+
+| P4 | 120 | 235   |
++----+-----+-------+
+
+
+Wild Heerbrugg Cameras
+----------------------
 
 .. _wild rc5:
 
-Wild RC5, RC8 (Aviogon Lens)
------------------------------
+Wild RC5A, RC5, RC8 (Aviogon Lens)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+These cameras tend to have four crosshair fidcuial marks in the corners, set inside of a rounded frame:
 
 .. image:: img/wild_rc5.png
     :width: 400
     :align: center
-    :alt: a diagram of a Wild RC5 with fiducial markers labeled
+    :alt: a diagram of a Wild RC5-type with fiducial markers labeled
 
 |br|
 
@@ -103,8 +137,11 @@ Wild RC5, RC8 (Aviogon Lens)
 
 .. _wild rc10:
 
-Wild RC10 (Aviogon Lens)
--------------------------
+Wild RC8, RC10 (Aviogon Lens)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The RC8 and RC10 camera might also come in a pattern with 8 fiducial markers: 4 corner markers as on the RC5-type, and
+4 mid-side markers:
 
 .. image:: img/wild_rc10.png
     :width: 400
@@ -135,8 +172,11 @@ Wild RC10 (Aviogon Lens)
 
 .. _zeiss midside:
 
+Zeiss Cameras
+-------------
+
 Zeiss RMK 15/23 (Pleogon Lens)
--------------------------------
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. image:: img/zeiss.png
     :width: 400
@@ -164,7 +204,9 @@ Zeiss RMK 15/23 (Pleogon Lens)
 .. _zeiss corner:
 
 Zeiss RMK A 15/23 (Pleogon Lens)
----------------------------------
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Later versions of the Zeiss RMK camera used 8 fiducial markers: 4 mid-side markers, and 4 corner markers.
 
 .. image:: img/zeiss_rmka.png
     :width: 400
