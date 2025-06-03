@@ -1,5 +1,6 @@
 """
-spymicmac.micmac is a collection of tools for interfacing with MicMac
+spymicmac.micmac is a collection of tools for interfacing with MicMac commands, as well as for working with the various
+XML and other files created/used by MicMac.
 """
 import os
 from pathlib import Path
