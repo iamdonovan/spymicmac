@@ -193,6 +193,8 @@ From the command line. You should see the following output (or something very si
       -fn_gcps FN_GCPS      (optional) shapefile or CSV of GCP coordinates to use. Column names should be [(name | id),
                             (z | elevation), x, y]. If CSV is used, x,y should have the same CRS as the reference image.
 
+.. _usgs_setup:
+
 using the USGS M2M API
 ----------------------
 
