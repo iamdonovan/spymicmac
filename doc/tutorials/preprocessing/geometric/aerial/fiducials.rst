@@ -2,8 +2,9 @@ fiducial marks
 ==================
 
 Once you have finished pre-processing the images, you need to resample them to a common geometry using
-`mm3d ReSampFid <https://micmac.ensg.eu/index.php/ReSampFid>`_. For historical aerial images, follow the steps below to
-find the fiducial markers for resampling.
+`mm3d ReSampFid <https://micmac.ensg.eu/index.php/ReSampFid>`_.
+
+For historical aerial images, follow the steps below to find the fiducial markers for resampling.
 
 spymicmac.matching
 --------------------
@@ -12,9 +13,22 @@ There are a number of functions in :py:meth:`spymicmac.matching` that are design
 marker locations, given a ``MeasuresCamera.xml`` file and a template or camera type.
 
 For matching generic cameras, use :py:meth:`spymicmac.matching.find_fiducials`. The required arguments are the image
-filename and a **dict** object of (marker name, template) pairs. If you have already located the fiducial markers in
-a single image using, for example, ``mm3d SaisieAppuisInitQT``, you can use
-:py:meth:`spymicmac.matching.templates_from_meas` to generate this.
+filename and a **dict** object of (marker name, template) pairs.
+
+If you have already located the fiducial markers in a single image using, for example, ``mm3d SaisieAppuisInitQT``,
+you can use :py:meth:`spymicmac.matching.templates_from_meas` to generate this:
+
+.. code-block:: python
+
+    from spymicmac import matching
+    from glob import glob
+
+    templ_dict = matching.templates_from_meas(fn_img)
+    imlist = glob('*.tif')
+
+    for fn in imlist:
+        matching.find_fiducials(fn, templ_dict)
+
 
 This function also assumes that there is a ``MeasuresCamera.xml`` file located in ``Ori-InterneScan``; you can also
 specify the file location using the ``fn_cam`` argument.
@@ -110,17 +124,12 @@ directory.
 
 .. note::
 
-    In order to run :py:meth:`spymicmac.micmac.batch_saisie_fids`, you need to either have a ``MeasuresCamera.xml`` file
-    in ``Ori-InterneScan``, or an ``id_fiducials.txt`` file in the current directory. This is a simple text file with
-    the 'name' of each fiducial marker on each line:
+    In order to run :py:meth:`spymicmac.micmac.batch_saisie_fids`, you need to have either:
 
-    .. code-block:: text
+    - a ``MeasuresCamera.xml`` file in ``Ori-InterneScan``; or
+    - an ``id_fiducial.txt`` file in the current directory (see :ref:`here <id_fid>`)
 
-        P1
-        P2
-        ...
-
-    Note that the names of the fiducial markers in ``id_fiducials.txt`` must match the names in ``MeasuresCamera.xml``
+    Note that the names of the fiducial markers in ``id_fiducial.txt`` must match the names in ``MeasuresCamera.xml``
     in order to work with ``mm3d ReSampFid``.
 
 The MicMac program for inputting fiducial mark locations is ``SaisieAppuisInitQT``
@@ -146,10 +155,16 @@ Once you have selected the location for each fiducial marker, select ``File > Ex
 
 .. note::
 
-    If you are running ``mm3d SaisieAppuisInitQT`` from the command prompt, this will actually create two files,
-    ``MeasuresIm-<Img>-S2D.xml`` and ``MeasuresIm-<Img>-S3D.xml`` in the current directory. As these are only
-    two-dimensional points, you can discard the ``S3D.xml`` file. You'll need to move the ``S2D.xml`` file to a
-    new folder, ``Ori-InterneScan``, and rename it to remove the ``-S2D`` part of the name. In other words:
+    If you are running ``mm3d SaisieAppuisInitQT`` from the command prompt, this will actually create two files
+    in the current directory:
+
+    - ``MeasuresIm-<Img>-S2D.xml``
+    - ``MeasuresIm-<Img>-S3D.xml``
+
+    As these are only two-dimensional points, you can discard the ``S3D.xml`` file. You'll need to move the ``S2D.xml``
+    file to a new folder, ``Ori-InterneScan``, and rename it to remove the ``-S2D`` part of the name.
+
+    In other words:
 
     .. code-block:: sh
 
@@ -160,7 +175,7 @@ Once you have selected the location for each fiducial marker, select ``File > Ex
 Kugelhupf
 ----------
 If you have a number of images, and the fiducial marks are in approximately the same place,
-you might want to give ``mm3d Kugelhupf`` a try:
+you can also use ``mm3d Kugelhupf`` to detect fiducial marks in the other images based on a template image:
 
 .. code-block:: text
 
