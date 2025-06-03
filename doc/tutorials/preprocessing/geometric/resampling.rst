@@ -16,7 +16,7 @@ bilinear resampling (by default) to warp the image to the grid defined by the r√
     from spymicmac import resample
     resample.resample_hex(fn_img, 70)
 
-Using a value of 70 (the default used by :py:meth:`spymicmac.preprocessing.preprocess_kh9mc` will resample the images
+Using a value of 70 (the default used by :py:meth:`spymicmac.preprocessing.preprocess_kh9_mc` will resample the images
 to approximately 14 microns resolution (0.014 mm/px), creating images that are 32200 x 15400 pixels in size:
 
 .. image:: declass/img/resampled_mc.png

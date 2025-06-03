@@ -17,12 +17,13 @@ automatically detected locations:
 :py:meth:`spymicmac.resample.resample_hex`.
 
 .. note::
+
     Before running :py:meth:`spymicmac.resample.resample_hex`, you will also need to run
     :doc:`../../../../spymicmac/scripts/generate_micmac_measures` in order to generate the ``MeasuresCamera.xml`` file
     needed, then move ``MeasuresCamera.xml`` to the ``Ori-InterneScan`` directory in the correct folder.
 
-    If you are running these steps using the :doc:`../../../../spymicmac/scripts/preprocess_kh9` convenience tool,
-    these files will be automatically generated.
+    If you are running these steps using :py:meth:`spymicmac.preprocessing.preprocess_kh9_mc` or
+    :doc:`../../../../spymicmac/scripts/preprocess_kh9_mc`, these files will be automatically generated.
 
 
 cross removal

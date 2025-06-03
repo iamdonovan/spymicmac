@@ -126,12 +126,12 @@ For KH-9 Hexagon mapping camera processing, ``spymicmac`` uses
 `RadialExtended <https://micmac.ensg.eu/index.php/Tapas#RadialExtended>`_ by default, which uses 5 polynomial
 coefficients to estimate the radial distortion: :math:`r^3, r^5, r^7, r^9, r^{11}`.
 
-To help initialize the calibration, :py:meth:`spymicmac.preprocessing.preprocess_kh9mc` uses
+To help initialize the calibration, :py:meth:`spymicmac.preprocessing.preprocess_kh9_mc` uses
 :py:meth:`spymicmac.micmac.init_autocal` to create a directory with calibration files, ``Ori-Init``,
 that can be passed to ``Tapas`` using ``InCal=Init``.
 
 Because ``Tapas`` with ``RadialExtended`` is likely to diverge due to the number of degrees of freedom and residual
-distortion in the images, the default behavior in :py:meth:`spymicmac.preprocessing.preprocess_kh9mc` is to hold the
+distortion in the images, the default behavior in :py:meth:`spymicmac.preprocessing.preprocess_kh9_mc` is to hold the
 focal length, center of distortion, and principal point constant (``LibFoc=0``, ``LibCD=0``, and ``LibPP=0``,
 respectively):
 
@@ -143,11 +143,11 @@ This typically works well as an estimate for the camera distortion, but it is al
 distortion model used by ``RadialExtended`` with affine and decentric correction parameters, as used in models such as
 ``Fraser`` or ``FraserBasic``.
 
-If you are using :py:meth:`spymicmac.preprocessing.preprocess_kh9mc`, using ``add_params=True`` will initialize the
+If you are using :py:meth:`spymicmac.preprocessing.preprocess_kh9_mc`, using ``add_params=True`` will initialize the
 decentric and affine correction parameters with a value of 0; if the bundle block adjustment using ``Campari`` is
 run with ``AllFree=1``, these parameters will also be optimized at this stage.
 
-If you are not using :py:meth:`spymicmac.preprocessing.preprocess_kh9mc`, you can still add these parameters to the
+If you are not using :py:meth:`spymicmac.preprocessing.preprocess_kh9_mc`, you can still add these parameters to the
 higher-order distortion model in the following way:
 
 .. code-block:: python
