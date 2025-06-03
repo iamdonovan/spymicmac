@@ -13,36 +13,42 @@ from skimage import morphology, io, filters
 from skimage.morphology import binary_dilation, disk
 from skimage.measure import ransac
 from skimage.feature import peak_local_max, ORB
-from skimage.transform import AffineTransform, EuclideanTransform, SimilarityTransform
+from skimage.transform import ProjectiveTransform, AffineTransform, EuclideanTransform, SimilarityTransform
 from scipy.interpolate import RectBivariateSpline as RBS
 from scipy import ndimage
 import numpy as np
 from shapely.ops import nearest_points
 from shapely.geometry import LineString, MultiPoint, Point
 import geopandas as gpd
+import geoutils as gu
 from spymicmac import image, micmac, resample, register
+from numpy.typing import NDArray
+from typing import Union
 
 
 ######################################################################################################################
 # tools for matching fiducial markers (or things like fiducial markers)
 ######################################################################################################################
-def find_fiducials(fn_img, templates, fn_cam=None, thresh_tol=0.9, npeaks=5, min_dist=1, angle=None,
-                   use_frame=True, tsize=None, threshold=True, dual=False):
+def find_fiducials(fn_img: str, templates: dict, fn_cam: Union[str, Path, None] = None, thresh_tol: float = 0.9,
+                   npeaks: int = 5, min_dist: int = 1, angle: Union[float, None] = None,
+                   use_frame: bool = True, tsize: Union[int, None] = None, threshold: bool =True,
+                   dual: bool = False) -> float:
     """
     Match the location of fiducial markers for a scanned aerial photo.
 
-    :param str fn_img: the filename of the image to find fiducial markers in.
-    :param dict templates: a dict of (name, template) pairs corresponding to each fiducial marker.
-    :param str fn_cam: the filename of the MeasuresIm file for the template image, if templates are created using
+    :param fn_img: the filename of the image to find fiducial markers in.
+    :param templates: a dict of (name, template) pairs corresponding to each fiducial marker.
+    :param fn_cam: the filename of the MeasuresIm file for the template image, if templates are created using
         templates_from_meas().
-    :param float thresh_tol: the minimum relative peak intensity to use for detecting matches (default: 0.9)
-    :param int npeaks: maximum number of potential matches to accept for each fiducial marker template (default: 5)
-    :param int min_dist: the minimum distance allowed between potential peaks (default: not set)
-    :param int angle: the angle by which to rotate the points in MeasuresCam (default: do not rotate)
-    :param bool use_frame: use the rough image frame to try to find fiducial markers (default: True)
-    :param int tsize: target half-size to use for matching (default: calculated based on image size)
-    :param bool threshold: use a local threshold to help find matches (default: True)
-    :param bool dual: match using both thresholding and not thresholding to help find matches (default: False)
+    :param thresh_tol: the minimum relative peak intensity to use for detecting matches
+    :param npeaks: maximum number of potential matches to accept for each fiducial marker template
+    :param min_dist: the minimum distance allowed between potential peaks
+    :param angle: the angle by which to rotate the points in MeasuresCam
+    :param use_frame: use the rough image frame to try to find fiducial markers
+    :param tsize: target half-size to use for matching (default: calculated based on image size)
+    :param threshold: use a local threshold to help find matches
+    :param dual: match using both thresholding and not thresholding to help find matches
+    :return: the mean residual between the matches and the fiducial marker locations
     """
     img = io.imread(fn_img)
 
@@ -208,13 +214,13 @@ def _fix_fiducials(coords, measures_cam):
     return coords.reset_index()
 
 
-def fix_measures_xml(fn_img, fn_cam=None):
+def fix_measures_xml(fn_img: str, fn_cam: Union[str, Path, None] = None):
     """
     Use an affine transformation to estimate locations of any missing fiducial markers in an image. Output written to
         Ori-InterneScan/MeasuresIm-{fn_img}.xml
 
-    :param str fn_img: the filename of the image.
-    :param str fn_cam: the Measures file to use. Defaults to Ori-InterneScan/MeasuresCamera.xml.
+    :param fn_img: the filename of the image.
+    :param fn_cam: the Measures file to use. Defaults to Ori-InterneScan/MeasuresCamera.xml.
     """
     if fn_cam is None:
         fn_cam = Path('Ori-InterneScan', 'MeasuresCamera.xml')
@@ -360,13 +366,13 @@ def _inscribe(outer, inner):
     return outer - padded
 
 
-def padded_dot(size, disk_size):
+def padded_dot(size: int, disk_size: int) -> NDArray:
     """
     Pad a disk-shaped marker with zeros. Works for, e.g., Zeiss RMK mid-side fiducials.
 
-    :param int size: the size of the padded template
-    :param int disk_size: the half-size of the disk to use
-    :return: **padded** (*array-like*) -- the disk with a padding of zeros around it
+    :param size: the size of the padded template
+    :param disk_size: the half-size of the disk to use
+    :return: **padded** -- the disk with a padding of zeros around it
     """
     template = 255 * np.ones((size, size))
     dot = 255 * disk(disk_size)
@@ -374,15 +380,15 @@ def padded_dot(size, disk_size):
     return 255 - _inscribe(template, dot)
 
 
-def inscribed_cross(size, cross_size, width=3, angle=45):
+def inscribed_cross(size: int, cross_size: int, width: int = 3, angle: Union[float, None] = 45) -> NDArray:
     """
     Create a cross-shaped template inscribed inside of a circle for matching fiducial marks.
 
-    :param int size: the half-size of the template. Final size will be (2 * size + 1, 2 * size + 1).
-    :param int cross_size: the size of the cross template to create
-    :param int width: the width of the cross at the center of the template (default: 3 pixels).
-    :param float angle: the angle to rotate the template by (default: None).
-    :return: **template** (*array-like*) -- the output template
+    :param size: the half-size of the template. Final size will be (2 * size + 1, 2 * size + 1).
+    :param cross_size: the size of the cross template to create
+    :param width: the width of the cross at the center of the template.
+    :param angle: the angle to rotate the template by.
+    :return: **template** -- the output template
     """
 
     circle = 255 * disk(size)
@@ -396,15 +402,15 @@ def inscribed_cross(size, cross_size, width=3, angle=45):
     return circle - padded
 
 
-def templates_from_meas(fn_img, half_size=100, threshold=False):
+def templates_from_meas(fn_img: Union[str, Path], half_size: int = 100, threshold: bool = False) -> dict:
     """
     Create fiducial templates from points in a MeasuresIm file.
 
     :param str fn_img: the filename of the image to use. Points for templates will be taken from
         Ori-InterneScan-Measuresim{fn-img}.xml.
-    :param int half_size: the half-size of the template to create, in pixels (default: 100)
-    :param bool threshold: return binary templates based on otsu thresholding (default: False)
-    :return: **templates** (*dict*) -- a *dict* of (name, template) pairs for each fiducial marker.
+    :param int half_size: the half-size of the template to create, in pixels
+    :param bool threshold: return binary templates based on otsu thresholding
+    :return: **templates** -- a dict of (name, template) pairs for each fiducial marker.
     """
     dir_img = os.path.dirname(fn_img)
     if dir_img == '':
@@ -428,23 +434,24 @@ def templates_from_meas(fn_img, half_size=100, threshold=False):
     return dict(zip(meas_im.name.values, templates))
 
 
-def match_fairchild(fn_img, size, model, data_strip, fn_cam=None, dot_size=4, **kwargs):
+def match_fairchild(fn_img: Union[str, Path], size: int, model: str, data_strip: str, fn_cam: Union[str, Path] = None,
+                    dot_size: int = 4, **kwargs) -> float:
     """
     Match the fiducial locations for a Fairchild-style camera (4 fiducial markers markers on the side).
 
-    :param str fn_img: the filename of the image to match
-    :param int size: the size of the marker to match
-    :param str model: the type of fiducial marker: T11 style with either checkerboard-style markers (T11S) or dot style
+    :param fn_img: the filename of the image to match
+    :param size: the size of the marker to match
+    :param model: the type of fiducial marker: T11 style with either checkerboard-style markers (T11S) or dot style
         markers (T11D), side + corner dot style markers (T12), or K17 style ("wing" style markers). Must be one of
         [K17, T11S, T11D, T12].
-    :param str data_strip: the location of the data strip in the image (left, right, top, bot). For T11 style cameras,
+    :param data_strip: the location of the data strip in the image (left, right, top, bot). For T11 style cameras,
         the data strip should be along the left-hand side; for K17 style cameras, the "data strip" (focal length
         indicator) should be on the right-hand side. Be sure to check your images, as the scanned images may be rotated
         relative to this expectation.
-    :param str fn_cam: the filename of the MeasuresCamera.xml file corresponding to the image
-    :param int dot_size: the size of the dot to use for T11D style fiducial markers (default: 4 -> 9x9)
+    :param fn_cam: the filename of the MeasuresCamera.xml file corresponding to the image
+    :param dot_size: the half-size of the dot to use for T11D style fiducial markers (default: 4 -> 9x9)
     :param kwargs: additional keyword arguments to pass to matching.find_fiducials()
-    :return:
+    :return: the mean residual between the matches and the fiducial marker locations
     """
     assert model.upper() in ['K17', 'T11S', 'T11D', 'T12'], "model must be one of [K17, T11S, T11D, T12]"
     assert data_strip in ['left', 'right', 'top', 'bot'], "data_strip must be one of [left, right, top, bot]"
@@ -490,7 +497,9 @@ def _zeiss_midside(size, dot_size):
     return 4 * [templ]
 
 
-def match_zeiss_rmk(fn_img, size, dot_size, data_strip='left', fn_cam=None, corner_size=None, **kwargs):
+def match_zeiss_rmk(fn_img: Union[str, Path], size: int, dot_size: int,
+                    data_strip: str = 'left', fn_cam: Union[str, Path, None] = None,
+                    corner_size: Union[int, None] = None, **kwargs) -> float:
     """
     Match the fiducial locations for a Zeiss RMK-style camera (4 dot-shaped markers on the side, possibly 4 cross-shaped
     markers in the corners).
@@ -503,7 +512,7 @@ def match_zeiss_rmk(fn_img, size, dot_size, data_strip='left', fn_cam=None, corn
     :param str fn_cam: the filename of the MeasuresCamera.xml file corresponding to the image
     :param int corner_size: the size of the corner markers (default: do not find corner markers)
     :param kwargs: additional keyword arguments to pass to matching.find_fiducials()
-    :return:
+    :return: the mean residual between the matches and the fiducial marker locations
     """
     assert data_strip in ['left', 'right', 'top', 'bot'], "data_strip must be one of [left, right, top, bot]"
 
@@ -579,29 +588,31 @@ def _wild_midside(size, model, circle_size, ring_width):
     return template
 
 
-def match_wild_rc(fn_img, size, model, data_strip='left', fn_cam=None, width=3, circle_size=None, ring_width=7, gap=9,
-                  vgap=None, dot_size=None, pad=10, **kwargs):
+def match_wild_rc(fn_img: Union[str, Path], size: int, model: str, data_strip: str = 'left',
+                  fn_cam: Union[str, Path] = None, width: int = 3, circle_size: Union[int, None] = None,
+                  ring_width: int = 7, gap: int = 9, vgap: Union[int, None] = None, dot_size: Union[int, None] = None,
+                  pad: int = 10, **kwargs) -> float:
     """
     Match the fiducial locations for a Wild RC-style camera (4 cross/bulls-eye markers in the corner, possibly
     4 bulls-eye markers along the sides).
 
-    :param str fn_img: the filename of the image to match
-    :param int size: the size of the marker to match
-    :param str model: whether the camera is an RC5/RC8 (4 corner markers) or RC10-style (corner + midside markers)
-    :param str data_strip: the location of the data strip in the image (left, right, top, bot). Most calibration reports
+    :param fn_img: the filename of the image to match
+    :param size: the size of the marker to match
+    :param model: whether the camera is an RC5/RC8 (4 corner markers) or RC10-style (corner + midside markers)
+    :param data_strip: the location of the data strip in the image (left, right, top, bot). Most calibration reports
         assume the data strip is along the left-hand side, but scanned images may be rotated relative to this.
-    :param str fn_cam: the filename of the MeasuresCamera.xml file corresponding to the
+    :param fn_cam: the filename of the MeasuresCamera.xml file corresponding to the
         image (default: Ori-InterneScan/MeasuresCamera.xml)
-    :param int width: the thickness of the cross template, in pixels (default: 3)
-    :param int circle_size: the size of the circle in which to inscribe the cross-shaped marker (default: no circle)
-    :param int ring_width: the width of the ring if the marker(s) are a cross inscribed with a ring. Only used for RC10
+    :param width: the thickness of the cross template, in pixels
+    :param circle_size: the size of the circle in which to inscribe the cross-shaped marker (default: no circle)
+    :param ring_width: the width of the ring if the marker(s) are a cross inscribed with a ring. Only used for RC10
         models.
-    :param int gap: the width, in pixels, of the gap in the middle of the cross (default: 9)
-    :param int vgap: the height, in pixels, of the gap in the middle of the cross (default: same as gap)
-    :param int dot_size: the half-size, in pixels, of the dot in the middle of the cross (default: no dot)
-    :param int pad: the size of the padding around the outside of the cross to include (default: 10 pixels)
+    :param gap: the width, in pixels, of the gap in the middle of the cross
+    :param vgap: the height, in pixels, of the gap in the middle of the cross (default: same as gap)
+    :param dot_size: the half-size, in pixels, of the dot in the middle of the cross (default: no dot)
+    :param pad: the size of the padding around the outside of the cross to include
     :param kwargs: additional keyword arguments to pass to matching.find_fiducials()
-    :return:
+    :return: the mean residual betweent he matches and the fiducial marker locations
     """
     assert model.upper() in ['RC5', 'RC5A', 'RC8', 'RC10'], "model must be one of [RC5, RC5A, RC8, RC10]"
     assert data_strip in ['left', 'right', 'top', 'bot'], "data_strip must be one of [left, right, top, bot]"
@@ -625,15 +636,16 @@ def match_wild_rc(fn_img, size, model, data_strip='left', fn_cam=None, width=3, 
     return find_fiducials(fn_img, tdict, fn_cam=fn_cam, angle=ldict[data_strip], **kwargs)
 
 
-def cross_template(shape, width=3, angle=None, no_border=False):
+def cross_template(shape: int, width: int = 3,
+                   angle: Union[float, None] = None, no_border: bool = False) -> NDArray:
     """
-    Create a cross-shaped template for matching reseau or fiducial marks.
+    Create a cross-shaped template for matching Réseau or fiducial marks.
 
     :param int shape: the output shape of the template
-    :param int width: the width of the cross at the center of the template (default: 3 pixels).
-    :param float angle: the angle to rotate the template by (default: None).
-    :param bool no_border: do not include a border around the cross (default: False)
-    :return: **cross** (*array-like*) -- the cross template
+    :param int width: the width of the cross at the center of the template
+    :param float angle: the angle to rotate the template by (default: no rotation)
+    :param bool no_border: do not include a border around the cross
+    :return: **cross** -- the cross template
     """
     if isinstance(shape, int):
         rows = shape
@@ -674,13 +686,13 @@ def cross_template(shape, width=3, angle=None, no_border=False):
         return cross[rs[0]+1:rs[-1], cs[0]+1:cs[-1]]
 
 
-def find_crosses(img, cross):
+def find_crosses(img: NDArray, cross: NDArray) -> pd.DataFrame:
     """
     Find all cross markers in an image.
 
-    :param array-like img: the image
-    :param array-like cross: the cross template to use
-    :return: **grid_df** (*pandas.DataFrame*) -- a dataframe of marker locations and offsets
+    :param img: the image
+    :param cross: the cross template to use
+    :return: **grid_df** -- a dataframe of marker locations and offsets
     """
 
     sub_coords = []
@@ -718,14 +730,14 @@ def find_crosses(img, cross):
     return grid_df
 
 
-def match_reseau_grid(img, coords, cross):
+def match_reseau_grid(img: NDArray, coords: NDArray, cross: NDArray) -> pd.DataFrame:
     """
-    Find the best match for each KH-9 mapping camera reseau grid point, given a list of potential matches.
+    Find the best match for each KH-9 mapping camera Réseau grid point, given a list of potential matches.
 
-    :param array-like img: the image to use
-    :param array-like coords: the coordinates of the potential matches
-    :param array-like cross: the cross template to use.
-    :return: **grid_df** (*pandas.DataFrame*) -- a DataFrame of grid locations and match points
+    :param img: the image to use
+    :param coords: the coordinates of the potential matches
+    :param cross: the cross template to use.
+    :return: **grid_df** -- a DataFrame of grid locations and match points
     """
     matchpoints = MultiPoint(coords[:, ::-1])
     # top, bot, left, right = find_grid_border(coords)
@@ -824,12 +836,12 @@ def _fix_cross(subimg):
     return subimg.astype(np.uint8)
 
 
-def remove_crosses(fn_img, nproc=1):
+def remove_crosses(fn_img: Union[str, Path], nproc: int = 1) -> None:
     """
-    Remove the Reseau marks from a KH-9 image before re-sampling.
+    Remove the Réseau marks from a KH-9 image before re-sampling.
 
-    :param str fn_img: the image filename.
-    :param int nproc: the number of subprocesses to use (default: 1).
+    :param fn_img: the image filename
+    :param nproc: the number of subprocesses to use
     """
     fn_meas = Path('Ori-InterneScan', f"MeasuresIm-{fn_img}.xml")
     img = io.imread(fn_img)
@@ -909,15 +921,16 @@ def _outlier_filter(vals, n=3):
     return np.abs(vals - np.nanmean(vals)) > n * np.nanstd(vals)
 
 
-def find_reseau_grid(fn_img, csize=361, return_val=False):
+def find_reseau_grid(fn_img: Union[str, Path],
+                     csize: int = 361, return_val: bool = False) -> Union[pd.DataFrame, None]:
     """
-    Find the locations of the Reseau marks in a scanned KH-9 image. Locations are saved
-    to Ori-InterneScan/MeasuresIm-:fn_img:.xml.
+    Find the locations of the Réseau marks in a scanned KH-9 image. Locations are saved
+    to Ori-InterneScan/MeasuresIm-{fn_img}.xml.
 
-    :param str fn_img: the image filename.
-    :param int csize: the size of the cross template (default: 361 -> 361x361)
-    :param bool return_val: return a pandas DataFrame of the Reseau mark locations (default: False).
-    :return: **gcps_df** (*pandas.DataFrame*) -- a DataFrame of the Reseau mark locations (if return_val=True).
+    :param fn_img: the image filename.
+    :param csize: the size of the cross template (default: 361 -> 361x361)
+    :param return_val: return a pandas DataFrame of the Réseau mark locations
+    :return: **gcps_df** (*pandas.DataFrame*) -- a DataFrame of the Réseau mark locations (if return_val=True).
     """
     print(f"Reading {fn_img}")
     img = io.imread(fn_img)
@@ -995,20 +1008,23 @@ def find_reseau_grid(fn_img, csize=361, return_val=False):
 
     if return_val:
         return grid_df
+    else:
+        return None
 
 
-def wagon_wheel(size, width=3, mult=255, circle_size=None, circle_width=None, angle=None):
+def wagon_wheel(size: int, width: int = 3, mult: Union[int, float] = 255,
+                circle_size: Union[int, None] = None, circle_width: Union[int, None] = None,
+                angle: Union[float, None] = None) -> NDArray:
     """
     Creates a template in the shape of a "wagon wheel" (a cross inscribed in a ring).
 
-    :param int size: the width (and height) of the template, in pixels
-    :param int width: the width/thickness of the cross, in pixels
-    :param mult: a multiplier to use for the template [default: 255]
-    :param int circle_size: the size of the circle to inscribe the cross into (default: same as cross size)
-    :param int circle_width: the width of the ring to inscribe the cross into (default: same as cross width)
-    :param float angle: the angle by which to rotate the cross (default: do not rotate)
-
-    :return: **template** (*array-like*) the wagon wheel template
+    :param size: the width (and height) of the template, in pixels
+    :param width: the width/thickness of the cross, in pixels
+    :param mult: a multiplier to use for the template
+    :param circle_size: the size of the circle to inscribe the cross into (default: same as cross size)
+    :param circle_width: the width of the ring to inscribe the cross into (default: same as cross width)
+    :param angle: the angle by which to rotate the cross (default: do not rotate)
+    :return: **template** the wagon wheel template
     """
     cross = cross_template(size, width, angle=angle)
     cross[cross > 0.8] = 1
@@ -1044,16 +1060,17 @@ def wagon_wheel(size, width=3, mult=255, circle_size=None, circle_width=None, an
 
 
 # all credit to joe kennedy for the name of this function.
-def ocm_show_wagon_wheels(img, size, width=3, img_border=None):
+def ocm_show_wagon_wheels(img: NDArray, size: int, width: int = 3,
+                          img_border: Union[tuple[int, int], None] = None) -> NDArray:
     """
     Find all "wagon wheel" markers in an image.
 
-    :param array-like img: the image
-    :param int size: the size of the marker (in pixels)
-    :param int width: the width/thickness of the cross, in pixels (default: 3)
+    :param img: the image
+    :param size: the size of the marker (in pixels)
+    :param width: the width/thickness of the cross, in pixels
     :param img_border: the approximate top and bottom rows of the image frame. If not set,
         calls get_rough_frame() on the image.
-    :return: **coords** an Nx2 array of the location of the detected markers.
+    :return: **coords** -- an Nx2 array of the location of the detected markers.
     """
     if img_border is None:
         _, _, top, bot = image.get_rough_frame(img)
@@ -1084,13 +1101,13 @@ def ocm_show_wagon_wheels(img, size, width=3, img_border=None):
     return np.concatenate((coords_top, coords_bot), axis=0)
 
 
-def find_rail_marks(img, marker):
+def find_rail_marks(img: NDArray, marker: NDArray) -> NDArray:
     """
     Find all rail marks along the bottom edge of a KH-4 style image.
 
-    :param array-like img: the image to find the rail marks in.
-    :param array-like marker: the marker template to use for matching
-    :return: **coords** (*array-like*) -- Nx2 array of the location (row, col) of the detected markers.
+    :param img: the image to find the rail marks in.
+    :param marker: the marker template to use for matching
+    :return: **coords** -- Nx2 array of the location (row, col) of the detected markers.
     """
     left, right, top, bot = image.get_rough_frame(img)
     img_lowres = resample.downsample(img, fact=10)
@@ -1131,12 +1148,12 @@ def _refine_rail(coords):
     return valid
 
 
-def notch_template(size):
+def notch_template(size: int) -> NDArray:
     """
     Create a notch-shaped ("^") template.
 
-    :param int size: the size of the template, in pixels
-    :return: **template** (*array-like*) -- the notch template
+    :param size: the size of the template, in pixels
+    :return: **template** -- the notch template
     """
     template = np.zeros((size, size), dtype=np.uint8)
     template[-1, :] = 1
@@ -1145,13 +1162,13 @@ def notch_template(size):
     return 255 * template
 
 
-def find_kh4_notches(img, size=101):
+def find_kh4_notches(img: NDArray, size: int = 101) -> NDArray:
     """
     Find all 4 notches along the top of a KH-4 style image.
 
-    :param array-like img: the image.
-    :param int size: the size of the notch template to use.
-    :return: **coords** (*array-like*) -- a 4x2 array of notch locations
+    :param img: the image.
+    :param size: the size of the notch template to use.
+    :return: **coords** -- a 4x2 array of notch locations
     """
     left, right, top, bot = image.get_rough_frame(img)
 
@@ -1185,17 +1202,17 @@ def find_kh4_notches(img, size=101):
 ######################################################################################################################
 # tools for matching gcps
 ######################################################################################################################
-def make_template(img, pt, half_size):
+def make_template(img: NDArray, pt: tuple[int, int], half_size: int) -> tuple[NDArray, list, list]:
     """
     Return a sub-section of an image to use for matching.
 
-    :param array-like img: the image from which to create the template
-    :param tuple pt: the (row, column) center of the template
-    :param int half_size: the half-size of the template; template size will be 2 * half_size + 1
+    :param img: the image from which to create the template
+    :param pt: the (row, column) center of the template
+    :param half_size: the half-size of the template; template size will be 2 * half_size + 1
     :return:
-        - **template** (*array-like*) -- the template
-        - **row_inds** (*list*) -- the number of rows above/below the center of the template
-        - **col_inds** (*list*) -- the number of columns left/right of the center of the template
+        - **template** -- the template
+        - **row_inds** -- the number of rows above/below the center of the template
+        - **col_inds** -- the number of columns left/right of the center of the template
     """
     nrows, ncols = img.shape
     row, col = np.round(pt).astype(int)
@@ -1209,18 +1226,18 @@ def make_template(img, pt, half_size):
     return template, row_inds, col_inds
 
 
-def find_match(img, template, how='min', eq=True):
+def find_match(img: NDArray, template: NDArray, how: str = 'min', eq: bool = True) -> tuple[NDArray, float, float]:
     """
     Given an image and a template, find a match using openCV's normed cross-correlation.
 
-    :param array-like img: the image to find a match in
-    :param array-like template: the template to use for matching
-    :param str how: determines whether the match is the minimum or maximum correlation (default: min)
-    :param bool eq: use a rank equalization filter before matching the templates (default: True)
+    :param img: the image to find a match in
+    :param template: the template to use for matching
+    :param how: determines whether the match is the minimum or maximum correlation
+    :param eq: use a rank equalization filter before matching the templates
     :return:
-        - **res** (*array-like*) -- the correlation image
-        - **match_i** (*float*) -- the row location of the match
-        - **match_j** (*float*) -- the column location of the match
+        - **res** -- the correlation image
+        - **match_i** -- the row location of the match
+        - **match_j** -- the column location of the match
     """
     assert how in ['min', 'max'], "have to choose min or max"
 
@@ -1312,23 +1329,25 @@ def _match_grid(refgeo, spacing, srcwin):
     return jj.astype(int).flatten(), ii.astype(int).flatten()
 
 
-def find_matches(tfm_img, refgeo, mask, points=None, initM=None, strategy='grid', spacing=200, srcwin=60, dstwin=600):
+def find_matches(tfm_img: NDArray, refgeo: gu.Raster, mask: NDArray, points: Union[gpd.GeoDataFrame, None] = None,
+                 initM: Union[ProjectiveTransform, None] = None, strategy: str = 'grid',
+                 spacing: int = 200, srcwin: int = 60, dstwin: int = 600) -> pd.DataFrame:
     """
     Find matches between two images using normalized cross-correlation template matching. If point locations are not
     given, generates a two-dimensional grid of evenly spaced points.
 
-    :param array-like tfm_img: the image to use for matching.
-    :param Raster refgeo: the reference image to use for matching.
-    :param array-like mask: a mask indicating areas that should be used for matching.
-    :param GeoDataFrame points: a GeoDataFrame of point locations
+    :param tfm_img: the image to use for matching.
+    :param refgeo: the reference image to use for matching.
+    :param mask: a mask indicating areas that should be used for matching.
+    :param points: a GeoDataFrame of point locations
     :param initM: the model used for transforming the initial, non-georeferenced image.
-    :param str strategy: strategy for generating points. Must be one of 'grid' or 'random'. Note that if
+    :param strategy: strategy for generating points. Must be one of 'grid' or 'random'. Note that if
         'random' is used, density is the approximate number of points, rather than the distance between
-        grid points (default: grid)
-    :param int spacing: the grid spacing, in pixels (default: 200 pixels)
-    :param int srcwin: the half-size of the template window.
-    :param int dstwin: the half-size of the search window.
-    :return: **gcps** (*pandas.DataFrame*) -- a DataFrame with GCP locations, match strength, and other information.
+        grid points
+    :param spacing: the grid spacing, in pixels
+    :param srcwin: the half-size of the template window.
+    :param dstwin: the half-size of the search window.
+    :return: **gcps** -- a DataFrame with GCP locations, match strength, and other information.
     """
     assert strategy in ['grid', 'random', 'chebyshev'], f"{strategy} must be one of [grid, random]"
 
@@ -1385,16 +1404,17 @@ def find_matches(tfm_img, refgeo, mask, points=None, initM=None, strategy='grid'
     return gcps
 
 
-def do_match(dest_img, ref_img, mask, pt, srcwin, dstwin):
+def do_match(dest_img: NDArray, ref_img: NDArray, mask: NDArray, pt: tuple[int, int],
+             srcwin: int, dstwin: int) -> tuple[tuple, float, float]:
     """
     Find a match between two images using normalized cross-correlation template matching.
 
-    :param array-like dest_img: the image to search for the matching point in.
-    :param array-like ref_img: the reference image to use for matching.
-    :param array-like mask: a mask indicating areas that should be used for matching.
-    :param array-like pt: the index (i, j) to search for a match for.
-    :param int srcwin: the half-size of the template window.
-    :param int dstwin: the half-size of the search window.
+    :param dest_img: the image to search for the matching point in.
+    :param ref_img: the reference image to use for matching.
+    :param mask: a mask indicating areas that should be used for matching.
+    :param pt: the index (i, j) to search for a match for.
+    :param srcwin: the half-size of the template window.
+    :param dstwin: the half-size of the search window.
     :return:
         - **match_pt** (*tuple*) -- the matching point (j, i) found in dest_img
         - **z_corr** (*float*) -- number of standard deviations (z-score) above other potential matches
@@ -1444,21 +1464,22 @@ def do_match(dest_img, ref_img, mask, pt, srcwin, dstwin):
     return (out_j, out_i), z_corr, peak_corr
 
 
-def get_matches(img1, img2, mask1=None, mask2=None, dense=False, npix=100, nblocks=None):
+def get_matches(img1: NDArray, img2: NDArray, mask1: Union[NDArray, None] = None, mask2: Union[NDArray, None] = None,
+                dense: bool = False, npix: int = 100, nblocks: Union[int, None] = None) -> tuple[tuple, tuple, list]:
     """
     Return keypoint matches found using openCV's ORB implementation.
 
-    :param array-like img1: the first image to match
-    :param array-like img2: the second image to match
-    :param array-like mask1: a mask to use for the first image. (default: no mask)
-    :param array-like mask2: a mask to use for the second image. (default: no mask)
-    :param bool dense: compute matches over sub-blocks (True) or the entire image (False). (default: False)
-    :param int npix: the block size (in pixels) to divide the image into, if doing dense matching (default: 100).
-    :param int nblocks: the number of blocks to divide the image into. If set, overrides value given by npix.
+    :param img1: the first image to match
+    :param img2: the second image to match
+    :param mask1: a mask to use for the first image. (default: no mask)
+    :param mask2: a mask to use for the second image. (default: no mask)
+    :param dense: compute matches over sub-blocks (True) or the entire image (False).
+    :param npix: the block size (in pixels) to divide the image into, if doing dense matching.
+    :param nblocks: the number of blocks to divide the image into. If set, overrides value given by npix.
     :return:
-        - **keypoints** (*tuple*) -- the keypoint locations for the first and second image.
-        - **descriptors** (*tuple*) -- the descriptors for the first and second image.
-        - **matches** (*list*) -- a list of matching keypoints between the first and second image
+        - **keypoints** -- the keypoint locations for the first and second image.
+        - **descriptors** -- the descriptors for the first and second image.
+        - **matches** -- a list of matching keypoints between the first and second image
     """
     if dense:
         if np.any(np.array(img1.shape) < 100) or np.any(np.array(img2.shape) < 100):
@@ -1495,7 +1516,7 @@ def keypoint_grid(img, spacing=25, size=10):
     return [cv2.KeyPoint(pt[0], pt[1], size) for pt in _grid]
 
 
-def _dense_skimage(split_img, oy, ox, return_des, detector_kwargs):
+def _dense_skimage(split_img: list, oy: list, ox: list, return_des: bool, detector_kwargs: dict) -> tuple[list, ...]:
     orb = ORB(**detector_kwargs)
 
     keypoints = []
@@ -1527,7 +1548,8 @@ def _dense_skimage(split_img, oy, ox, return_des, detector_kwargs):
         return keypoints
 
 
-def _dense_opencv(split_img, oy, ox, split_msk, return_des, detector_kwargs):
+def _dense_opencv(split_img: list, oy: list, ox: list,
+                  split_msk: list, return_des: bool, detector_kwargs: dict) -> tuple[list, ...]:
     orb = cv2.ORB_create(**detector_kwargs)
 
     keypoints = []
@@ -1549,22 +1571,22 @@ def _dense_opencv(split_img, oy, ox, split_msk, return_des, detector_kwargs):
         return keypoints
 
 
-def get_dense_keypoints(img, mask, npix=100, nblocks=None, return_des=False,
-                        use_skimage=False, detector_kwargs={}):
+def get_dense_keypoints(img: NDArray, mask: NDArray, npix: int = 100, nblocks: int = None, return_des: bool = False,
+                        use_skimage: bool = False, detector_kwargs: dict = {}) -> tuple[list, ...]:
     """
     Find ORB keypoints by dividing an image into smaller parts.
 
-    :param array-like img: the image to use.
-    :param array-like mask: a mask to use for keypoint generation.
-    :param int npix: the block size (in pixels) to divide the image into.
-    :param int nblocks: the number of blocks to divide the image into. If set, overrides value given by npix.
-    :param bool return_des: return the keypoint descriptors, as well
-    :param bool use_skimage: use the scikit-image implementation of ORB rather than OpenCV (default: False)
-    :param dict detector_kwargs: additional keyword arguments to pass when creating the ORB detector. For details,
+    :param img: the image to use.
+    :param mask: a mask to use for keypoint generation.
+    :param npix: the block size (in pixels) to divide the image into.
+    :param nblocks: the number of blocks to divide the image into. If set, overrides value given by npix.
+    :param return_des: return the keypoint descriptors, as well
+    :param use_skimage: use the scikit-image implementation of ORB rather than OpenCV
+    :param detector_kwargs: additional keyword arguments to pass when creating the ORB detector. For details,
         see the documentation for cv2.ORB_create or skimage.feature.ORB.
     :return:
-        - **keypoints** (*list*) -- a list of keypoint locations
-        - **descriptors** (*list*) -- if requested, a list of keypoint descriptors.
+        - **keypoints** -- a list of keypoint locations
+        - **descriptors** -- if requested, a list of keypoint descriptors.
     """
 
     if nblocks is None:
@@ -1588,15 +1610,15 @@ def get_dense_keypoints(img, mask, npix=100, nblocks=None, return_des=False,
         return _dense_opencv(split_img, oy, ox, split_msk, return_des, detector_kwargs)
 
 
-def match_halves(left, right, overlap, block_size=None):
+def match_halves(left: NDArray, right: NDArray, overlap: int, block_size: int = None) -> EuclideanTransform:
     """
     Find a transformation to join the left and right halves of an image scan.
 
-    :param array-like left: the left-hand image scan.
-    :param array-like right: the right-hand image scan.
-    :param int overlap: the estimated overlap between the two images, in pixels.
-    :param int block_size: the number of rows each sub-block should cover. Defaults to overlap.
-    :return: **model** (*EuclideanTransform*) -- the estimated Euclidean transformation between the two image halves.
+    :param left: the left-hand image scan.
+    :param right: the right-hand image scan.
+    :param overlap: the estimated overlap between the two images, in pixels.
+    :param block_size: the number of rows each sub-block should cover. Defaults to overlap.
+    :return: **model** -- the estimated Euclidean transformation between the two image halves.
     """
     src_pts = []
     dst_pts = []
