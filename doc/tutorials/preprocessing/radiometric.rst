@@ -50,20 +50,21 @@ images:
 |br| ``spymicmac`` has two main functions available for enhancing contrast: :py:meth:`spymicmac.image.stretch_image`
 and :py:meth:`spymicmac.image.contrast_enhance`.
 
-``stretch_image()`` performs a linear contrast stretch on the image to a given quantile, while ``contrast_enhance()``
-performs a median filter to de-noise, before calling ``stretch_image()`` and performing a gamma adjustment on the
+:py:meth:`stretch_image <spymicmac.image.stretch_image>` performs a linear contrast stretch on the image to a given
+quantile, while :py:meth:`contrast_enhance <spymicmac.image.contrast_enhance>` performs a median filter to de-noise,
+before calling :py:meth:`stretch_image <spymicmac.image.stretch_image>` and performing a gamma adjustment on the
 stretched image.
 
-For the image on the left above, here is the result of applying ``stretch_image()`` clipped to (0.01, 0.99) -
-that is, 1% and 99% of the image values:
+For the image on the left above, here is the result of applying :py:meth:`stretch_image <spymicmac.image.stretch_image>`
+clipped to (0.01, 0.99) - that is, 1% and 99% of the image values:
 
 .. image:: img/stretch.png
     :width: 600
     :align: center
     :alt: a scanned aerial image
 
-|br| And here is the result using ``contrast_enhance()`` (note that this also enhances the residual striping
-that was not corrected earlier):
+|br| And here is the result using :py:meth:`contrast_enhance <spymicmac.image.contrast_enhance>` (note that this also
+enhances the residual striping that was not corrected earlier):
 
 .. image:: img/enhanced.png
     :width: 600
