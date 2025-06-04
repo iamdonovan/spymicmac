@@ -17,6 +17,8 @@ page. If you found any of the tools helpful, let me know!
    tutorials/index
    spymicmac/index
    citations
+   script
+
 
 indices and tables
 ==================

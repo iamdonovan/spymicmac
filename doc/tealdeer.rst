@@ -5,6 +5,10 @@ This page is designed to provide a "bare bones" user guide to spymicmac/MicMac f
 Camera images or scanned air photos. It is presented primarily as a list of commands to run; if you would like a
 longer explanation of the different steps, see the additional guides :doc:`here <index>`.
 
+.. note::
+
+    If even this is too verbose for your tastes, you can view the sample "one big script" :doc:`here <script>`.
+
 KH-9 processing
 -----------------
 
