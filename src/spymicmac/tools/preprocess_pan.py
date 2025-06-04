@@ -24,9 +24,9 @@ def _argparser():
     parser.add_argument('flavor', action='store', type=str,
                         help='The camera type (KH4 or KH9)')
     parser.add_argument('--steps', action='store', type=str, nargs='+', default='all',
-                        help='The pre-processing steps to run.')
+                        help='The pre-processing steps to run (default: all).')
     parser.add_argument('--skip', action='store', type=str, nargs='+', default='none',
-                        help='The pre-processing steps to skip.')
+                        help='The pre-processing steps to skip (default: none).')
     parser.add_argument('--tar_ext', action='store', type=str, default='.tgz',
                         help='Extension for tar files (default: .tgz)')
     parser.add_argument('-r', '--is_reversed', action='store_true',
@@ -35,7 +35,7 @@ def _argparser():
                         help='The amount of overlap between image parts to use to search for matches. Default depends'
                              'on flavor: KH4 -> 8000, KH9 -> 1000')
     parser.add_argument('-k', '--block_size', action='store', type=int, default=2000,
-                    help='the number of rows each search sub-block should cover [2000].')
+                    help='the number of rows each search sub-block should cover (default: 2000).')
     parser.add_argument('-b', '--blend', action='store_true',
                         help='Blend across image halves to prevent a sharp line at edge.')
     parser.add_argument('-m', '--marker_size', action='store', type=int, default=31,
