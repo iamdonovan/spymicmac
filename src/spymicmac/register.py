@@ -423,7 +423,8 @@ def register_relative(dirmec: str, fn_dem: Union[str, Path], fn_ref: Union[str, 
     :param fn_ortho: path to relative orthoimage (optional)
     :param glacmask: path to file of glacier outlines (i.e., an exclusion mask)
     :param landmask: path to file of land outlines (i.e., an inclusion mask)
-    :param footprints: path to shapefile of image outlines. If not set, will download from USGS.
+    :param footprints: path to shapefile of image outlines. If not set, will look for Footprints.gpkg in the current
+        directory. If this file does not exist, will attempt to download from USGS using imgsource.
     :param im_subset: subset of raw images to work with
     :param block_num: block number to use if processing multiple image blocks
     :param subscript: optional subscript to use for output filenames
