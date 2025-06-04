@@ -13,6 +13,7 @@ from pathlib import Path
 from glob import glob
 import pyproj
 from osgeo import gdal
+from rasterio.crs import CRS
 from shapely.geometry.polygon import Polygon
 from usgs import api, USGSAuthExpiredError
 import geoutils as gu
@@ -154,25 +155,34 @@ def _clean_imlist(imlist: list, globstr: str) -> list:
 
 
 def download_cop30_vrt(imlist: Union[list, None] = None,
-                       footprints: Union[gpd.GeoDataFrame, Polygon, None] = None,
+                       footprints: Union[str, Path, gpd.GeoDataFrame, Polygon, None] = None,
                        imgsource: str = 'DECLASSII',
-                       globstr: str = 'OIS*.tif') -> None:
+                       globstr: str = 'OIS*.tif',
+                       crs: Union[CRS, str, int, None] = None,
+                       to_ellipsoid: bool = True) -> None:
     """
     Create a VRT using Copernicus 30m DSM tiles that intersect image footprints. Creates Copernicus_DSM.vrt using files
     downloaded to cop30_dem/ within the current directory.
 
     :param imlist: a list of image filenames. If None, uses globstr to search for images in the current directory.
-    :param footprints: a GeoDataFrame of image footprints, or a Polygon of an image footprint in
-        WGS84 lat/lon. If None, uses spymicmac.usgs.get_usgs_footprints to download footprints based on imlist.
-    :param imgsource: the EE Dataset name for the images (default: DECLASSII)
+    :param footprints: a filename for a vector dataset of image footprints, a GeoDataFrame of image footprints,
+        or a Polygon of an image footprint in WGS84 lat/lon. If None, uses spymicmac.data.get_usgs_footprints to
+        download footprints based on imlist.
+    :param imgsource: the EE Dataset name for the images
     :param globstr: the search string to use to find images in the current directory.
+    :param crs: a CRS representation recognized by geoutils.Raster.reproject to re-project the raster to. If
+        None, CRS remains WGS84 Lat/Lon (EPSG:4326).
+    :param to_ellipsoid: convert the elevations from height above EGM2008 Geoid to height above WGS84 Ellipsoid.
     """
+    fn_out = 'Copernicus_DSM.vrt'
 
     clean_imlist = _clean_imlist(imlist, globstr)
 
     if footprints is None:
         footprints = get_usgs_footprints(clean_imlist, dataset=imgsource)
         fprint = footprints.union_all
+    elif isinstance(footprints, (str, Path)):
+        fprint = gpd.read_file(footprints).to_crs(crs='epsg:4326').union_all()
     elif isinstance(footprints, Polygon):
         fprint = footprints
     elif isinstance(footprints, gpd.GeoDataFrame):
@@ -204,14 +214,26 @@ def download_cop30_vrt(imlist: Union[list, None] = None,
 
     for tile in tiles:
         this_url = '/'.join(['https://copernicus-dem-30m.s3.amazonaws.com', tile, tile + '.tif'])
-        try:
-            urllib.request.urlretrieve(this_url, Path('cop30_dem', tile + '.tif'))
-        except urllib.error.HTTPError:
-            print(f'No tile found for {tile}')
+        if not os.path.exists(Path('cop30_dem', tile + '.tif')):
+            try:
+                urllib.request.urlretrieve(this_url, Path('cop30_dem', tile + '.tif'))
+            except urllib.error.HTTPError:
+                print(f'No tile found for {tile}')
+        else:
+            print(f"{tile} already downloaded, skipping.")
 
-    filelist = glob(Path('cop30_dem', '*DEM.tif'))
-    out_vrt = gdal.BuildVRT('Copernicus_DSM.vrt', filelist, srcNodata=0)
+    filelist = glob(str(Path('cop30_dem', '*DEM.tif')))
+    out_vrt = gdal.BuildVRT(fn_out, filelist, srcNodata=0)
     out_vrt = None
+
+    if crs is not None:
+        tmp = gu.Raster(fn_out)
+
+        fn_out = 'Copernicus_DSM.tif'
+        tmp.reproject(crs = crs).save(fn_out)
+
+    if to_ellipsoid:
+        to_wgs84_ellipsoid(fn_out)
 
 
 def _lon_prefix(lon: Union[float, int]) -> str:
@@ -304,7 +326,7 @@ def _unpack_pgc(tarball: Union[str, Path], folder: Union[str, Path]):
 
 
 def download_pgc_mosaic(flavor: str, imlist: Union[list, None] = None,
-                        footprints: Union[gpd.GeoDataFrame, None] = None,
+                        footprints: Union[str, Path, gpd.GeoDataFrame, None] = None,
                         imgsource: str = 'DECLASSII', globstr: str = 'OIS*.tif', res: str = '2m',
                         write_urls: bool = False):
     """
@@ -313,8 +335,9 @@ def download_pgc_mosaic(flavor: str, imlist: Union[list, None] = None,
 
     :param flavor: Which PGC product to download. Must be one of [adem, rema].
     :param imlist: a list of image filenames. If None, uses globstr to search for images in the current directory.
-    :param footprints: a GeoDataFrame of image footprints. If None, uses spymicmac.usgs.get_usgs_footprints
-        to download footprints based on imlist.
+    :param footprints: a filename for a vector dataset of image footprints, a GeoDataFrame of image footprints,
+        or a Polygon of an image footprint in WGS84 lat/lon. If None, uses spymicmac.data.get_usgs_footprints to
+        download footprints based on imlist.
     :param imgsource: the EE Dataset name for the images (default: DECLASSII)
     :param globstr: the search string to use to find images in the current directory.
     :param res: the DEM resolution to download. Options are 2m, 10m, or 32m (default: 2m)
@@ -333,13 +356,15 @@ def download_pgc_mosaic(flavor: str, imlist: Union[list, None] = None,
 
     if footprints is None:
         footprints = get_usgs_footprints(clean_imlist, dataset=imgsource)
+    elif isinstance(footprints, Polygon):
+        footprints = gpd.GeoDataFrame(geometry=footprints, crs='epsg:4326')
 
     os.makedirs(flavor, exist_ok=True)
 
     # get the shapefile of tiles corresponding to our flavor and resolution
     tiles = _get_pgc_tiles(flavor, res)
 
-    intersects = tiles.intersects(footprints.to_crs(tiles.crs).unary_union)
+    intersects = tiles.intersects(footprints.to_crs(tiles.crs).union_all())
 
     selection = tiles.loc[intersects].reset_index(drop=True)
     if not write_urls:
