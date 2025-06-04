@@ -139,6 +139,8 @@ def block_orientation(blocks: list, meas_out: str = 'AutoMeasures', gcp_out: str
                       max_iter: int = 1, share_gcps: bool = False) -> gpd.GeoDataFrame:
     """
     Combine GCPs, Measures files, and Ori directories from multiple sub-blocks into a single file and orientation.
+    After combining blocks into a single orientation, runs mm3d Campari to refine the orientation and shared
+    camera parameters.
 
     :param blocks: a list of the sub-block numbers to combine
     :param meas_out: the output filename for the Measures file (no extension).

@@ -23,6 +23,7 @@ combining image blocks
 
 .. autofunction:: spymicmac.orientation.block_orientation
 
+.. autofunction:: spymicmac.orientation.combine_block_measures
 
 fixing orientations
 -------------------
