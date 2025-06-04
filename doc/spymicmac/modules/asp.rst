@@ -16,3 +16,8 @@ bundle adjustment
 
 .. autofunction:: spymicmac.asp.bundle_adjust_from_gcp
 
+
+miscellaneous
+-------------
+
+.. autofunction:: spymicmac.asp.meas_to_asp_gcp

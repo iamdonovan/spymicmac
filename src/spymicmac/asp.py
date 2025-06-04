@@ -11,7 +11,7 @@ import geopandas as gpd
 from osgeo import gdal
 from shapely.ops import split, orient
 from shapely.geometry import LineString, Point, Polygon
-from . import data, declass
+from . import data, declass, micmac
 from typing import Union
 
 
@@ -252,3 +252,48 @@ def bundle_adjust_from_gcp(fn_img: str, fn_cam: str, fn_out: str, fn_gcp: str) -
 
     p = subprocess.Popen(cl_args)
     p.wait()
+
+
+def meas_to_asp_gcp(fn_gcp: Union[str, Path], fn_meas: Union[str, Path], imlist: list,
+                    outname: Union[str, None] = None, scale: int = 1, singles: bool = False) -> None:
+    """
+    Convert image measures stored in a micmac xml file to an ASP .gcp file format.
+
+    :param str fn_gcp: the filename of the shapefile with the GCP coordinates
+    :param str fn_meas: the filename of the xml file with the image measures
+    :param list imlist: the image(s) to write point locations for
+    :param str outname: the name of the output filename to create (default: {fn_meas}.gcp)
+    :param int scale: the factor by which to scale the image point locations (default: 1)
+    :param bool singles: write gcps present in only a single image (default: False)
+    """
+    if outname is None:
+        outname = fn_meas.replace('.xml', '.gcp')
+
+    gcps = gpd.read_file(fn_gcp).to_crs(crs='epsg:4326').set_index('id')
+    meas = micmac.parse_im_meas(fn_meas)
+
+    meas = meas.loc[meas['image'].isin(imlist)]
+
+    gcp_list = sorted(meas.name.unique())
+
+    with open(outname, 'w') as f:
+        for gcp in gcp_list:
+            _gcp = gcps.loc[gcp]
+            lon, lat = _gcp.geometry.x, _gcp.geometry.y
+
+            out_gcp = ','.join([gcp.strip('GCP'), str(lat), str(lon), str(_gcp.elevation), '1.0', '1.0', '1.0'])
+
+            if not singles:
+                if all([gcp in meas.loc[meas.image == img]['name'].values for img in imlist]):
+                    for img in sorted(imlist):
+                        row, col = meas.loc[(meas.image == img) & (meas.name == gcp), ['i', 'j']].values[0]
+                        out_gcp += ',' + ','.join([img, str(col / scale), str(row / scale), '1.0', '1.0'])
+                    print(out_gcp, file=f)
+            else:
+                for img in sorted(imlist):
+                    try:
+                        row, col = meas.loc[(meas.image == img) & (meas.name == gcp), ['i', 'j']].values[0]
+                        out_gcp += ',' + ','.join([img, str(col / scale), str(row / scale), '1.0', '1.0'])
+                    except IndexError as e:
+                        continue
+                print(out_gcp, file=f)
