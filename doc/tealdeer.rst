@@ -12,7 +12,7 @@ longer explanation of the different steps, see the additional guides :doc:`here 
 KH-9 processing
 -----------------
 
-To begin, run :doc:`../../spymicmac/scripts/generate_micmac_measures` to generate ``id_fiducial.txt`` and
+To begin, run :doc:`../../spymicmac/scripts/generate_measures_files` to generate ``id_fiducial.txt`` and
 ``MeasuresCamera.xml``.
 
 Next, create a new directory, ``Ori-InterneScan``, and move ``MeasuresCamera.xml`` into it.

@@ -19,7 +19,7 @@ automatically detected locations:
 .. note::
 
     Before running :py:meth:`spymicmac.resample.resample_hex`, you will also need to run
-    :py:meth:`spymicmac.micmac.generate_measures_files` (or :doc:`../../../../spymicmac/scripts/generate_micmac_measures`)
+    :py:meth:`spymicmac.micmac.generate_measures_files` (or :doc:`../../../../spymicmac/scripts/generate_measures_files`)
     in order to generate the ``MeasuresCamera.xml`` file needed, then move ``MeasuresCamera.xml`` to the
     ``Ori-InterneScan`` directory in the correct folder.
 
