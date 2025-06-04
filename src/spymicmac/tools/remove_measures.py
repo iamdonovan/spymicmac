@@ -4,7 +4,7 @@ from spymicmac.micmac import remove_measure
 
 
 def _argparser():
-    parser = argparse.ArgumentParser(description="Remove GCP(s) from a Measures xml file.",
+    parser = argparse.ArgumentParser(description="Remove all instances of a given measure from an xml file.",
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('fn_meas', action='store', type=str, help='xml file to remove GCP(s) from.')
     parser.add_argument('gcp', action='store', type=str, nargs='+', help='GCP name(s) to remove from <fn_meas>.')
@@ -16,7 +16,6 @@ def main():
     args = parser.parse_args()
 
     for gcp in args.gcp:
-
         remove_measure(args.fn_meas, gcp)
 
 
