@@ -328,6 +328,7 @@ def _unpack_pgc(tarball: Union[str, Path], folder: Union[str, Path]):
 def download_pgc_mosaic(flavor: str, imlist: Union[list, None] = None,
                         footprints: Union[str, Path, gpd.GeoDataFrame, None] = None,
                         imgsource: str = 'DECLASSII', globstr: str = 'OIS*.tif', res: str = '2m',
+                        crs: Union[CRS, str, int, None] = None,
                         write_urls: bool = False):
     """
     Download either the latest ArcticDEM or REMA mosaic tiles that intersect image footprints. Downloads .tar.gz files
@@ -341,6 +342,7 @@ def download_pgc_mosaic(flavor: str, imlist: Union[list, None] = None,
     :param imgsource: the EE Dataset name for the images (default: DECLASSII)
     :param globstr: the search string to use to find images in the current directory.
     :param res: the DEM resolution to download. Options are 2m, 10m, or 32m (default: 2m)
+    :param crs: an optional CRS representation recognized by geoutils.Raster.reproject to re-project the raster to.
     :param write_urls: write a text file with the urls for each tile, for downloading using curl,
         wget, etc., instead of via python (default: False)
     """
@@ -356,6 +358,8 @@ def download_pgc_mosaic(flavor: str, imlist: Union[list, None] = None,
 
     if footprints is None:
         footprints = get_usgs_footprints(clean_imlist, dataset=imgsource)
+    elif isinstance(footprints, (str, Path)):
+        footprints = gpd.read_file(footprints)
     elif isinstance(footprints, Polygon):
         footprints = gpd.GeoDataFrame(geometry=footprints, crs='epsg:4326')
 
@@ -371,15 +375,22 @@ def download_pgc_mosaic(flavor: str, imlist: Union[list, None] = None,
         for ind, row in selection.iterrows():
             this_path = Path(flavor, row['dem_id'] + '.tar.gz')
             print('Downloading', row['dem_id'], f'({ind + 1}/{selection.shape[0]})')
-            urllib.request.urlretrieve(row['fileurl'], this_path)
+            if not os.path.exists(this_path):
+                urllib.request.urlretrieve(row['fileurl'], this_path)
+            else:
+                print(f"{row['dem_id']} already downloaded, skipping.")
 
         tarlist = glob('*.tar.gz', root_dir=flavor)
         for tarball in tarlist:
-            _unpack_pgc(tarball)
+            _unpack_pgc(tarball, flavor)
 
-        filelist = glob(Path(flavor, '*_dem.tif'))
+        filelist = glob(str(Path(flavor, '*_dem.tif')))
         out_vrt = gdal.BuildVRT(outfile, filelist)
         out_vrt = None
+
+        if crs is not None:
+            tmp = gu.Raster(outfile)
+            tmp.reproject(crs = crs).save(outfile.replace('vrt', 'tif'))
 
     else:
         with open(f'{flavor}_tiles.txt', 'w') as f:
