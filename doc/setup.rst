@@ -206,7 +206,7 @@ the `usgs <http://kapadia.github.io/usgs/>`__ python package.
     Because of recent changes to the USGS API, you will need to install ``usgs`` from github
     (https://github.com/kapadia/usgs), rather than from PyPI.
 
-In order for this two work, you will need to do the following things:
+In order for this to work, you will need to do the following things:
 
 - create a free USGS EarthExplorer account: https://earthexplorer.usgs.gov/
 - add your EarthExplorer login credentials to a ``.netrc`` (or ``_netrc``) file in your ``$home`` directory.
@@ -231,7 +231,9 @@ If this prints something like the following:
      'errorMessage': None,
      'sessionId': 316673291}
 
-You have successfully authenticated. On the other hand, if you see something like:
+You have successfully authenticated.
+
+On the other hand, if you see something like:
 
 .. code-block:: python
 
