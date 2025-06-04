@@ -104,9 +104,9 @@ def check_reseau() -> bool:
 
 
 def batch_resample(imlist: list, args) -> None:
-    pool = mp.Pool(args.nproc, maxtasksperchild=1)
+    pool = mp.Pool(args['nproc'], maxtasksperchild=1)
 
-    arg_dict = {'scale': args.scale}
+    arg_dict = {'scale': args['scale']}
     pool_args = [{'fn_img': fn_img + '.tif'} for fn_img in imlist]
 
     for d in pool_args:
@@ -151,7 +151,7 @@ def _handle_steps(proc_steps, steps, skips):
     return do
 
 
-def preprocess_kh9_mc(steps: Union[str, list] = 'all', skip: Union[str, list] = 'none', nproc: int = 1,
+def preprocess_kh9_mc(steps: Union[str, list] = 'all', skip: Union[str, list] = 'none', nproc: Union[int, str] = 1,
                       add_sfs: bool = False, cam_csv: str = 'camera_defs.csv', tar_ext: str = '.tgz',
                       is_reversed: bool = False, overlap: int = 2000, block_size: int = 2000, blend: bool = False,
                       scale: int = 70, clip_limit: float = 0.005, res_low: int = 400, res_high: int = 1200,
@@ -180,7 +180,8 @@ def preprocess_kh9_mc(steps: Union[str, list] = 'all', skip: Union[str, list] = 
 
     :param steps: The pre-processing steps to run
     :param skip: The pre-processing steps to skip
-    :param nproc: The number of sub-processes to use
+    :param nproc: The number of sub-processes to use - either an integer value, or 'max'. If 'max', uses  to determine
+        the total number of processors available.
     :param add_sfs: use SFS to help find tie points in low-contrast images
     :param cam_csv: Name of the CSV file containing camera information
     :param tar_ext: Extension for tar files
@@ -200,6 +201,11 @@ def preprocess_kh9_mc(steps: Union[str, list] = 'all', skip: Union[str, list] = 
     :param lib_cd: Use LibCD=1 for mm3d Tapas
     :param add_params: Add decentric and affine parameters to the camera model
     """
+    assert isinstance(nproc, int) or nproc == 'max', f"nproc must be an integer or 'max': {nproc}"
+
+    if nproc == 'max':
+        nproc = mp.cpu_count()
+        print(f"Using {nproc} processors for steps that use multiprocessing.")
 
     proc_steps = ['extract', 'join', 'reseau', 'erase', 'filter', 'resample',
                   'balance', 'tapioca', 'tapas', 'aperi']
@@ -278,7 +284,7 @@ def preprocess_kh9_mc(steps: Union[str, list] = 'all', skip: Union[str, list] = 
         os.makedirs('Orig', exist_ok=True)
         # now, resample the images
         if nproc > 1 and len(imlist) > 1:
-            batch_resample(imlist, **locals())
+            batch_resample(imlist, locals())
         else:
             for fn_img in imlist:
                 print(f'Resampling {fn_img}')
