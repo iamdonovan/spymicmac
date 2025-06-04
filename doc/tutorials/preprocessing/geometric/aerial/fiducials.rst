@@ -67,7 +67,7 @@ shown :ref:`here <fairchild t11d>`.
 wild cameras
 -------------
 
-Matching Wild RC-style cameras can be done using :py:meth:`spymicmac.matching.match_wild`. As with
+Matching Wild RC-style cameras can be done using :py:meth:`spymicmac.matching.match_wild_rc`. As with
 :py:meth:`spymicmac.matching.match_fairchild`, the camera ``model`` must be specified:
 
 - Wild RC5 and RC8: :ref:`wild rc5`; use ``model='rc5'`` or ``model='rc8'``
@@ -85,10 +85,11 @@ image (``left``, ``right``, ``top``, or ``bot``).
 zeiss rmk cameras
 -------------------
 
-Matching Zeiss RMK-style cameras can be done using :py:meth:`spymicmac.matching.zeiss_rmk`. Here, ``size`` controls the
-size of the zero-padding around the dot to use, while ``dot_size`` controls the size of the dot in the fiducial marker.
+Matching Zeiss RMK-style cameras can be done using :py:meth:`spymicmac.matching.match_zeiss_rmk`. Here, ``size``
+controls the size of the zero-padding around the dot to use, while ``dot_size`` controls the size of the dot in the
+fiducial marker.
 
-There are two options for Zeiss RMK-style cameras:
+At present, there are two options for Zeiss RMK-style cameras:
 
 - mid-side only (:ref:`zeiss midside`): use ``corner_size=None`` (the default option)
 - mid-side + corner markers (:ref:`zeiss corner`): specify a size for the cross-shaped corner markers
