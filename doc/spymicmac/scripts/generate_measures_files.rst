@@ -1,7 +1,7 @@
-generate_micmac_measures
-=================================
+generate_measures_files
+=========================
 
-``generate_micmac_measures`` calls :py:meth:`spymicmac.micmac.generate_measures_files` to create:
+``generate_measures_files`` calls :py:meth:`spymicmac.micmac.generate_measures_files` to create:
 
 - ``id_fiducial.txt``,
 - ``MeasuresCamera.xml``, and
@@ -36,6 +36,6 @@ files for KH-9 Hexagon mapping camera images.
 
 
 .. argparse::
-   :module: spymicmac.tools.generate_micmac_measures
+   :module: spymicmac.tools.generate_measures_files
    :func: _argparser
-   :prog: generate_micmac_measures
+   :prog: generate_measures_files
