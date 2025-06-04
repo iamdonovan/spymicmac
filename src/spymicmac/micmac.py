@@ -2091,6 +2091,9 @@ def post_process(projstr: Union[str, int], out_name: str, dirmec: str,
     if _needs_mosaic(Path(dirmec, f"Z_Num{level}_DeZoom{zoomf}_STD-MALT.tif")):
         mosaic_micmac_tiles(f"Z_Num{level}_DeZoom{zoomf}_STD-MALT", dirmec)
 
+    if isinstance(projstr, int):
+        projstr = f"EPSG:{projstr}"
+
     subprocess.Popen(['gdal_translate', '-a_nodata', '0', '-a_srs', projstr,
                       Path(dirmec, f'Correl_STD-MALT_Num_{level-1}.tif'),
                       'tmp_corr.tif']).wait()
@@ -2160,6 +2163,9 @@ def _mask_ortho(fn_img: str, out_name: str, dirmec: str, projstr: Union[str, int
     _mask = PIL.Image.fromarray(mask)
     mask = np.array(_mask.resize((ox, oy)))
     imsave(fn_mask, 255 * mask.astype(np.uint8))
+
+    if isinstance(projstr, int):
+        projstr = f"EPSG:{projstr}"
 
     subprocess.Popen(['gdal_translate', '-a_srs', projstr, fn_ortho, 'tmp_ortho.tif']).wait()
     subprocess.Popen(['gdal_translate', '-a_srs', projstr, fn_mask, 'tmp_mask.tif']).wait()
