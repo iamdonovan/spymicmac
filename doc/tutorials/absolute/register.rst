@@ -150,7 +150,7 @@ template matching
 
 Once the relative orthophoto has been roughly transformed to absolute space,
 :py:meth:`spymicmac.register.register_relative` finds matches between the orthophoto and the reference image using
-:py:meth:`spymicmac.matching.find_grid_matches`. The size of each template is 121x121 pixels, while the size of the
+:py:meth:`spymicmac.matching.find_matches`. The size of each template is 121x121 pixels, while the size of the
 search window is set by ``dstwin``.
 
 Each template and search image are first run through :py:meth:`spymicmac.image.highpass_filter`, to help minimize
