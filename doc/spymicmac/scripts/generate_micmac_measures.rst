@@ -1,13 +1,18 @@
 generate_micmac_measures
 =================================
 
-``generate_micmac_measures`` calls :py:meth:`spymicmac.micmac.generate_micmac_measures` to create ``id_fiducial.txt``,
-``MeasuresCamera.xml``, and ``Tmp-SL-Glob.xml`` files for KH-9 Hexagon images.
+``generate_micmac_measures`` calls :py:meth:`spymicmac.micmac.generate_measures_files` to create:
+
+- ``id_fiducial.txt``,
+- ``MeasuresCamera.xml``, and
+- ``Tmp-SL-Glob.xml``
+
+files for KH-9 Hexagon mapping camera images.
 
 .. warning::
 
     Once created, you should move ``MeasuresCamera.xml`` into the ``Ori-InterneScan`` directory so that it can be
-    found by ``mm3d ReSampFid`` or :py:meth:`spymicmac.image.resample_hex`.
+    found by ``mm3d ReSampFid`` or :py:meth:`spymicmac.resample.resample_hex`.
 
 .. note::
     To use the ``Tmp-SL-Glob.xml`` file, copy it into the ``Tmp-SaisieAppuis`` directory with the name of the image
