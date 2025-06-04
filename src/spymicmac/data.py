@@ -180,13 +180,13 @@ def download_cop30_vrt(imlist: Union[list, None] = None,
 
     if footprints is None:
         footprints = get_usgs_footprints(clean_imlist, dataset=imgsource)
-        fprint = footprints.union_all
+        fprint = footprints.union_all()
     elif isinstance(footprints, (str, Path)):
         fprint = gpd.read_file(footprints).to_crs(crs='epsg:4326').union_all()
     elif isinstance(footprints, Polygon):
         fprint = footprints
     elif isinstance(footprints, gpd.GeoDataFrame):
-        fprint = footprints.to_crs(crs='epsg:4326').union_all
+        fprint = footprints.to_crs(crs='epsg:4326').union_all()
 
     # now, get the envelope
     xmin, ymin, xmax, ymax = fprint.bounds
