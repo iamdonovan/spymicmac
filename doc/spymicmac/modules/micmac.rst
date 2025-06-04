@@ -19,6 +19,8 @@ These methods are used to set up the different files needed to run MicMac.
 
 .. autofunction:: spymicmac.micmac.init_autocal
 
+.. autofunction:: spymicmac.micmac.write_xml
+
 
 micmac interface
 ----------------
