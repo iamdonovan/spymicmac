@@ -211,7 +211,7 @@ This will create a **.ply** file with only the camera centers drawn:
     :alt: a point cloud showing only the camera locations and orientations
 
 |br| Alternatively, this can be done with with python, using :py:meth:`spymicmac.micmac.martini` and
-:py:meth:`spymicmac.micmac.aperi`:
+:py:meth:`spymicmac.micmac.apericloud`:
 
 .. code-block:: python
 
