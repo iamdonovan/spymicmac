@@ -1,4 +1,4 @@
-Installation and Setup
+installation and setup
 =======================
 
 The following is a (non-exhaustive) set of instructions for getting setup to run spymicmac on your own machine. Note
@@ -8,7 +8,7 @@ personal laptop.
 As this is a (non-exhaustive) set of instructions, it may not work 100% with your particular setup.
 We are happy to try to provide guidance/support, **but we make no promises**.
 
-Installing MicMac
+installing MicMac
 -----------------
 
 Detailed installation instructions for MicMac on multiple platforms can be found `here <https://micmac.ensg.eu/index.php/Install/>`_,
@@ -64,11 +64,11 @@ installed by running the following:
 
 In a nutshell, the basic idea is: clone the MicMac git repository, then build the source code. Simple!
 
-Installing spymicmac
+installing spymicmac
 --------------------
 spymicmac is available in a number of ways - either installing from source or packaged via PyPI or conda-forge.
 
-via PyPI
+via pip
 ^^^^^^^^
 
 As of version 0.1, spymicmac is available via PyPI. To install the latest packaged version into your python environment,
@@ -97,7 +97,7 @@ To get started, clone the repository, then navigate to the directory where the r
 
     git clone https://github.com/iamdonovan/spymicmac.git
 
-Optional: Preparing a python environment
+optional: Preparing a python environment
 """"""""""""""""""""""""""""""""""""""""
 If you like, you can set up a dedicated python environment for your spymicmac needs. This can be handy, in case any
 packages required by spymicmac clash with packages in your default environment. Our personal preference
@@ -120,7 +120,7 @@ necessary to run spymicmac. To activate the new environment, type:
 And you should be ready to go. Note that you will have to activate this environment any time you wish to run
 spymicmac scripts and tools, if it is not already activated in your terminal.
 
-Installing via pip
+installing via pip
 """"""""""""""""""
 Once you have the environment prepared (or not), run pip from inside the ``spymicmac`` directory:
 
@@ -135,7 +135,7 @@ or your own tinkering) without having to re-install each time. To install a deve
 
     pip install -e .
 
-Checking the installation
+checking the installation
 ^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Assuming that you haven't run into any errors, you should be set up. You can verify this by running:

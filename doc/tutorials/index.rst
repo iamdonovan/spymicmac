@@ -1,5 +1,5 @@
-Tutorials
-=======================
+tutorials
+=========
 
 Here, you will find information about the workflow for using spymicmac to process KH-9 mapping camera and historic air
 photos.
