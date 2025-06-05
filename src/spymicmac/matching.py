@@ -932,11 +932,9 @@ def find_reseau_grid(fn_img: Union[str, Path],
     :param return_val: return a pandas DataFrame of the Réseau mark locations
     :return: **gcps_df** (*pandas.DataFrame*) -- a DataFrame of the Réseau mark locations (if return_val=True).
     """
-    print(f"Reading {fn_img}")
     img = io.imread(fn_img)
     img_lowres = resample.downsample(img, fact=10)
 
-    print('Image read.')
     cross = cross_template(csize, width=3)
     cross[cross > 1] = 0
     cross *= 255
@@ -991,9 +989,8 @@ def find_reseau_grid(fn_img: Union[str, Path],
     grid_df['dj'] = grid_df['match_j'] - dst[:, 0]
     grid_df['di'] = grid_df['match_i'] - dst[:, 1]
 
-    print('Grid points found.')
     os.makedirs('match_imgs', exist_ok=True)
-
+    print(f"Grid points found for {fn_img}.")
     print(f"Mean x residual: {grid_df.loc[~outliers, 'dj'].abs().mean():.2f} pixels")
     print(f"Mean y residual: {grid_df.loc[~outliers, 'di'].abs().mean():.2f} pixels")
     print(f"Mean residual: {grid_df.loc[~outliers, 'resid'].mean():.2f} pixels")

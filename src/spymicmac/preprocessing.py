@@ -13,6 +13,8 @@ from skimage import io, filters, exposure
 from . import micmac, resample, matching, image
 from typing import Union
 
+from .matching import find_reseau_grid
+
 
 def initialize_kh9_mc(add_sfs: bool = False, cam_csv: str = 'camera_defs.csv', overwrite: bool = False) -> None:
     """
@@ -103,6 +105,25 @@ def check_reseau() -> bool:
         return all([any([im in meas for meas in measlist]) for im in imlist])
 
 
+def _reseau_wrapper(argsin: dict) -> None:
+    find_reseau_grid(**argsin)
+
+
+def batch_reseau(imlist: list, args) -> None:
+
+    pool = mp.Pool(args['nproc'], maxtasksperchild=1)
+
+    pool_args = [{'fn_img': fn_img + '.tif'} for fn_img in imlist]
+    pool.map(_reseau_wrapper, pool_args, chunksize=1)
+
+    pool.close()
+    pool.join()
+
+
+def _resample_wrapper(argsin: dict) -> None:
+    print(argsin['fn_img'])
+    resample.resample_hex(**argsin)
+
 def batch_resample(imlist: list, args) -> None:
     pool = mp.Pool(args['nproc'], maxtasksperchild=1)
 
@@ -112,13 +133,9 @@ def batch_resample(imlist: list, args) -> None:
     for d in pool_args:
         d.update(arg_dict)
 
-    pool.map(_wrapper, pool_args, chunksize=1)
+    pool.map(_resample_wrapper, pool_args, chunksize=1)
     pool.close()
     pool.join()
-
-def _wrapper(argsin: dict) -> None:
-    print(argsin['fn_img'])
-    resample.resample_hex(**argsin)
 
 
 def _handle_steps(proc_steps, steps, skips):
@@ -180,8 +197,8 @@ def preprocess_kh9_mc(steps: Union[str, list] = 'all', skip: Union[str, list] = 
 
     :param steps: The pre-processing steps to run
     :param skip: The pre-processing steps to skip
-    :param nproc: The number of sub-processes to use - either an integer value, or 'max'. If 'max', uses  to determine
-        the total number of processors available.
+    :param nproc: The number of sub-processes to use - either an integer value, or 'max'. If 'max',
+        uses mp.cpu_count() to determine the total number of processors available.
     :param add_sfs: use SFS to help find tie points in low-contrast images
     :param cam_csv: Name of the CSV file containing camera information
     :param tar_ext: Extension for tar files
@@ -255,8 +272,13 @@ def preprocess_kh9_mc(steps: Union[str, list] = 'all', skip: Union[str, list] = 
         # do this step, then do it.
         if (steps == 'all' and not check_reseau()) or ('reseau' in steps):
             print('Finding Reseau marks in images.')
-            for fn_img in imlist:
-                matching.find_reseau_grid(fn_img + '.tif')
+
+            if nproc > 1 and len(imlist) > 1:
+                batch_reseau(imlist, locals())
+            else:
+                for fn_img in imlist:
+                    matching.find_reseau_grid(fn_img + '.tif')
+
         else:
             print('All images have reseau marks found. To re-run, explicitly call with --steps reseau.')
 

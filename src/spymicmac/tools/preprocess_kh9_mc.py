@@ -1,4 +1,5 @@
 import argparse
+import multiprocessing as mp
 from spymicmac.preprocessing import preprocess_kh9_mc
 
 
@@ -30,8 +31,10 @@ def _argparser():
                         help='The pre-processing steps to run (default: all).')
     parser.add_argument('--skip', action='store', type=str, nargs='+', default='none',
                         help='The pre-processing steps to skip (default: none).')
-    parser.add_argument('-n', '--nproc', type=int, default=1,
-                        help='number of sub-processes to use (default: 1).')
+    parser.add_argument('-n', '--nproc', type=str, default=1,
+                        help='The number of sub-processes to use - either an integer value, or max. '
+                             'If max, uses mp.cpu_count() to determine the total number of processors '
+                             'available (default: 1).')
     parser.add_argument('--add_sfs', action='store_true',
                         help='use SFS to help find tie points in low-contrast images')
     parser.add_argument('--cam_csv', action='store', type=str, default='camera_defs.csv',
@@ -77,6 +80,12 @@ def _argparser():
 def main():
     parser = _argparser()
     args = parser.parse_args()
+
+    try:
+        args.nproc = int(args.nproc)
+    except ValueError as e:
+        assert args.nproc == 'max', f"-nproc must either be max or a integer value: {args.nproc}"
+        args.nproc = mp.cpu_count()
 
     preprocess_kh9_mc(**vars(args))
 
