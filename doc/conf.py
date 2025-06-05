@@ -45,7 +45,7 @@ author = 'Robert McNabb'
 # The short X.Y version
 version = __version__
 # The full version, including alpha/beta/rc tags
-release = version
+release = version.split('.dev')[0]
 
 
 # -- General configuration ---------------------------------------------------
