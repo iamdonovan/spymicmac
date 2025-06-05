@@ -168,7 +168,7 @@ def download_cop30_vrt(imlist: Union[list, None] = None,
     :param footprints: a filename for a vector dataset of image footprints, a GeoDataFrame of image footprints,
         or a Polygon of an image footprint in WGS84 lat/lon. If None, uses spymicmac.data.get_usgs_footprints to
         download footprints based on imlist.
-    :param imgsource: the EE Dataset name for the images
+    :param imgsource: the EarthExplorer Dataset name for the images
     :param globstr: the search string to use to find images in the current directory.
     :param crs: a CRS representation recognized by geoutils.Raster.reproject to re-project the raster to. If
         None, CRS remains WGS84 Lat/Lon (EPSG:4326).
@@ -339,7 +339,7 @@ def download_pgc_mosaic(flavor: str, imlist: Union[list, None] = None,
     :param footprints: a filename for a vector dataset of image footprints, a GeoDataFrame of image footprints,
         or a Polygon of an image footprint in WGS84 lat/lon. If None, uses spymicmac.data.get_usgs_footprints to
         download footprints based on imlist.
-    :param imgsource: the EE Dataset name for the images (default: DECLASSII)
+    :param imgsource: the EarthExplorer Dataset name for the images (default: DECLASSII)
     :param globstr: the search string to use to find images in the current directory.
     :param res: the DEM resolution to download. Options are 2m, 10m, or 32m (default: 2m)
     :param crs: an optional CRS representation recognized by geoutils.Raster.reproject to re-project the raster to.

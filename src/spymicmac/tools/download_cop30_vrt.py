@@ -14,10 +14,20 @@ def _argparser():
                          help='image(s) to use for geographic extent. If not set, '
                               'will search for images of form OIS*.tif')
     _parser.add_argument('-footprints', action='store', type=str,
-                         help='filename for image footprints. By default, '
-                              'downloads footprints from USGS Earth Explorer.')
+                         help='filename for image footprints. If not set, uses '
+                              'spymicmac.data.get_usgs_footprints to download footprints'
+                              'based on imlist.')
     _parser.add_argument('-imgsource', action='store', type=str, default='DECLASSII',
-                         help='the EE Dataset name for the images (default: DECLASSII)')
+                         help='the EarthExplorer Dataset name for the images (default: DECLASSII)')
+    _parser.add_argument('-g', '--globstr', action='store', type=str, default='OIS.*tif',
+                         help='the search string to use to find images in the '
+                              'current directory. (default: OIS.*tif)')
+    _parser.add_argument('-crs', action='store', type=int, default=None,
+                         help='the epsg code for the CRS to re-project the mosaic to. '
+                              'If not set, uses EPSG:4326 (WGS84 Lat/Lon).')
+    _parser.add_argument('--geoid_height', action='store_true',
+                         help='do not convert the elevations from height above EGM2008 Geoid '
+                              'to height above WGS84 Ellipsoid.')
 
     return _parser
 
@@ -25,16 +35,20 @@ def _argparser():
 def main():
     parser = _argparser()
     args = parser.parse_args()
-    print(args)
 
     if args.footprints is not None:
         footprints = gpd.read_file(args.footprints)
     else:
         footprints = None
 
-    download_cop30_vrt(imlist=args.imlist,
-                       footprints=footprints,
-                       imgsource=args.imgsource)
+    download_cop30_vrt(
+        imlist=args.imlist,
+        footprints=footprints,
+        imgsource=args.imgsource,
+        globstr=args.globstr,
+        crs=args.crs,
+        to_ellipsoid=(not args.geoid_height)
+    )
 
 
 if __name__ == "__main__":

@@ -7,7 +7,8 @@ def _argparser():
     parser = argparse.ArgumentParser(description="Combine GCPs, Measures files, and Ori directories from multiple "
                                                  "sub-blocks into a single file and orientation.",
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument('blocks', action='store', type=int, nargs='+', help='the block numbers to combine')
+    parser.add_argument('blocks', action='store', type=int, nargs='+',
+                        help='a list of the sub-block numbers to combine')
     parser.add_argument('-meas_out', action='store', type=str, default='AutoMeasures',
                         help='the output filename for the Measures file (no extension). (default: AutoMeasures)')
     parser.add_argument('-gcp_out', action='store', type=str, default='AutoGCPs',
@@ -28,8 +29,8 @@ def _argparser():
                         help='the pixel resolution of the reference image, in meters. (default: 15)')
     parser.add_argument('-ortho_res', action='store', type=float, default=8,
                         help='the pixel resolution of the orthoimage being used, in meters. (default: 8)')
-    parser.add_argument('-allfree', action='store_false',
-                        help='run Campari with AllFree set to False')
+    parser.add_argument('-no_allfree', action='store_false',
+                         help='run Campari with AllFree set to False')
     parser.add_argument('-max_iter', action='store', type=int, default=1,
                         help='the maximum number of iterations to run. (default: 1)')
     parser.add_argument('-share_gcps', action='store_true',
@@ -40,6 +41,9 @@ def _argparser():
 def main():
     parser = _argparser()
     args = parser.parse_args()
+
+    args.allfree = not args.no_allfree
+    delattr(args, 'no_allfree')
 
     block_orientation(**vars(args))
 

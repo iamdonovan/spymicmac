@@ -440,8 +440,8 @@ def register_relative(dirmec: str, fn_dem: Union[str, Path], fn_ref: Union[str, 
     :param useortho: use the orthomosaic in Ortho-{dirmec} rather than the DEM. If fn_ortho is
         set, uses that file instead.
     :param max_iter: the maximum number of Campari iterations to run.
-    :param use_cps: split the GCPs into GCPs and CPs, to quantify the uncertainty of the camera model
-    :param cp_frac: the fraction of GCPs to use when splitting into GCPs and CPs
+    :param use_cps: split the GCPs into GCPs and checkpoints (CPs), to quantify the uncertainty of the camera model
+    :param cp_frac: the fraction of GCPs to use as CPs when splitting into GCPs and CPs
     :param use_orb: use skimage.feature.ORB to identify GCP locations in the reference image
         (default: use regular grid for matching)
     :param str fn_gcps: (optional) shapefile or CSV of GCP coordinates to use. Column names should be [(name | id),
