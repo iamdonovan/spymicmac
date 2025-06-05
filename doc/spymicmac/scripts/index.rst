@@ -53,8 +53,8 @@ image processing
 post-processing
 ---------------
 
-:doc:`post_process_micmac`: for masking and georeferencing the DEM and orthophoto(s) or orthomosaic.
-:doc:`mosaic_micmac_tiles`: for mosaicking the tiled outputs from Malt.
+- :doc:`post_process_micmac`: for masking and georeferencing the DEM and orthophoto(s) or orthomosaic.
+- :doc:`mosaic_micmac_tiles`: for mosaicking the tiled outputs from Malt.
 
 
 .. toctree::

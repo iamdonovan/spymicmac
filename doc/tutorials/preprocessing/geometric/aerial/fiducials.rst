@@ -1,8 +1,9 @@
 fiducial marks
 ==================
 
-Once you have finished pre-processing the images, you need to resample them to a common geometry using
-`mm3d ReSampFid <https://micmac.ensg.eu/index.php/ReSampFid>`_.
+Before processing scanned aerial images, you need to resample them to a common geometry using
+`mm3d ReSampFid <https://micmac.ensg.eu/index.php/ReSampFid>`_. The easiest way to do this is using the fiducial
+markers which are usually visible around the frame of the image.
 
 For historical aerial images, follow the steps below to find the fiducial markers for resampling.
 
