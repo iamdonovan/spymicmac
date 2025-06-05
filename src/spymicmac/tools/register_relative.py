@@ -41,7 +41,7 @@ def _argparser():
                               "rather than the distance between grid points (default: grid).")
     _parser.add_argument('-density', action='store', type=int, default=200,
                          help='pixel spacing to look for GCPs (default: 200)')
-    _parser.add_argument('-no_allfree', action='store_false',
+    _parser.add_argument('-no_allfree', action='store_true',
                          help='run Campari with AllFree set to False')
     _parser.add_argument('-useortho', action='store_true',
                          help='use the orthomosaic in Ortho-{dirmec} rather than the DEM. '
