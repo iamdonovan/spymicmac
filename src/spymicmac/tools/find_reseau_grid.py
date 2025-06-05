@@ -10,11 +10,15 @@ def batch_wrapper(argsin):
 
 
 def _argparser():
-    _parser = argparse.ArgumentParser(description="Find Reseau marks in a scanned KH-9 Hexagon image.",
+    _parser = argparse.ArgumentParser(description="Find the locations of the Réseau marks in scanned KH-9 images. "
+                                                  "Locations are saved to Ori-InterneScan/MeasuresIm-{fn_img}.xml.",
                                       formatter_class=argparse.RawDescriptionHelpFormatter)
-    _parser.add_argument('img', action='store', type=str, nargs='+', help='Image(s) to find Reseau marks in.')
-    _parser.add_argument('-csize', action='store', type=int, default=361, help='Reseau mark template size [361 pixels]')
-    _parser.add_argument('-n', '--nproc', type=int, default=1, help='number of sub-processes to use [Default: 1].')
+    _parser.add_argument('fn_img', action='store', type=str, nargs='+',
+                         help='Image(s) to find Réseau marks in.')
+    _parser.add_argument('-csize', action='store', type=int, default=361,
+                         help='the size of the cross template (default: 361 -> 361x361).')
+    _parser.add_argument('-n', '--nproc', type=int, default=1,
+                         help='number of sub-processes to use (default: 1).')
     return _parser
 
 

@@ -4,7 +4,7 @@ from spymicmac.matching import remove_crosses
 
 
 def _argparser():
-    parser = argparse.ArgumentParser(description="Remove Reseau marks from KH-9 image(s).",
+    parser = argparse.ArgumentParser(description="Remove Réseau marks from KH-9 mapping camera image(s).",
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('img', action='store', type=str, nargs='+', help='Image(s) to remove crosses from.')
     parser.add_argument('-n', '--nproc', type=int, default=1, help='number of sub-processes to use (default: 1).')

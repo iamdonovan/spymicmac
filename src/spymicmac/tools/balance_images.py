@@ -1,3 +1,4 @@
+from pathlib import Path
 import os
 import argparse
 from glob import glob
@@ -6,7 +7,8 @@ from spymicmac.image import balance_image
 
 
 def _argparser():
-    _parser = argparse.ArgumentParser(description="Apply Contrast-limited Adaptive Histogram Equalization (CLAHE) to all re-sampled images in current directory.",
+    _parser = argparse.ArgumentParser(description="Apply Contrast-limited Adaptive Histogram Equalization (CLAHE)"
+                                                  " to all re-sampled images in current directory.",
                                       formatter_class=argparse.RawDescriptionHelpFormatter)
     return _parser
 
@@ -23,7 +25,7 @@ def main():
     for im in imlist:
         print(im)
         img_filt = balance_image(imread(im))
-        imsave(os.path.join('balanced', im), img_filt)
+        imsave(Path('balanced', im), img_filt)
 
 
 if __name__ == "__main__":

@@ -1,4 +1,4 @@
-Welcome to spymicmac's documentation!
+welcome to spymicmac's documentation!
 =====================================
 
 This is the documentation for spymicmac, a set of python tools for processing historic spy satellite and
@@ -13,11 +13,14 @@ page. If you found any of the tools helpful, let me know!
    :maxdepth: 2
 
    setup
-   examples/index
+   tealdeer
    tutorials/index
    spymicmac/index
+   citations
+   script
 
-Indices and tables
+
+indices and tables
 ==================
 
 * :ref:`genindex`

@@ -21,7 +21,7 @@ def get_landsat_collections(filt_geom=None, sensors='all', tier='all'):
     :param tier: Processing tier(s) to select.
     :return:
     """
-    assert tier.lower() in ['all', 't1', 't2'], "tier is not one of 'all', 't1', 't2': {}".format(tier)
+    assert tier.lower() in ['all', 't1', 't2'], f"tier is not one of 'all', 't1', 't2': {tier}"
     if tier == 'all':
         tiers = ['T1', 'T2']
     else:
@@ -34,20 +34,20 @@ def get_landsat_collections(filt_geom=None, sensors='all', tier='all'):
         getSensors = []
         if isinstance(sensors, list):
             for sens in sensors:
-                assert sens.upper() in allSensors, "{} is not a recognized Landsat sensor name".format(sens)
+                assert sens.upper() in allSensors, f"{sens} is not a recognized Landsat sensor name"
                 getSensors.append(sens)
         else:
-            assert isinstance(sensors, str), "sensors is not a list of strings, or a single string: {}".format(sensors)
-            assert sensors.upper() in allSensors, "{} is not a recognized Landsat sensor name".format(sensors)
+            assert isinstance(sensors, str), f"sensors is not a list of strings, or a single string: {sensors}"
+            assert sensors.upper() in allSensors, f"{sensors} is not a recognized Landsat sensor name"
             getSensors = [sensors]
 
     outColls = []
     for sens in getSensors:
         for t in tiers:
             if filt_geom is not None:
-                outColls.append(ee.ImageCollection('LANDSAT/{}/C01/{}'.format(sens, t)).filterBounds(filt_geom))
+                outColls.append(ee.ImageCollection(f"LANDSAT/{sens}/C01/{t}".filterBounds(filt_geom)))
             else:
-                outColls.append(ee.ImageCollection('LANDSAT/{}/C01/{}'.format(sens, t)))
+                outColls.append(ee.ImageCollection(f"LANDSAT/{sens}/C01/{t}"))
 
     if len(outColls) == 1:
         return outColls[0]
@@ -67,7 +67,7 @@ def get_srtm(ver='usgs', filt_geom=None):
 
     :return:
     '''
-    assert ver.lower() in ['usgs', 'cgiar'], "srtm version is not one of 'usgs', 'cgiar': {}".format(ver)
+    assert ver.lower() in ['usgs', 'cgiar'], f"srtm version is not one of 'usgs', 'cgiar': {ver}"
 
     verDict = {'usgs': 'USGS/SRTMGL1_003', 'cgiar': 'CGIAR/SRTM90_V4'}
     _ver = verDict[ver]

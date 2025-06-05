@@ -5,10 +5,8 @@ channels:
 dependencies:
   - python>=3.10
   - scikit-image
-  - geopandas
+  - geopandas<1.1.0
   - geoutils
-  - matplotlib
-  - sphinx
   - opencv<4.9.0
   - lxml
   - gdal
@@ -19,8 +17,10 @@ dependencies:
   - exiftool
   - pillow>9.1.0
   - rtree
+  - sphinx
+  - sphinx-argparse
+  - sphinx-book-theme
+  - sphinx-copybutton
   - pip
   - pip:
-      - sphinx-argparse
-      - sphinx-rtd-theme
-      - usgs
+      - "git+https://github.com/kapadia/usgs.git"
