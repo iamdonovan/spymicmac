@@ -3,6 +3,7 @@
 [![Conda Version](https://img.shields.io/conda/vn/conda-forge/spymicmac.svg)](https://anaconda.org/conda-forge/spymicmac)
 [![Conda Platforms](https://img.shields.io/conda/pn/conda-forge/spymicmac.svg)](https://anaconda.org/conda-forge/spymicmac)
 [![Anaconda-Server Badge](https://anaconda.org/conda-forge/spymicmac/badges/license.svg)](https://anaconda.org/conda-forge/spymicmac)
+[![DOI](https://zenodo.org/badge/242221735.svg)](https://doi.org/10.5281/zenodo.15602812)
 
 
 # sPyMicMac

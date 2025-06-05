@@ -5,7 +5,7 @@ If you have used spymicmac in your research, please include the following citati
 
 .. rst-class:: ref
 
-    McNabb, R. (2025). *spymicmac* (version). doi: TBC
+    McNabb, R. (2025). *spymicmac* (0.3.0-alpha). doi: `10.5281/zenodo.15602812 <https://doi.org/10.5281/zenodo.15602812>`__
 
 *In BibTeX format:*
 
@@ -14,8 +14,8 @@ If you have used spymicmac in your research, please include the following citati
     @software{spymicmac,
       author = {{R. McNabb}},
       title = {spymicmac},
-      version = {version},
-      doi = {TBC},
+      version = {0.3.0-alpha},
+      doi = {10.5281/zenodo.15602812},
       year = {2025}
     }
 
