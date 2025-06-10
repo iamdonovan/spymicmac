@@ -467,7 +467,7 @@ def create_measurescamera_xml(fn_csv: Union[str, Path, pd.DataFrame],
 
 def estimate_measures_camera(approx: Union[pd.DataFrame, dict], pairs: list[tuple],
                              ori: str = 'InterneScan', scan_res: float = 2.5e-5,
-                             how: str = 'mean', write_xml: bool = True) -> None:
+                             how: str = 'mean', write_xml: bool = True, inverted: bool = True) -> None:
     """
     Use a set of located fiducial markers to create a MeasuresCamera file using the average location of each fiducial
     marker.
@@ -481,6 +481,7 @@ def estimate_measures_camera(approx: Union[pd.DataFrame, dict], pairs: list[tupl
     :param scan_res: the scanning resolution of the images in m
     :param how: what average to use for the output locations. Must be one of [mean, median].
     :param write_xml: write the MeasuresCamera.xml file in addition to a CSV
+    :param inverted: the y-axis is inverted.
     """
     assert how in ['mean', 'median'], "how must be one of [mean, median]"
 
@@ -494,6 +495,9 @@ def estimate_measures_camera(approx: Union[pd.DataFrame, dict], pairs: list[tupl
         approx['j'] -= ppx
         approx['i'] -= ppy
 
+        if inverted:
+            approx['i'] *= -1
+
         angles = np.arctan2(approx['i'], approx['j'])
         angles[angles < 0] += 2 * np.pi
 
@@ -505,15 +509,12 @@ def estimate_measures_camera(approx: Union[pd.DataFrame, dict], pairs: list[tupl
     for fn_meas in meas_list:
         meas = parse_im_meas(Path(f'Ori-{ori}', fn_meas)).set_index('name')
 
-        meas, rot = matching.tfm_measures(meas, pairs, angles)
+        meas, rot = matching.tfm_measures(meas, pairs, angles, inverted=inverted)
 
         all_meas.append(meas.reset_index())
         all_angles.append(rot)
 
     all_meas = pd.concat(all_meas, ignore_index=True)
-
-    all_meas['j'] /= all_meas['collim_dist']
-    all_meas['i'] /= all_meas['collim_dist']
 
     if how == 'mean':
         avg_meas = all_meas.groupby('name').mean(numeric_only=True)
@@ -522,8 +523,8 @@ def estimate_measures_camera(approx: Union[pd.DataFrame, dict], pairs: list[tupl
 
     avg_meas['angle'] = np.arctan2(avg_meas['i'], avg_meas['j'])
 
-    avg_meas['j'] *= avg_meas['collim_dist'] * scan_res * 1000 # convert from m to mm
-    avg_meas['i'] *= avg_meas['collim_dist'] * scan_res * 1000 # convert from m to mm
+    avg_meas['j'] *= scan_res * 1000 # convert from m to mm
+    avg_meas['i'] *= scan_res * 1000 # convert from m to mm
 
     all_meas.to_csv('AllMeasures.csv', index=False)
     avg_meas.to_csv('AverageMeasures.csv')
