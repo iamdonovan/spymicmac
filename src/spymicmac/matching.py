@@ -9,6 +9,7 @@ import multiprocessing as mp
 import cv2
 import matplotlib.pyplot as plt
 import pandas as pd
+from itertools import combinations
 from skimage import morphology, io, filters
 from skimage.morphology import binary_dilation, disk
 from skimage.measure import ransac
@@ -285,6 +286,62 @@ def _rotate_meas(meas, angle, pp=None):
     rot.i += shift_j
 
     return rot
+
+
+def tfm_measures(meas: pd.DataFrame, pairs: list[tuple],
+                 angles: Union[dict, pd.Series], inverted: bool = True) -> tuple[pd.DataFrame, float]:
+    """
+    Rotate a set of fiducial marker measures so that the angle made by each fiducial marker and the principal point
+    is as close to the expected angle as possible.
+
+    :param meas: a DataFrame of fiducial marker locations (as read by micmac.parse_im_meas)
+    :param pairs: a list of pairs of co-linear fiducial markers; e.g., [(P1, P2), (P3, P4)]
+    :param angles: a Series or dict of fiducial marker names and their angle with respect to the principal point.
+        i.e., a mid-side marker on the right side of the frame should have an angle of 0, the fiducial marker in the
+        upper right-hand corner should have an angle of 45° (pi / 4), a mid-side marker on the top of the frame should
+         have an angle of 90° (pi / 2), and so on.
+    :param inverted: the y-axis is inverted.
+    :return:
+        - **rotated** - a DataFrame of the rotated fiducial marker locations
+        - **angle** - the angle by which the markers were rotated
+    """
+    collinear = [LineString(meas.loc[p, ['j', 'i']].values) for p in pairs]
+
+    for ind, pair in enumerate(pairs):
+        meas.loc[pair, ['collim_dist']] = collinear[ind].length
+
+    ppx, ppy = _meas_center(meas, pairs)
+
+    meas['j'] -= ppx
+    meas['i'] -= ppy
+
+    if inverted:
+        meas['i'] *= -1
+
+    meas['angle'] = np.arctan2(meas['i'], meas['j'])
+    meas.loc[meas['angle'] < 0, 'angle'] += 2 * np.pi
+
+    if isinstance(angles, dict):
+        if max(angles.values()) > 2 * np.pi:
+            angles = pd.Series(angles).apply(np.deg2rad)
+        else:
+            angles = pd.Series(angles)
+
+    rot_angle = np.arctan2(np.mean(np.sin(meas['angle'] - angles)),
+                           np.mean(np.cos(meas['angle'] - angles)))
+
+    rotated = _rotate_meas(meas, rot_angle, pp=Point(0, 0))
+
+    rotated['angle'] = np.arctan2(rotated['i'], rotated['j'])
+
+    return rotated, rot_angle
+
+
+def _meas_center(meas: pd.DataFrame, pairs: list[tuple]) -> tuple[float, float]:
+    collims = [LineString(meas.loc[p, ['j', 'i']].values) for p in pairs]
+    pp = MultiPoint([a.intersection(b) for a, b in list(combinations(collims, 2))]).centroid
+
+    return pp.x, pp.y
 
 
 def _get_rough_locs(meas, img=None):

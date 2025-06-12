@@ -9,7 +9,6 @@ import re
 import subprocess
 import shutil
 import PIL
-from itertools import combinations
 import numpy as np
 from osgeo import gdal
 import pandas as pd
@@ -24,7 +23,7 @@ from shapely.geometry import LineString, MultiPoint
 from skimage.io import imread, imsave
 from skimage.transform import AffineTransform
 import geoutils as gu
-from . import data, register, resample
+from . import data, register, resample, matching
 from typing import Union
 from numpy.typing import NDArray
 
@@ -466,96 +465,71 @@ def create_measurescamera_xml(fn_csv: Union[str, Path, pd.DataFrame],
                xml_declaration=True, encoding="utf-8")
 
 
-def estimate_measures_camera(approx: pd.DataFrame, pairs: list[tuple],
+def estimate_measures_camera(approx: Union[pd.DataFrame, dict], pairs: list[tuple],
                              ori: str = 'InterneScan', scan_res: float = 2.5e-5,
-                             how: str = 'mean', write_xml: bool = True) -> None:
+                             how: str = 'mean', write_xml: bool = True, inverted: bool = True) -> None:
     """
     Use a set of located fiducial markers to create a MeasuresCamera file using the average location of each fiducial
     marker.
 
-    :param approx: a dataframe of approximate fiducial marker locations.
+    :param approx: a dataframe of approximate fiducial marker locations, or a dict of fiducial marker names and
+        their angle with respect to the principal point. i.e., a mid-side marker on the right side of the frame should
+        have an angle of 0, the fiducial marker in the upper right-hand corner should have an angle of 45° (pi / 4),
+        a mid-side marker on the top of the frame should have an angle of 90° (pi / 2), and so on.
     :param pairs: a list of pairs of co-linear fiducial markers
     :param ori: The Ori- directory containing the MeasuresIm files
     :param scan_res: the scanning resolution of the images in m
     :param how: what average to use for the output locations. Must be one of [mean, median].
     :param write_xml: write the MeasuresCamera.xml file in addition to a CSV
+    :param inverted: the y-axis is inverted.
     """
     assert how in ['mean', 'median'], "how must be one of [mean, median]"
+
+    if isinstance(approx, dict):
+        if max(approx.values()) > 2 * np.pi:
+            angles = pd.Series(approx).apply(np.deg2rad)
+        else:
+            angles = pd.Series(approx)
+    else:
+        ppx, ppy = matching._meas_center(approx, pairs)
+        approx['j'] -= ppx
+        approx['i'] -= ppy
+
+        if inverted:
+            approx['i'] *= -1
+
+        angles = np.arctan2(approx['i'], approx['j'])
+        angles[angles < 0] += 2 * np.pi
 
     meas_list = sorted(glob('MeasuresIm*.xml', root_dir=f'Ori-{ori}'))
 
     all_meas = []
+    all_angles = []
 
     for fn_meas in meas_list:
         meas = parse_im_meas(Path(f'Ori-{ori}', fn_meas)).set_index('name')
 
-        collinear = [LineString(meas.loc[p, ['j', 'i']].values) for p in pairs]
-
-        for ind, pair in enumerate(pairs):
-            meas.loc[pair, ['collim_dist']] = collinear[ind].length
-
-        scale = np.mean([c.length for c in collinear])
-
-        meas['j'] = meas['j'] / scale
-        meas['i'] = meas['i'] / scale
-
-        ppx, ppy = _meas_center(meas, pairs)
-        meas['j'] -= ppx
-        meas['i'] -= ppy
-
-        model = AffineTransform()
-        joined = meas.join(approx.set_index('name'), lsuffix='_img', rsuffix='_cam')
-        model.estimate(joined[['j_img', 'i_img']].values, joined[['j_cam', 'i_cam']].values)
-
-        meas['resid'] = model.residuals(joined[['j_img', 'i_img']].values, joined[['j_cam', 'i_cam']].values)
-
-        noscale = AffineTransform(translation=model.translation, rotation=model.rotation, shear=model.shear)
-        rot = noscale(meas[['j', 'i']].values)
-        # rot = model(meas[['j', 'i']].values)
-
-        meas['j'] = rot[:, 0]
-        meas['i'] = rot[:, 1]
+        meas, rot = matching.tfm_measures(meas, pairs, angles, inverted=inverted)
 
         all_meas.append(meas.reset_index())
+        all_angles.append(rot)
 
     all_meas = pd.concat(all_meas, ignore_index=True)
+    all_meas['j'] *= scan_res * 1000 # convert from m to mm
+    all_meas['i'] *= scan_res * 1000 # convert from m to mm
 
     if how == 'mean':
         avg_meas = all_meas.groupby('name').mean(numeric_only=True)
     else:
         avg_meas = all_meas.groupby('name').median(numeric_only=True)
 
-    joined = avg_meas.join(approx.set_index('name'), lsuffix='_img', rsuffix='_cam')
-    model = AffineTransform()
-    model.estimate(joined[['j_img', 'i_img']].values, joined[['j_cam', 'i_cam']].values)
-
-    noscale = AffineTransform(translation=model.translation, rotation=model.rotation)
-
-    rot = noscale(meas[['j', 'i']].values)
-
-    avg_meas['j'] = rot[:, 0]
-    avg_meas['i'] = rot[:, 1]
-
-    avg_meas['j'] -= avg_meas['j'].min()
-    avg_meas['i'] -= avg_meas['i'].min()
-
-    scale = avg_meas['collim_dist'].mean()
-
-    avg_meas['j'] *= scale * scan_res * 1000  # convert from m to mm
-    avg_meas['i'] *= scale * scan_res * 1000  # convert from m to mm
+    avg_meas['angle'] = np.arctan2(avg_meas['i'], avg_meas['j'])
 
     all_meas.to_csv('AllMeasures.csv', index=False)
     avg_meas.to_csv('AverageMeasures.csv')
 
     if write_xml:
-        create_measurescamera_xml('AverageMeasures.csv', ori=ori, translate=False, name='name', x='j', y='i')
-
-
-def _meas_center(meas: pd.DataFrame, pairs: list[tuple]) -> tuple[float, float]:
-    collims = [LineString(meas.loc[p, ['j', 'i']].values) for p in pairs]
-    pp = MultiPoint([a.intersection(b) for a, b in list(combinations(collims, 2))]).centroid
-
-    return pp.x, pp.y
+        create_measurescamera_xml('AverageMeasures.csv', ori=ori, translate=True, name='name', x='j', y='i')
 
 
 def generate_multicam_csv(patterns: Union[list, None] = None, prefix: str = 'OIS-Reech_',
