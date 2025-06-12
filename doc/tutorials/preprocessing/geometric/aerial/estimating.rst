@@ -94,7 +94,7 @@ geometry - for example, if the images are scanned at 25 microns (25 µm per pixe
 approximate measures
 ^^^^^^^^^^^^^^^^^^^^^
 
-For example, the following code will create a ``DataFrame`` with the approximate fiducial marker locations for the
+The following code will create a ``DataFrame`` with the approximate fiducial marker locations for the
 camera illustrated above:
 
 .. note::
@@ -240,7 +240,7 @@ between the values from the report, and the values estimated by
 to better than 0.04 mm:
 
 +------+------------------+------------------+
-| name | :math:`\delta x` | :math:`\delta y` |
+| name | :math:`\Delta x` | :math:`\Delta y` |
 +======+==================+==================+
 | P1   | 0.0191           | -0.0312          |
 +------+------------------+------------------+
