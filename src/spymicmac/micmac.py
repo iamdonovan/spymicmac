@@ -515,6 +515,8 @@ def estimate_measures_camera(approx: Union[pd.DataFrame, dict], pairs: list[tupl
         all_angles.append(rot)
 
     all_meas = pd.concat(all_meas, ignore_index=True)
+    all_meas['j'] *= scan_res * 1000 # convert from m to mm
+    all_meas['i'] *= scan_res * 1000 # convert from m to mm
 
     if how == 'mean':
         avg_meas = all_meas.groupby('name').mean(numeric_only=True)
@@ -522,9 +524,6 @@ def estimate_measures_camera(approx: Union[pd.DataFrame, dict], pairs: list[tupl
         avg_meas = all_meas.groupby('name').median(numeric_only=True)
 
     avg_meas['angle'] = np.arctan2(avg_meas['i'], avg_meas['j'])
-
-    avg_meas['j'] *= scan_res * 1000 # convert from m to mm
-    avg_meas['i'] *= scan_res * 1000 # convert from m to mm
 
     all_meas.to_csv('AllMeasures.csv', index=False)
     avg_meas.to_csv('AverageMeasures.csv')
