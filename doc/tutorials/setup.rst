@@ -131,7 +131,7 @@ This is just a plain text file, with the "names" of the different fiducial marks
 
 .. code-block:: sh
 
-    for nn in {1..8}; do echo P$nn >> id_fiducial.txt
+    for nn in {1..8}; do echo P$nn >> id_fiducial.txt; done
 
 Alternatively, in python:
 
