@@ -1697,8 +1697,17 @@ def match_halves(left: NDArray, right: NDArray, overlap: int, block_size: int = 
         except:
             continue
 
-    model, inliers = ransac((np.array(src_pts), np.array(dst_pts)), EuclideanTransform,
-                        min_samples=10, residual_threshold=0.2, max_trials=25000)
+    models = []
+    inliers = []
+
+    for ii in range(20):
+        mod, inl = ransac((np.array(src_pts), np.array(dst_pts)), EuclideanTransform,
+                          min_samples=10, residual_threshold=0.2, max_trials=2500)
+        models.append(mod)
+        inliers.append(inl)
+
+    num_inliers = [np.count_nonzero(inl) for inl in inliers]
+    best_ind = np.argmax(num_inliers)
 
     print(f"{np.count_nonzero(inliers)} tie points found")
-    return model, np.count_nonzero(inliers)
+    return models[best_ind], num_inliers[best_ind]
