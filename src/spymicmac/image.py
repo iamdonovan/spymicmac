@@ -249,16 +249,16 @@ def make_binary_mask(img: NDArray, mult_value: Union[int, float] = 255,
     return _mask
 
 
-def balance_image(img: NDArray) -> NDArray:
+def balance_image(img: NDArray, clip_limit: float = 0.01) -> NDArray:
     """
-    Apply contrast-limited adaptive histogram equalization (CLAHE) on an image, then apply a de-noising filter.
+    Apply contrast-limited adaptive histogram equalization (CLAHE) on an image.
 
     :param img: the image to balance.
+    :param clip_limit: Clipping limit, normalized between 0 and 1 (higher values give
+        more contrast).
     :return: **img_filt** -- the balanced, filtered image.
     """
-    img_eq = (255 * exposure.equalize_adapthist(img)).astype(np.uint8)
-    img_filt = filters.median(img_eq, footprint=disk(1))
-    return img_filt
+    return (255 * exposure.equalize_adapthist(img, clip_limit=clip_limit)).astype(np.uint8)
 
 
 # thanks to SO user Jamie for this answer
