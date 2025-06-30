@@ -207,6 +207,23 @@ def contrast_enhance(fn_img: str, mask_value: Union[int, float, None] = None,
     return gamma
 
 
+def high_low_subtract(img: NDArray) -> NDArray:
+    """
+    Remove the column and row median values from an image, then stretch/scale to the new min/max values.
+
+    :param img: the image to adjust
+    :returns: the adjusted image
+    """
+
+    row_med = np.median(img, axis=1)
+    col_med = np.median(img, axis=0)
+
+    subtract = img - col_med * np.ones_like(img)
+    subtract -= row_med.reshape(-1, 1) * np.ones_like(img)
+
+    return stretch_image(subtract)
+
+
 def make_binary_mask(img: NDArray, mult_value: Union[int, float] = 255,
                      erode: int = 0, mask_value: int = 0) -> NDArray:
     """
