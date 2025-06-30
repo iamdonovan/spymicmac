@@ -320,7 +320,8 @@ def preprocess_kh9_mc(steps: Union[str, list] = 'all', skip: Union[str, list] = 
         for fn_img in imlist:
             print('OIS-Reech_' + fn_img)
             img = io.imread('OIS-Reech_' + fn_img + '.tif')
-            img_adj = 255 * exposure.equalize_adapthist(img, clip_limit=clip_limit)
+            img_adj = image.high_low_subtract(img)
+            img_adj = image.balance_image(img_adj, clip_limit=clip_limit)
             io.imsave('OIS-Reech_' + fn_img + '.tif', img_adj.astype(np.uint8))
 
     # run tapioca
