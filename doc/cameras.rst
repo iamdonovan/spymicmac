@@ -274,11 +274,13 @@ arrow-type fiducials
 
 .. caution::
 
-    I have only been able to identify a single example of this type of fiducial marker connected to a calibration
-    report, and to notes made on the edges of the frame of an image from a separate survey.
+    I have been able to identify a single example of this type of fiducial marker connected to a calibration
+    report, and a number of others to notes made on the edges of the frame of an image from a separate survey, or to
+    the film identification information taken at the beginning of a roll.
 
-    The reported camera in both cases was a Fairchild K-17, but I am hesitant to definitively state this. As with the
-    wing-type examples shown above, I recommend using
+    The reported camera in all cases was a Fairchild K-17, but it is unclear whether the K-17 also used other fiducial
+    marker patterns (as appears to be the case based on calibration reports downloaded through Earth Explorer). As
+    with the wing-type examples shown above, therefore, I recommend using
     :py:meth:`estimate_measures_camera <spymicmac.micmac.estimate_measures_camera>` in the absence of any definitive
     marker coordinates.
 
@@ -303,9 +305,9 @@ notch-type fiducials
 mid-side only
 """"""""""""""
 
-This pattern was used in a number of different cameras, including T-11, T-12, KC-1, and KC-1B. Note that the marker
-location is given by a small pinhole just inside the frame of the image, rather than the notch-shaped marks in the
-frame. Note also the distance between P5 and the principal point is longer than the distance between P6 and the
+This pattern was used in a number of different cameras, including T-11, T-12, KC-1, KC-1B, and CA-14. Note that the
+marker location is given by a small pinhole just inside the frame of the image, rather than the notch-shaped marks in
+the frame. Note also the distance between P5 and the principal point is longer than the distance between P6 and the
 principal point.
 
 .. image:: img/fairchild_t11_notch.png
