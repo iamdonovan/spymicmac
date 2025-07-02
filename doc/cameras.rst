@@ -28,7 +28,7 @@ but others are both very similar and widely used, making a definitive identifica
 alone challenging, especially for earlier cameras that did not expose this ancillary information on the image negative.
 
 A good deal of the information on this page has been pieced together from looking at a very large number of images
-and calibration reports downloaded from `EarthExplorer <https://earthexplorer.usgs.gov/>`__ and the USGS
+and calibration reports downloaded from `EarthExplorer <https://earthexplorer.usgs.gov/>`__\ [2]_ and the USGS
 `Camera Calibration Report Database <https://calval.cr.usgs.gov/cameracal/reports.html>`__. This guide is by no means
 exhaustive, though it is built on a fairly large dataset of example images.
 
@@ -47,6 +47,10 @@ exhaustive, though it is built on a fairly large dataset of example images.
     With the serial number(s) and/or other identifying information (e.g., make/model), you can use the USGS
     `Camera Calibration Report Database <https://calval.cr.usgs.gov/cameracal/reports.html>`__ to search for the
     calibration report for your camera (or a similar camera).
+
+    Additionally, I have transcribed the information from a (growing) number of these calibration reports; the combined
+    CSV files and a few jupyter notebooks for printing summary information based on make/model, fiducial marker pattern,
+    etc. can be found at https://github.com/iamdonovan/fiducial_markers.
 
 
 "wing-type" fiducials
@@ -71,7 +75,7 @@ lens), or Zeiss (e.g., the Pleogon lens).
     Because:
 
     - the measured separation between P5-P6 and P7-P8 is somewhat variable for these images, even for the same camera
-      manufacturer (and sometimes even the same camera...); and
+      manufacturer (and sometimes even the same camera as identified by the serial number...); and
     - the majority of these cameras were used before coordinates were regularly included in calibration reports,
 
     it is probably a better idea to use :py:meth:`estimate_measures_camera <spymicmac.micmac.estimate_measures_camera>`
@@ -108,9 +112,9 @@ flat wing (small)
 ^^^^^^^^^^^^^^^^^
 
 This style is perhaps the most common of the wing-type (at least by volume in EarthExplorer), and seems to have been
-used by a wide range of manufacturers:
+used by a wide range of manufacturers (with the caveat noted above\ [2]_):
 
-- Fairchild (K-3B "modified", K-17, K-17 "modified", K-17B "modified")\ [2]_
+- Fairchild (K-3B "modified", K-17, K-17 "modified", K-17B "modified")\ [3]_
 - Aero Services (Aero, Aero/View)
 - Airagon
 - Western Aerial Contractors
@@ -284,12 +288,12 @@ arrow-type fiducials
     :py:meth:`estimate_measures_camera <spymicmac.micmac.estimate_measures_camera>` in the absence of any definitive
     marker coordinates.
 
-These cameras have four mid-side fiducial markers. Both P5 and P6 are "arrows" that point in the direction of flight.
-P5 is the tip of the arrow-shaped notch that is level with the frame, while P6 is the tip of the arrow-shaped notch
-that is cut into the frame.
+These cameras have four mid-side fiducial markers. Both P5 and P6 are "arrows" that (typically) point in the direction
+of flight. P5 is the tip of the arrow-shaped notch that is level with the frame, while P6 is the tip of the arrow-shaped
+notch that is cut into the frame.
 
 Many prints (or scans) of images of this type will cut off the point of the notch on P7 and P8, so it is probably
-better to use the point where the vertical edge of the notch instersects the image frame, rather than the "point" of
+better to use the point where the vertical edge of the notch intersects the image frame, rather than the "point" of
 the notch.
 
 .. image:: img/arrow.png
@@ -344,8 +348,8 @@ principal point.
 T-12
 """""
 
-Similar to the pattern shown above, the T-12 also used corner fiducial markers. Note that the fiducial marker
-for each of these is a small pinhole just inside the frame, rather than the notch-shaped marks in the frame.
+Similar to the pattern shown above, some versions of the T-12 also used corner fiducial markers. Note that the fiducial
+marker for each of these is a small pinhole just inside the frame, rather than the notch-shaped marks in the frame.
 
 .. image:: img/fairchild_t12_notch.png
     :width: 500
@@ -357,7 +361,7 @@ for each of these is a small pinhole just inside the frame, rather than the notc
 .. note::
 
     In some of these models, P5 is further inside of the left-hand side of the frame, which is why the variability of
-    the P5-P6 separation, and the x location of P5, is much higher than for the other markers.
+    the P5-P6 separation, and the *x* location of P5, is much higher than for the other markers.
 
 **Marker Separation (n = 5 reports)**
 
@@ -437,7 +441,61 @@ the other three notches.
 KC-6A
 """"""
 
-Example coming soon...
+The Fairchild KC-6A used four mid-side wing/notch-shaped fiducial markers. In addition to P7 and P8, there are two
+markers that are not included in the calibration report; these are off-center, and closer to P5 than to P6.
+
+On most examples of the KC-6A that I have seen, there is a direction of flight arrow at the bottom of the area where the
+serial number and other ancillary information is shown (in the upper left of the example below).
+
+It is not completely clear whether the marker is meant to be a small dot just inside the frame, as on the T-11 and
+T-12 examples above, or the tip of the notch cut into the frame. Based on the longer separation distance for P7-P8
+compared to P5-P6 in the example calibration report, and the fact that in the example below, dots are visible on P7 and
+P8 but not on P5 and P6, I have used the dots for P7 and P8 but not for P5 and P6.
+
+In other images, no dots are visible, though this may be due to issues with exposure/development of the film. Because
+of this, and the lack of scanned calibration reports for this type of camera, it might be better to use the tip of the
+notch, as is done for P5 and P6, and use :py:meth:`estimate_measures_camera <spymicmac.micmac.estimate_measures_camera>`.
+
+.. image:: img/kc6a.png
+    :width: 500
+    :align: center
+    :alt: a diagram of a Fairchild KC-6A with fiducial markers labeled
+
+|br|
+
+.. note::
+
+    There is a single calibration report for a Fairchild KC-6A in the USGS calibration report database, but it is
+    mislabeled as a KC-8A.
+
+    Based on information taken from a film identification image (EarthExplorer ID: ARHHORNT110X172), the Fairchild
+    F-489 "Terrain Objective Camera" (TROC) used a similar pattern, but did not have an identification strip with the
+    camera make/model and serial number exposed. There are also no F-489 cameras available from the USGS database.
+
+
+**Marker Separation (n = 1 reports)**
+
++-----------+---------------+----------+
+| markers   | mean          |   median |
++===========+===============+==========+
+| P5 - P6   | 234.893 ± nan |  234.893 |
++-----------+---------------+----------+
+| P7 - P8   | 236.089 ± nan |  236.089 |
++-----------+---------------+----------+
+
+**Marker Location (n = 1 reports)**
+
++--------+---------------+---------------+---------+
+| name   | x             | y             |   angle |
++========+===============+===============+=========+
+| P5     | 0.000 ± nan   | 117.939 ± nan | 180.018 |
++--------+---------------+---------------+---------+
+| P6     | 234.893 ± nan | 117.939 ± nan | 359.982 |
++--------+---------------+---------------+---------+
+| P7     | 117.147 ± nan | 0.000 ± nan   |  90.014 |
++--------+---------------+---------------+---------+
+| P8     | 117.231 ± nan | 236.089 ± nan | 270.027 |
++--------+---------------+---------------+---------+
 
 
 checker-type fiducials
@@ -883,12 +941,18 @@ and a "fixed" style:
 
     The coordinates for P5-P8 above correspond to the center of the small dot near the tip of the fiducial marker.
 
-references
-----------
+notes and references
+--------------------
 
 .. [1] Fleming EA (1960) Recognition of Air Survey Lens Types. *The Canadian Surveyor* 15(**2**), 91–96.
              doi: `10.1139/tcs-1960-0027 <https://doi.org/10.1139/tcs-1960-0027>`__.
 
-.. [2] In a number of the calibration reports for these "modified" cameras, the phrase "... which has been modified to
+.. [2] In the absence of any other identifying information such as a serial number on the frame, I am taking the
+       camera information from the calibration report at face value. Because I have seen a number of instances where
+       the camera information from the associated calibration report (make/model, serial number, lens serial number)
+       did not match the information visible on the frame, however, the information about which cameras used which
+       fiducial marker patterns, especially for the wing-type fiducial markers, may not be fully accurate.
+
+.. [3] In a number of the calibration reports for these "modified" cameras, the phrase "... which has been modified to
        meet the requirements of a precision camera" is included. Presumably, this modification is adding fiducial
        markers, which might explain why this camera type corresponds to so many different fiducial marker patterns.
