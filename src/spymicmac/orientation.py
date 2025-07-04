@@ -6,6 +6,7 @@ from pathlib import Path
 import subprocess
 from collections import defaultdict
 import numpy as np
+import scipy
 import pandas as pd
 import geopandas as gpd
 import geoutils as gu
@@ -23,6 +24,7 @@ from . import register, micmac
 from typing import Union
 from numpy.typing import NDArray
 from mpl_toolkits.mplot3d.axes3d import Axes3D
+import matplotlib
 
 
 def plot_camera_centers(ori: str, ax: Union[Axes3D, None] = None) -> Axes3D:
@@ -653,3 +655,149 @@ def _norm_vector(line):
     b = np.array([a[1], -a[0]])
     b = b / np.linalg.norm(a)
     return b
+
+
+def scale_intrinsics(fn_cam: Union[str, Path], scale: float) -> dict:
+    """
+    Parse an AutoCal xml file into a dictionary of intrinsic parameters, then scale those parameters - for example,
+    to go from pixel values (default for MicMac) to mm.
+
+    :param fn_cam: the name of the AutoCal xml file to parse.
+    :param scale: the scale to use to convert the intrinsic values
+    :return: **cam_dict** -- a dictionary of intrinsic parameter values for the camera
+    """
+    cam_dict = micmac.load_cam_xml(fn_cam)
+
+    cam_dict['cdist'] = np.array([float(p) for p in cam_dict['cdist'].split(' ')]) * scale
+    cam_dict['size'] = np.array([float(p) for p in cam_dict['size'].split(' ')]) * scale
+
+    for ii in range(1, 4):
+        cam_dict[f"K{ii}"] = float(cam_dict[f"K{ii}"]) * scale
+
+    if 'K4' in cam_dict:
+        cam_dict['K4'] = float(cam_dict['K4']) * scale
+
+    if 'K5' in cam_dict:
+        cam_dict['K5'] = float(cam_dict['K5']) * scale
+
+    for pp in ['P1', 'P2']:
+        if pp in cam_dict:
+            cam_dict[pp] = float(cam_dict[pp]) * scale
+
+    for pp in ['b1', 'b2']:
+        if pp in cam_dict:
+            cam_dict[pp] = float(cam_dict[pp]) * scale
+
+    return cam_dict
+
+
+def radial_distortion(params: dict, spacing: int) -> tuple[NDArray, NDArray, NDArray, NDArray]:
+    """
+    Apply a radial distortion model to a grid of pixel values, to produce a grid of un-distorted x,y locations.
+
+    Uses values of {K1, K2, K3, ...} to apply the following formulas:
+
+        Dx = Cx + (1 + K1 r**2 + K2 r**4 + K3 r**6 + ... Kn r**(2n)) * (x - Cx)
+        Dy = Cy + (1 + K1 r**2 + K2 r**4 + K3 r**6 + ... Kn r**(2n)) * (y - Cy)
+
+    Where Cx, Cy are the x,y center of distortion for the camera, Ki are the radial distortion coefficients, and
+    x, y are the coordinates in the image space. Dx, Dy are the un-distorted locations that would be produced by an
+    ideal (pinhole) camera.
+
+    :param params: a dictionary of intrinsic parameter values for the camera
+    :param spacing: the grid spacing to use for computing the (x, y) locations
+    :returns:
+        - **Dx**, **Dy** - the un-distorted x and y coordinates
+        - **x**, **y** - the coordinates in the image space
+    """
+    sx, sy = params['size']
+    cx, cy = params['cdist']
+
+    xx, yy = np.meshgrid(np.arange(0, sx + 1, spacing),
+                         np.arange(0, sy + 1, spacing))
+
+    du = xx - cx
+    dv = yy - cy
+
+    rr = np.sqrt(du ** 2 + dv ** 2)
+
+    order = len([kk for kk in params.keys() if 'K' in kk])
+    radpart = 1
+    for nn in range(1, order+1):
+        radpart += params[f"K{nn}"] * rr ** (2 * nn)
+
+    xdist = cx + radpart * du
+    ydist = cy + radpart * dv
+
+    return xdist, ydist, xx, yy
+
+
+def standard_distortion(params: dict, spacing: int) -> tuple[NDArray, NDArray, NDArray, NDArray]:
+    """
+    Apply a standard distortion model to a grid of pixel values, to produce a grid of un-distorted x,y locations
+    (see, for example, MicMac manual §15.2 "Distorsion specification", and eq. 15.13). The model consists of
+    a radial distortion part Dr, a decentric part (P1, P2), and an affine part (b1, b2).
+
+    Using the given parameters, the following formulas are applied:
+
+        Dx = Dr,x + (2(x - Cx)**2 + r**2) * P1 + (2(x - Cx)(y - Cy)) * P2 + (x - Cx) * b1 + (y - Cy) * b2
+        Dy = Dr,y + (2(x - Cx)(y - Cy)) * P1 + (2(y - Cy)**2 + r**2) * P2
+
+    Where Dr are the x,y components of radial distortion, x, y are the coordinates in the image space, and r is the
+    distance from the center of distortion. Dx, Dy are the un-distorted locations that would be produced by an ideal
+    (pinhole) camera.
+
+    :param params: a dictionary of intrinsic parameter values for the camera
+    :param spacing: the grid spacing to use for computing the (x, y) locations
+    :returns:
+        - **Dx**, **Dy** - the un-distorted x and y coordinates
+        - **x**, **y** - the coordinates in the image space
+    """
+    xdist, ydist, xx, yy = radial_distortion(params, spacing)
+
+    cx, cy = params['cdist']
+
+    du = xx - cx
+    dv = yy - cy
+
+    rr = np.sqrt(du**2 + dv**2)
+
+    xdist += (2 * du**2 + rr**2) * params['P1'] + (2 * du * dv) * params['P2'] + params['b1'] * du + params['b2'] * dv
+    ydist += (2 * du * dv ) * params['P1'] + (2 * dv**2 + rr**2) * params['P2']
+
+    return xdist, ydist, xx, yy
+
+
+def plot_lens_distortion(fn_cam: Union[str, Path],
+                         spacing: int, scale: float = 1.0) -> tuple[matplotlib.figure.Figure, matplotlib.axes.Axes]:
+    """
+    Plot a lens distortion curve (D% = d / r), where d is the offset caused by the lens distortion, and r is the
+    radial distance from the center of distortion.
+
+    :param fn_cam: the name of the AutoCal xml file to parse.
+    :param spacing: the grid spacing to use for computing the (x, y) locations
+    :param scale: the scale to use to convert the intrinsic values
+    :returns: **fig**, **ax** - the Figure and Axes objects containing the plot.
+    """
+    cam_params = scale_intrinsics(fn_cam, scale)
+
+    for pp in ['P1', 'P2', 'b1', 'b2']:
+        if pp not in cam_params.keys():
+            cam_params[pp] = 0.
+
+    xdist, ydist, xx, yy = standard_distortion(cam_params, spacing)
+
+    cx, cy = cam_params['cdist']
+    dd = np.sqrt((xdist - xx)**2 + (ydist - yy)**2)
+    rr = np.sqrt((xx - cx)**2 + (yy - cy)**2)
+
+    fdist = scipy.interpolate.interp1d(rr.flatten(), 100 * dd.flatten() / rr.flatten())
+    _rr = np.linspace(rr.min(), rr.max(), 1000)
+
+    fig, ax = plt.subplots(1, 1, figsize=(6, 3))
+
+    ax.plot(_rr, fdist(_rr), 'k')
+    ax.set_ylabel('D (%)')
+    ax.set_xlabel('radial distance')
+
+    return fig, ax
