@@ -671,22 +671,17 @@ def scale_intrinsics(fn_cam: Union[str, Path], scale: float) -> dict:
     cam_dict['cdist'] = np.array([float(p) for p in cam_dict['cdist'].split(' ')]) * scale
     cam_dict['size'] = np.array([float(p) for p in cam_dict['size'].split(' ')]) * scale
 
-    for ii in range(1, 4):
-        cam_dict[f"K{ii}"] = float(cam_dict[f"K{ii}"]) * scale
-
-    if 'K4' in cam_dict:
-        cam_dict['K4'] = float(cam_dict['K4']) * scale
-
-    if 'K5' in cam_dict:
-        cam_dict['K5'] = float(cam_dict['K5']) * scale
+    order = len([kk for kk in cam_dict.keys() if 'K' in kk])
+    for ii in range(1, order + 1):
+        cam_dict[f"K{ii}"] = float(cam_dict[f"K{ii}"]) / scale ** (2*ii)
 
     for pp in ['P1', 'P2']:
         if pp in cam_dict:
-            cam_dict[pp] = float(cam_dict[pp]) * scale
+            cam_dict[pp] = float(cam_dict[pp]) / scale ** 2
 
     for pp in ['b1', 'b2']:
         if pp in cam_dict:
-            cam_dict[pp] = float(cam_dict[pp]) * scale
+            cam_dict[pp] = float(cam_dict[pp]) / scale
 
     return cam_dict
 
