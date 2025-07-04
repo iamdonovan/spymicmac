@@ -657,31 +657,36 @@ def _norm_vector(line):
     return b
 
 
-def scale_intrinsics(fn_cam: Union[str, Path], scale: float) -> dict:
+def scale_intrinsics(fn_cam: Union[str, Path, dict], scale: float) -> dict:
     """
     Parse an AutoCal xml file into a dictionary of intrinsic parameters, then scale those parameters - for example,
     to go from pixel values (default for MicMac) to mm.
 
-    :param fn_cam: the name of the AutoCal xml file to parse.
+    :param fn_cam: the name of the AutoCal xml file to parse, or a loaded camera dict
     :param scale: the scale to use to convert the intrinsic values
     :return: **cam_dict** -- a dictionary of intrinsic parameter values for the camera
     """
-    cam_dict = micmac.load_cam_xml(fn_cam)
+    if isinstance(fn_cam, dict):
+        cam_dict = fn_cam
+    else:
+        cam_dict = micmac.load_cam_xml(fn_cam)
 
-    cam_dict['cdist'] = np.array([float(p) for p in cam_dict['cdist'].split(' ')]) * scale
-    cam_dict['size'] = np.array([float(p) for p in cam_dict['size'].split(' ')]) * scale
+    cam_dict['pp'] = [pp * scale for pp in cam_dict['pp']]
+    cam_dict['focal'] = cam_dict['focal'] * scale
+    cam_dict['cdist'] = [pp * scale for pp in cam_dict['cdist']]
+    cam_dict['size'] = [pp * scale for pp in cam_dict['size']]
 
     order = len([kk for kk in cam_dict.keys() if 'K' in kk])
     for ii in range(1, order + 1):
-        cam_dict[f"K{ii}"] = float(cam_dict[f"K{ii}"]) / scale ** (2*ii)
+        cam_dict[f"K{ii}"] = cam_dict[f"K{ii}"] / scale ** (2*ii)
 
     for pp in ['P1', 'P2']:
         if pp in cam_dict:
-            cam_dict[pp] = float(cam_dict[pp]) / scale ** 2
+            cam_dict[pp] = cam_dict[pp] / scale ** 2
 
     for pp in ['b1', 'b2']:
         if pp in cam_dict:
-            cam_dict[pp] = float(cam_dict[pp]) / scale
+            cam_dict[pp] = cam_dict[pp] / scale
 
     return cam_dict
 

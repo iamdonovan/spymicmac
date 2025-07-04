@@ -738,6 +738,10 @@ def init_autocal(imsize: tuple[int, int] = (32200, 15400),
                pretty_print=True, xml_declaration=True, encoding="utf-8")
 
 
+def _split_field(text):
+    return [float(pp) for pp in text.split(' ')]
+
+
 def load_cam_xml(fn_cam: Union[str, Path]) -> dict:
     """
     Parse an AutoCal xml file into a dictionary of intrinsic parameters.
@@ -759,27 +763,27 @@ def load_cam_xml(fn_cam: Union[str, Path]) -> dict:
     root = ET.parse(fn_cam).getroot()
     dist_model = root.find('CalibrationInternConique').find('CalibDistortion')
 
-    cam_dict = {'pp': root.find('CalibrationInternConique').find('PP').text,
-                'focal': root.find('CalibrationInternConique').find('F').text,
-                'size': root.find('CalibrationInternConique').find('SzIm').text}
+    cam_dict = {'pp': _split_field(root.find('CalibrationInternConique').find('PP').text),
+                'focal': float(root.find('CalibrationInternConique').find('F').text),
+                'size': _split_field(root.find('CalibrationInternConique').find('SzIm').text)}
 
     if dist_model.find('ModRad') is not None:
         dist_model = dist_model.find('ModRad')
-        cam_dict['cdist'] = dist_model.find('CDist').text
+        cam_dict['cdist'] = _split_field(dist_model.find('CDist').text)
         for ind, coef in enumerate(dist_model.findall('CoeffDist')):
-            cam_dict[f"K{ind+1}"] = coef.text
+            cam_dict[f"K{ind+1}"] = float(coef.text)
 
     elif dist_model.find('ModPhgrStd') is not None:
         dist_model = dist_model.find('ModPhgrStd')
         rad_part = dist_model.find('RadialePart')
 
-        cam_dict['cdist'] = rad_part.find('CDist').text
+        cam_dict['cdist'] = _split_field(rad_part.find('CDist').text)
         for ind, coef in enumerate(rad_part.findall('CoeffDist')):
-            cam_dict[f"K{ind+1}"] = coef.text
+            cam_dict[f"K{ind+1}"] = float(coef.text)
 
         for param in ['P1', 'P2', 'b1', 'b2']:
             if dist_model.find(param) is not None:
-                cam_dict[param] = dist_model.find(param).text
+                cam_dict[param] = float(dist_model.find(param).text)
             else:
                 cam_dict[param] = 0.0
 
@@ -787,6 +791,10 @@ def load_cam_xml(fn_cam: Union[str, Path]) -> dict:
         raise NotImplementedError("Camera model is not yet implemented...")
 
     return cam_dict
+
+
+def _format_tup(tup):
+    return f"{tup[0]} {tup[1]}"
 
 
 def write_cam_xml(fn_xml: Union[str, Path], cam_dict: dict, fraser: bool = True) -> None:
@@ -806,25 +814,25 @@ def write_cam_xml(fn_xml: Union[str, Path], cam_dict: dict, fraser: bool = True)
             if param not in cam_dict.keys():
                 cam_dict[param] = '0.0'
 
-        rad_part = E.RadialePart(E.CDist(cam_dict['cdist']))
+        rad_part = E.RadialePart(E.CDist(_format_tup(cam_dict['cdist'])))
         for coef in rad_coefs:
-            rad_part.append(E.CoeffDist(cam_dict[coef]))
+            rad_part.append(E.CoeffDist(f"{cam_dict[coef]}"))
         rad_part.append(E.PPaEqPPs('true'))
 
         dist_model = E.CalibDistortion(
             E.ModPhgrStd(
                 rad_part,
-                E.P1(cam_dict['P1']),
-                E.P2(cam_dict['P2']),
-                E.b1(cam_dict['b1']),
-                E.b2(cam_dict['b2']),
+                E.P1(f"{cam_dict['P1']}"),
+                E.P2(f"{cam_dict['P2']}"),
+                E.b1(f"{cam_dict['b1']}"),
+                E.b2(f"{cam_dict['b2']}"),
             )
         )
 
     else:
-        rad_part = E.ModRad(E.CDist(cam_dict['cdist']))
+        rad_part = E.ModRad(E.CDist(_format_tup(cam_dict['cdist'])))
         for coef in rad_coefs:
-            rad_part.append(E.CoeffDist(cam_dict[coef]))
+            rad_part.append(E.CoeffDist(f"{cam_dict[coef]}"))
 
         dist_model = E.CalibDistortion(
             rad_part
@@ -833,9 +841,9 @@ def write_cam_xml(fn_xml: Union[str, Path], cam_dict: dict, fraser: bool = True)
     outxml = E.ExportAPERO(
         E.CalibrationInternConique(
             E.KnownConv('eConvApero_DistM2C'),
-                E.PP(cam_dict['pp']),
-                E.F(cam_dict['focal']),
-                E.SzIm(cam_dict['size']),
+                E.PP(_format_tup(cam_dict['pp'])),
+                E.F(f"{cam_dict['focal']}"),
+                E.SzIm(_format_tup(cam_dict['size'])),
                 dist_model
         )
     )
