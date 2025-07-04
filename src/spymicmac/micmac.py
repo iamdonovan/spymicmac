@@ -843,7 +843,7 @@ def write_cam_xml(fn_xml: Union[str, Path], cam_dict: dict, fraser: bool = True)
             E.KnownConv('eConvApero_DistM2C'),
                 E.PP(_format_tup(cam_dict['pp'])),
                 E.F(f"{cam_dict['focal']}"),
-                E.SzIm(_format_tup(cam_dict['size'])),
+                E.SzIm(_format_tup([int(pp) for pp in cam_dict['size']])),
                 dist_model
         )
     )
