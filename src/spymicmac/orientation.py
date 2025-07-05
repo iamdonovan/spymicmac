@@ -769,7 +769,10 @@ def standard_distortion(params: dict, spacing: int) -> tuple[NDArray, NDArray, N
 
 
 def plot_lens_distortion(fn_cam: Union[str, Path],
-                         spacing: int, scale: float = 1.0) -> tuple[matplotlib.figure.Figure, matplotlib.axes.Axes]:
+                         spacing: int, scale: float = 1.0,
+                         ax: Union[None, matplotlib.axes.Axes] = None,
+                         **kwargs
+                         ) -> tuple[matplotlib.figure.Figure, matplotlib.axes.Axes]:
     """
     Plot a lens distortion curve (D% = d / r), where d is the offset caused by the lens distortion, and r is the
     radial distance from the center of distortion.
@@ -777,6 +780,8 @@ def plot_lens_distortion(fn_cam: Union[str, Path],
     :param fn_cam: the name of the AutoCal xml file to parse.
     :param spacing: the grid spacing to use for computing the (x, y) locations
     :param scale: the scale to use to convert the intrinsic values
+    :param ax: the axis to plot into. If not provided, creates a new figure and axis.
+    :param kwargs: additional keyword arguments to pass to ax.plot()
     :returns: **fig**, **ax** - the Figure and Axes objects containing the plot.
     """
     cam_params = scale_intrinsics(fn_cam, scale)
@@ -788,16 +793,21 @@ def plot_lens_distortion(fn_cam: Union[str, Path],
     xdist, ydist, xx, yy = standard_distortion(cam_params, spacing)
 
     cx, cy = cam_params['cdist']
-    dd = np.sqrt((xdist - xx)**2 + (ydist - yy)**2)
+    rdist = np.sqrt((xdist - cx)**2 + (ydist - cy)**2)
     rr = np.sqrt((xx - cx)**2 + (yy - cy)**2)
 
-    fdist = scipy.interpolate.interp1d(rr.flatten(), 100 * dd.flatten() / rr.flatten())
+    dr = rdist - rr
+
+    fdist = scipy.interpolate.interp1d(rr.flatten(), 100 * dr.flatten() / rr.flatten())
     _rr = np.linspace(rr.min(), rr.max(), 1000)
 
-    fig, ax = plt.subplots(1, 1, figsize=(6, 3))
+    if ax is None:
+        fig, ax = plt.subplots(1, 1, figsize=(6, 3))
 
-    ax.plot(_rr, fdist(_rr), 'k')
+    ax.plot(_rr, fdist(_rr), **kwargs)
     ax.set_ylabel('D (%)')
     ax.set_xlabel('radial distance')
+
+    fig = plt.gcf()
 
     return fig, ax
