@@ -1367,7 +1367,7 @@ def batch_saisie_fids(imlist: list, flavor: str = 'qt', fn_cam: Union[None, str]
 
 
 def tapioca(img_pattern: str = 'OIS.*tif', res_low: int = 400, res_high: int = 1200,
-            fn_neighbours: Union[str, Path, None] = None) -> None:
+            fn_neighbours: Union[str, Path, None] = None) -> int:
     """
     Run mm3d Tapioca to find image tie points.
 
@@ -1391,8 +1391,44 @@ def tapioca(img_pattern: str = 'OIS.*tif', res_low: int = 400, res_high: int = 1
     return p.wait()
 
 
+def schnaps(img_pattern: str = 'OIS.*tif',
+            nb_win: Union[None, int] = None,
+            min_pct_coverage: Union[None, float, int] = None,
+            move_bad: bool = False) -> int:
+    """
+    Run mm3d Schnaps, which removes dubious tie points in image geometry. Helps improve
+        performance of Tapas and Martini steps.
+
+    :param img_pattern: The image pattern to pass to Schnaps (default: OIS.*tif)
+    :param nb_win: the minimum number of points to accept in each image; only used if also
+        moving "bad" images (default: 1000)
+    :param min_pct_coverage: the minimum percent coverage to use to accept an image; only used if also
+        moving "bad" images (default: 30)
+    :param move_bad: move bad images to a folder called "Poubelle"
+    """
+    if os.name == 'nt':
+        echo = subprocess.Popen('echo', stdout=subprocess.PIPE, shell=True)
+    else:
+        echo = subprocess.Popen('echo', stdout=subprocess.PIPE)
+
+    args = ['mm3d', 'Schnaps', img_pattern]
+
+    if nb_win is not None:
+        args.append(f"NbWin={nb_win}")
+
+    if min_pct_coverage is not None:
+        args.append(f"minPercentCoverage={min_pct_coverage}")
+
+    if move_bad:
+        args.append(f"MoveBadImgs={int(move_bad)}")
+
+    p = subprocess.Popen(args, stdin=echo.stdout)
+
+    return p.wait()
+
+
 def martini(img_pattern: str = 'OIS.*tif', in_ori: Union[None, str] = None, ori_out: Union[None, str] = None,
-            quick: bool = True) -> None:
+            quick: bool = True) -> int:
     """
     Run mm3d Martini, which provides a quick way to orient images without solving for camera parameters.
 
@@ -1423,7 +1459,7 @@ def martini(img_pattern: str = 'OIS.*tif', in_ori: Union[None, str] = None, ori_
 
 def tapas(cam_model: str, ori_out: Union[str, None] = None, img_pattern: str = 'OIS.*tif',
           in_cal: Union[str, None] = None, in_ori: Union[str, None] = None, lib_foc: bool = True,
-          lib_pp: bool = True, lib_cd: bool = True) -> None:
+          lib_pp: bool = True, lib_cd: bool = True) -> int:
     """
     Run mm3d Tapas with a given camera calibration model.
 
@@ -1469,7 +1505,7 @@ def tapas(cam_model: str, ori_out: Union[str, None] = None, img_pattern: str = '
 
 
 def apericloud(ori: str, img_pattern: str = 'OIS.*tif',
-               fn_out: Union[str, None] = None, with_points: bool = True) -> None:
+               fn_out: Union[str, None] = None, with_points: bool = True) -> int:
     """
     Run mm3d AperiCloud to create a point cloud layer
 
@@ -1500,7 +1536,7 @@ def malt(imlist: Union[str, list], ori: str, zoomf: int = 1, zoomi: Union[None, 
          dirmec: str = 'MEC-Malt', seed_img: Union[str, Path, None] = None, seed_xml: Union[str, Path, None] = None,
          resol_terr: Union[float, int, None] = None, resol_ort: Union[float, int, None] = None,
          cost_trans: Union[float, int, None] = None, szw: Union[int, None] = None,
-         regul: Union[float, None] = None, do_ortho: bool = True, do_mec: bool = True) -> None:
+         regul: Union[float, None] = None, do_ortho: bool = True, do_mec: bool = True) -> int:
     """
     Run mm3d Malt Ortho.
 
@@ -1568,7 +1604,7 @@ def malt(imlist: Union[str, list], ori: str, zoomf: int = 1, zoomi: Union[None, 
     return p.wait()
 
 
-def tawny(dirmec: str, radiomegal: bool = False) -> None:
+def tawny(dirmec: str, radiomegal: bool = False) -> int:
     """
     Run mm3d Tawny to create an orthomosaic.
 
