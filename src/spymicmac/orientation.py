@@ -763,7 +763,7 @@ def standard_distortion(params: dict, spacing: int) -> tuple[NDArray, NDArray, N
     rr = np.sqrt(du**2 + dv**2)
 
     xdist += (2 * du**2 + rr**2) * params['P1'] + (2 * du * dv) * params['P2'] + params['b1'] * du + params['b2'] * dv
-    ydist += (2 * du * dv ) * params['P1'] + (2 * dv**2 + rr**2) * params['P2']
+    ydist += (2 * du * dv) * params['P1'] + (2 * dv**2 + rr**2) * params['P2']
 
     return xdist, ydist, xx, yy
 
@@ -771,6 +771,8 @@ def standard_distortion(params: dict, spacing: int) -> tuple[NDArray, NDArray, N
 def plot_lens_distortion(fn_cam: Union[str, Path],
                          spacing: int, scale: float = 1.0,
                          ax: Union[None, matplotlib.axes.Axes] = None,
+                         normalize: bool = True,
+                         factor: Union[None, float] = 1,
                          **kwargs
                          ) -> tuple[matplotlib.figure.Figure, matplotlib.axes.Axes]:
     """
@@ -781,6 +783,8 @@ def plot_lens_distortion(fn_cam: Union[str, Path],
     :param spacing: the grid spacing to use for computing the (x, y) locations
     :param scale: the scale to use to convert the intrinsic values
     :param ax: the axis to plot into. If not provided, creates a new figure and axis.
+    :param normalize: plot the distortion as a percentage of the radial distance
+    :param factor: if normalize is False, a factor to scale the distortion by (e.g., to convert from mm to µm)
     :param kwargs: additional keyword arguments to pass to ax.plot()
     :returns: **fig**, **ax** - the Figure and Axes objects containing the plot.
     """
@@ -798,14 +802,20 @@ def plot_lens_distortion(fn_cam: Union[str, Path],
 
     dr = rdist - rr
 
-    fdist = scipy.interpolate.interp1d(rr.flatten(), 100 * dr.flatten() / rr.flatten())
+    if normalize:
+        fdist = scipy.interpolate.interp1d(rr.flatten(), 100 * dr.flatten() / rr.flatten())
+        ylab = '$D$ (%)'
+    else:
+        fdist = scipy.interpolate.interp1d(rr.flatten(), factor * dr.flatten())
+        ylab = '$D$'
+
     _rr = np.linspace(rr.min(), rr.max(), 1000)
 
     if ax is None:
         fig, ax = plt.subplots(1, 1, figsize=(6, 3))
 
     ax.plot(_rr, fdist(_rr), **kwargs)
-    ax.set_ylabel('D (%)')
+    ax.set_ylabel(ylab)
     ax.set_xlabel('radial distance')
 
     fig = plt.gcf()
