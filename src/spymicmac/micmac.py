@@ -781,7 +781,7 @@ def load_cam_xml(fn_cam: Union[str, Path]) -> dict:
         for ind, coef in enumerate(rad_part.findall('CoeffDist')):
             cam_dict[f"K{ind+1}"] = float(coef.text)
 
-        for param in ['P1', 'P2', 'b1', 'b2']:
+        for param in ['P1', 'P2']: #, 'b1', 'b2']:
             if dist_model.find(param) is not None:
                 cam_dict[param] = float(dist_model.find(param).text)
             else:
@@ -810,7 +810,7 @@ def write_cam_xml(fn_xml: Union[str, Path], cam_dict: dict, fraser: bool = True)
     rad_coefs = [p for p in cam_dict.keys() if 'K' in p]
 
     if fraser:
-        for param in ['P1', 'P2', 'b1', 'b2']:
+        for param in ['P1', 'P2']:
             if param not in cam_dict.keys():
                 cam_dict[param] = '0.0'
 
@@ -824,8 +824,8 @@ def write_cam_xml(fn_xml: Union[str, Path], cam_dict: dict, fraser: bool = True)
                 rad_part,
                 E.P1(f"{cam_dict['P1']}"),
                 E.P2(f"{cam_dict['P2']}"),
-                E.b1(f"{cam_dict['b1']}"),
-                E.b2(f"{cam_dict['b2']}"),
+                #E.b1(f"{cam_dict['b1']}"),
+                #E.b2(f"{cam_dict['b2']}"),
             )
         )
 
