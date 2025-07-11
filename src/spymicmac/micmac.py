@@ -1459,7 +1459,7 @@ def martini(img_pattern: str = 'OIS.*tif', in_ori: Union[None, str] = None, ori_
 
 def tapas(cam_model: str, ori_out: Union[str, None] = None, img_pattern: str = 'OIS.*tif',
           in_cal: Union[str, None] = None, in_ori: Union[str, None] = None, lib_foc: bool = True,
-          lib_pp: bool = True, lib_cd: bool = True) -> int:
+          lib_pp: bool = True, lib_cd: bool = True, dir_homol: Union[str, None] = None) -> int:
     """
     Run mm3d Tapas with a given camera calibration model.
 
@@ -1480,6 +1480,7 @@ def tapas(cam_model: str, ori_out: Union[str, None] = None, img_pattern: str = '
     :param lib_foc: allow the focal length to be calibrated
     :param lib_pp: allow the principal point to be calibrated
     :param lib_cd: allow the center of distortion to be calibrated
+    :param dir_homol: the name of the Homol directory to use (default: Homol)
     """
     if os.name == 'nt':
         echo = subprocess.Popen('echo', stdout=subprocess.PIPE, shell=True)
@@ -1498,6 +1499,9 @@ def tapas(cam_model: str, ori_out: Union[str, None] = None, img_pattern: str = '
 
     if in_ori is not None:
         args.append('InOri=' + in_ori)
+
+    if dir_homol is not None:
+        args.append('SH=' + dir_homol)
 
     p = subprocess.Popen(args, stdin=echo.stdout)
 
