@@ -187,6 +187,7 @@ def preprocess_kh9_mc(steps: Union[str, list] = 'all', skip: Union[str, list] = 
     - resample: resamples images to common size using the reseau marker locations
     - balance: use contrast-limited adaptive histogram equalization (clahe) to improve contrast in the image
     - tapioca: calls mm3d Tapioca MulScale to find tie points
+    - schnaps: calls mm3d Schnaps to clean/filter tie points
     - tapas: calls mm3d Tapas to calibrate camera model, find relative image orientation
     - aperi: calls mm3d AperiCloud to create point cloud using calibrated camera model
 
@@ -225,7 +226,7 @@ def preprocess_kh9_mc(steps: Union[str, list] = 'all', skip: Union[str, list] = 
         print(f"Using {nproc} processors for steps that use multiprocessing.")
 
     proc_steps = ['extract', 'join', 'reseau', 'erase', 'filter', 'resample',
-                  'balance', 'tapioca', 'tapas', 'aperi']
+                  'balance', 'tapioca', 'schnaps', 'tapas', 'aperi']
 
     do = _handle_steps(proc_steps, steps, skip)
 
@@ -329,9 +330,19 @@ def preprocess_kh9_mc(steps: Union[str, list] = 'all', skip: Union[str, list] = 
         if exit_code != 0:
             raise RuntimeError('Error in mm3d Tapioca - check Tapioca output for details.')
 
+    # run schnaps
+    if do['schnaps']:
+        exit_code = micmac.schnaps("OIS.*tif")
+        if exit_code != 0:
+            raise RuntimeError('Error in mm3d Schnaps - check Schnaps output for details.')
+
     # run tapas
     if do['tapas']:
-        exit_code = micmac.tapas(camera_model, ori, in_cal=init_cal, lib_foc=lib_foc, lib_pp=lib_pp, lib_cd=lib_cd)
+        tapas_kwargs = {'in_cal': init_cal, 'lib_foc': lib_foc, 'lib_pp': lib_pp, 'lib_cd': lib_cd}
+        if do['schnaps']:
+            tapas_kwargs['dir_homol'] = 'Homol_mini'
+
+        exit_code = micmac.tapas(camera_model, ori, **tapas_kwargs)
         if exit_code != 0:
             raise RuntimeError('Error in mm3d Tapas - check Tapas output for details.')
 
