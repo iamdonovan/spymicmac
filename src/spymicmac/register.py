@@ -411,9 +411,9 @@ def register_relative(dirmec: str, fn_dem: Union[str, Path], fn_ref: Union[str, 
                       im_subset: Union[str, None] = None, block_num: Union[str, None] = None,
                       subscript: Union[str, None] = None, ori: str ='Relative', ortho_res: Union[float, int] = 8.,
                       imgsource: str = 'DECLASSII', strategy: str = 'grid', density: int = 200,
-                      out_dir: Union[str, Path, None] = None, allfree: bool = True, useortho: bool = False,
-                      max_iter: int = 5, use_cps: bool = False, cp_frac: float = 0.2, use_orb: bool = False,
-                      fn_gcps: Union[str, Path, None] = None) -> None:
+                      out_dir: Union[str, Path, None] = None, allfree: bool = True, dir_homol: str = 'Homol',
+                      useortho: bool = False, max_iter: int = 5, use_cps: bool = False, cp_frac: float = 0.2,
+                      use_orb: bool = False, fn_gcps: Union[str, Path, None] = None) -> None:
     """
     Register a relative DEM or orthoimage to a reference DEM and/or orthorectified image.
 
@@ -437,6 +437,7 @@ def register_relative(dirmec: str, fn_dem: Union[str, Path], fn_ref: Union[str, 
     :param density: pixel spacing to look for GCPs
     :param out_dir: output directory to save auto GCP files to
     :param allfree: run Campari setting all parameters free
+    :param dir_homol: the name of the Homol directory to use for Campari (default: Homol)
     :param useortho: use the orthomosaic in Ortho-{dirmec} rather than the DEM. If fn_ortho is
         set, uses that file instead.
     :param max_iter: the maximum number of Campari iterations to run.
@@ -701,7 +702,7 @@ def register_relative(dirmec: str, fn_dem: Union[str, Path], fn_ref: Union[str, 
 
     # now, iterate campari to refine the orientation
     gcps = micmac.iterate_campari(gcps, out_dir, match_pattern, subscript, ref_img.res[0], ortho_res,
-                                  rel_ori=ori, allfree=allfree, max_iter=max_iter)
+                                  rel_ori=ori, allfree=allfree, max_iter=max_iter, homol=dir_homol)
 
     if use_cps:
         cp_resids = micmac.checkpoints(match_pattern, f"Ori-TerrainFinal{subscript}",
