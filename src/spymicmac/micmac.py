@@ -738,6 +738,10 @@ def init_autocal(imsize: tuple[int, int] = (32200, 15400),
                pretty_print=True, xml_declaration=True, encoding="utf-8")
 
 
+def _split_field(text):
+    return [float(pp) for pp in text.split(' ')]
+
+
 def load_cam_xml(fn_cam: Union[str, Path]) -> dict:
     """
     Parse an AutoCal xml file into a dictionary of intrinsic parameters.
@@ -759,27 +763,27 @@ def load_cam_xml(fn_cam: Union[str, Path]) -> dict:
     root = ET.parse(fn_cam).getroot()
     dist_model = root.find('CalibrationInternConique').find('CalibDistortion')
 
-    cam_dict = {'pp': root.find('CalibrationInternConique').find('PP').text,
-                'focal': root.find('CalibrationInternConique').find('F').text,
-                'size': root.find('CalibrationInternConique').find('SzIm').text}
+    cam_dict = {'pp': _split_field(root.find('CalibrationInternConique').find('PP').text),
+                'focal': float(root.find('CalibrationInternConique').find('F').text),
+                'size': _split_field(root.find('CalibrationInternConique').find('SzIm').text)}
 
     if dist_model.find('ModRad') is not None:
         dist_model = dist_model.find('ModRad')
-        cam_dict['cdist'] = dist_model.find('CDist').text
+        cam_dict['cdist'] = _split_field(dist_model.find('CDist').text)
         for ind, coef in enumerate(dist_model.findall('CoeffDist')):
-            cam_dict[f"K{ind+1}"] = coef.text
+            cam_dict[f"K{ind+1}"] = float(coef.text)
 
     elif dist_model.find('ModPhgrStd') is not None:
         dist_model = dist_model.find('ModPhgrStd')
         rad_part = dist_model.find('RadialePart')
 
-        cam_dict['cdist'] = rad_part.find('CDist').text
+        cam_dict['cdist'] = _split_field(rad_part.find('CDist').text)
         for ind, coef in enumerate(rad_part.findall('CoeffDist')):
-            cam_dict[f"K{ind+1}"] = coef.text
+            cam_dict[f"K{ind+1}"] = float(coef.text)
 
         for param in ['P1', 'P2', 'b1', 'b2']:
             if dist_model.find(param) is not None:
-                cam_dict[param] = dist_model.find(param).text
+                cam_dict[param] = float(dist_model.find(param).text)
             else:
                 cam_dict[param] = 0.0
 
@@ -787,6 +791,10 @@ def load_cam_xml(fn_cam: Union[str, Path]) -> dict:
         raise NotImplementedError("Camera model is not yet implemented...")
 
     return cam_dict
+
+
+def _format_tup(tup):
+    return f"{tup[0]} {tup[1]}"
 
 
 def write_cam_xml(fn_xml: Union[str, Path], cam_dict: dict, fraser: bool = True) -> None:
@@ -802,29 +810,29 @@ def write_cam_xml(fn_xml: Union[str, Path], cam_dict: dict, fraser: bool = True)
     rad_coefs = [p for p in cam_dict.keys() if 'K' in p]
 
     if fraser:
-        for param in ['P1', 'P2', 'b1', 'b2']:
+        for param in ['P1', 'P2']:
             if param not in cam_dict.keys():
                 cam_dict[param] = '0.0'
 
-        rad_part = E.RadialePart(E.CDist(cam_dict['cdist']))
+        rad_part = E.RadialePart(E.CDist(_format_tup(cam_dict['cdist'])))
         for coef in rad_coefs:
-            rad_part.append(E.CoeffDist(cam_dict[coef]))
+            rad_part.append(E.CoeffDist(f"{cam_dict[coef]}"))
         rad_part.append(E.PPaEqPPs('true'))
 
         dist_model = E.CalibDistortion(
             E.ModPhgrStd(
                 rad_part,
-                E.P1(cam_dict['P1']),
-                E.P2(cam_dict['P2']),
-                E.b1(cam_dict['b1']),
-                E.b2(cam_dict['b2']),
+                E.P1(f"{cam_dict['P1']}"),
+                E.P2(f"{cam_dict['P2']}"),
+                E.b1(f"{cam_dict['b1']}"),
+                E.b2(f"{cam_dict['b2']}"),
             )
         )
 
     else:
-        rad_part = E.ModRad(E.CDist(cam_dict['cdist']))
+        rad_part = E.ModRad(E.CDist(_format_tup(cam_dict['cdist'])))
         for coef in rad_coefs:
-            rad_part.append(E.CoeffDist(cam_dict[coef]))
+            rad_part.append(E.CoeffDist(f"{cam_dict[coef]}"))
 
         dist_model = E.CalibDistortion(
             rad_part
@@ -833,9 +841,9 @@ def write_cam_xml(fn_xml: Union[str, Path], cam_dict: dict, fraser: bool = True)
     outxml = E.ExportAPERO(
         E.CalibrationInternConique(
             E.KnownConv('eConvApero_DistM2C'),
-                E.PP(cam_dict['pp']),
-                E.F(cam_dict['focal']),
-                E.SzIm(cam_dict['size']),
+                E.PP(_format_tup(cam_dict['pp'])),
+                E.F(f"{cam_dict['focal']}"),
+                E.SzIm(_format_tup([int(pp) for pp in cam_dict['size']])),
                 dist_model
         )
     )
@@ -1359,7 +1367,7 @@ def batch_saisie_fids(imlist: list, flavor: str = 'qt', fn_cam: Union[None, str]
 
 
 def tapioca(img_pattern: str = 'OIS.*tif', res_low: int = 400, res_high: int = 1200,
-            fn_neighbours: Union[str, Path, None] = None) -> None:
+            fn_neighbours: Union[str, Path, None] = None) -> int:
     """
     Run mm3d Tapioca to find image tie points.
 
@@ -1383,8 +1391,44 @@ def tapioca(img_pattern: str = 'OIS.*tif', res_low: int = 400, res_high: int = 1
     return p.wait()
 
 
+def schnaps(img_pattern: str = 'OIS.*tif',
+            nb_win: Union[None, int] = None,
+            min_pct_coverage: Union[None, float, int] = None,
+            move_bad: bool = False) -> int:
+    """
+    Run mm3d Schnaps, which removes dubious tie points in image geometry. Helps improve
+        performance of Tapas and Martini steps.
+
+    :param img_pattern: The image pattern to pass to Schnaps (default: OIS.*tif)
+    :param nb_win: the minimum number of points to accept in each image; only used if also
+        moving "bad" images (default: 1000)
+    :param min_pct_coverage: the minimum percent coverage to use to accept an image; only used if also
+        moving "bad" images (default: 30)
+    :param move_bad: move bad images to a folder called "Poubelle"
+    """
+    if os.name == 'nt':
+        echo = subprocess.Popen('echo', stdout=subprocess.PIPE, shell=True)
+    else:
+        echo = subprocess.Popen('echo', stdout=subprocess.PIPE)
+
+    args = ['mm3d', 'Schnaps', img_pattern]
+
+    if nb_win is not None:
+        args.append(f"NbWin={nb_win}")
+
+    if min_pct_coverage is not None:
+        args.append(f"minPercentCoverage={min_pct_coverage}")
+
+    if move_bad:
+        args.append(f"MoveBadImgs={int(move_bad)}")
+
+    p = subprocess.Popen(args, stdin=echo.stdout)
+
+    return p.wait()
+
+
 def martini(img_pattern: str = 'OIS.*tif', in_ori: Union[None, str] = None, ori_out: Union[None, str] = None,
-            quick: bool = True) -> None:
+            quick: bool = True) -> int:
     """
     Run mm3d Martini, which provides a quick way to orient images without solving for camera parameters.
 
@@ -1415,7 +1459,7 @@ def martini(img_pattern: str = 'OIS.*tif', in_ori: Union[None, str] = None, ori_
 
 def tapas(cam_model: str, ori_out: Union[str, None] = None, img_pattern: str = 'OIS.*tif',
           in_cal: Union[str, None] = None, in_ori: Union[str, None] = None, lib_foc: bool = True,
-          lib_pp: bool = True, lib_cd: bool = True) -> None:
+          lib_pp: bool = True, lib_cd: bool = True, dir_homol: Union[str, None] = None) -> int:
     """
     Run mm3d Tapas with a given camera calibration model.
 
@@ -1436,6 +1480,7 @@ def tapas(cam_model: str, ori_out: Union[str, None] = None, img_pattern: str = '
     :param lib_foc: allow the focal length to be calibrated
     :param lib_pp: allow the principal point to be calibrated
     :param lib_cd: allow the center of distortion to be calibrated
+    :param dir_homol: the name of the Homol directory to use (default: Homol)
     """
     if os.name == 'nt':
         echo = subprocess.Popen('echo', stdout=subprocess.PIPE, shell=True)
@@ -1455,13 +1500,16 @@ def tapas(cam_model: str, ori_out: Union[str, None] = None, img_pattern: str = '
     if in_ori is not None:
         args.append('InOri=' + in_ori)
 
+    if dir_homol is not None:
+        args.append('SH=' + dir_homol)
+
     p = subprocess.Popen(args, stdin=echo.stdout)
 
     return p.wait()
 
 
 def apericloud(ori: str, img_pattern: str = 'OIS.*tif',
-               fn_out: Union[str, None] = None, with_points: bool = True) -> None:
+               fn_out: Union[str, None] = None, with_points: bool = True) -> int:
     """
     Run mm3d AperiCloud to create a point cloud layer
 
@@ -1492,7 +1540,7 @@ def malt(imlist: Union[str, list], ori: str, zoomf: int = 1, zoomi: Union[None, 
          dirmec: str = 'MEC-Malt', seed_img: Union[str, Path, None] = None, seed_xml: Union[str, Path, None] = None,
          resol_terr: Union[float, int, None] = None, resol_ort: Union[float, int, None] = None,
          cost_trans: Union[float, int, None] = None, szw: Union[int, None] = None,
-         regul: Union[float, None] = None, do_ortho: bool = True, do_mec: bool = True) -> None:
+         regul: Union[float, None] = None, do_ortho: bool = True, do_mec: bool = True) -> int:
     """
     Run mm3d Malt Ortho.
 
@@ -1560,7 +1608,7 @@ def malt(imlist: Union[str, list], ori: str, zoomf: int = 1, zoomi: Union[None, 
     return p.wait()
 
 
-def tawny(dirmec: str, radiomegal: bool = False) -> None:
+def tawny(dirmec: str, radiomegal: bool = False) -> int:
     """
     Run mm3d Tawny to create an orthomosaic.
 

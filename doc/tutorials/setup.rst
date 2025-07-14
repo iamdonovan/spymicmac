@@ -47,7 +47,7 @@ of the different fiducial markers in the image geometry. Note that using ``ReSam
         yp = (-y) - min(-y)
 
 If you do not have a calibration report for your particular camera, you can have a look at some
-:doc:`preprocessing/geometric/aerial/cameras` for approximate locations of fiducial markers.
+:doc:`../cameras` for approximate locations of fiducial markers.
 
 Rather than editing the ``MeasuresCamera.xml`` file with the fiducial marker locations, you can also put the fiducial
 marker locations into a CSV file like this:
@@ -131,7 +131,7 @@ This is just a plain text file, with the "names" of the different fiducial marks
 
 .. code-block:: sh
 
-    for nn in {1..8}; do echo P$nn >> id_fiducial.txt
+    for nn in {1..8}; do echo P$nn >> id_fiducial.txt; done
 
 Alternatively, in python:
 

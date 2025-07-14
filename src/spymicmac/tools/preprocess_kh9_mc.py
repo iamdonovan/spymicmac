@@ -16,21 +16,35 @@ def _argparser():
     - resample: resamples images to common size using the reseau marker locations
     - balance: use contrast-limited adaptive histogram equalization (clahe) to improve contrast in the image
     - tapioca: calls mm3d Tapioca MulScale to find tie points
+    - schnaps: calls mm3d Schnaps to clean/filter tie points    
     - tapas: calls mm3d Tapas to calibrate camera model, find relative image orientation
     - aperi: calls mm3d AperiCloud to create point cloud using calibrated camera model
+
+    Additional optional steps can be included using the 'option' argument:
+
+    - filter: use a 1-sigma gaussian filter to smooth the images before resampling. Done before resampling the images.
+    - balance: use contrast-limited adaptive histogram equalization (clahe) to improve contrast in the image. Done
+        after resampling the images.
+    - schnaps: calls mm3d Schnaps to clean/filter tie points. Done after calling Tapioca and before calling Tapas.
 
     To run steps individually, use the --steps flag with the corresponding step name(s). For example, to only run the
     'reseau' and 'erase' steps:
     
-    preprocess_kh9 --steps reseau erase <additional arguments>
+        preprocess_kh9_mc --steps reseau erase <additional arguments>
+
+    Similarly, to run the 'reseau', 'erase', and 'balance' steps:
+    
+        preprocess_kh9_mc --steps reseau erase --option balance <additional arguments>
 
     """
     parser = argparse.ArgumentParser(description=helpstr,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--steps', action='store', type=str, nargs='+', default='all',
-                        help='The pre-processing steps to run (default: all).')
+                        help='The default pre-processing steps to run (default: all).')
     parser.add_argument('--skip', action='store', type=str, nargs='+', default='none',
                         help='The pre-processing steps to skip (default: none).')
+    parser.add_argument('--option', action='store', type=str, nargs='+', default='none',
+                        help='The optional pre-processing steps to skip (default: none).')
     parser.add_argument('-n', '--nproc', type=str, default=1,
                         help='The number of sub-processes to use - either an integer value, or max. '
                              'If max, uses mp.cpu_count() to determine the total number of processors '
