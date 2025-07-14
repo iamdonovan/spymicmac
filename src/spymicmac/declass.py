@@ -9,7 +9,7 @@ from typing import Union
 # default initial parameters for panoramic cameras
 sample_params = {
     'KH4': {'f': 0.61, 'tilt': np.deg2rad(15), 'scan_time': 0.36, 'speed': 7700},
-    'KH9': {'f': 1.5, 'tilt': np.deg2rad(10), 'scan_time': 0.7, 'speed': 8000}
+    'KH9': {'f': 1.524, 'tilt': np.deg2rad(10), 'scan_time': 0.7, 'speed': 8000}
 }
 
 
