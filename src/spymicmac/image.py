@@ -207,6 +207,24 @@ def contrast_enhance(fn_img: str, mask_value: Union[int, float, None] = None,
     return gamma
 
 
+def high_low_subtract(img: NDArray, avg_dist: int = 100) -> NDArray:
+    """
+    Remove the column and row median values from an image, then stretch/scale to the new min/max values.
+
+    :param img: the image to adjust
+    :param avg_dist: the spacing to average over for the column/row median values
+    :returns: the adjusted image
+    """
+
+    row_med = np.round(_moving_average(np.median(img, axis=1), avg_dist, size=img.shape[0]), 0)
+    col_med = np.round(_moving_average(np.median(img, axis=0), avg_dist, size=img.shape[1]), 0)
+
+    subtract = img - col_med * np.ones_like(img)
+    subtract -= row_med.reshape(-1, 1) * np.ones_like(img)
+
+    return stretch_image(subtract)
+
+
 def make_binary_mask(img: NDArray, mult_value: Union[int, float] = 255,
                      erode: int = 0, mask_value: int = 0) -> NDArray:
     """
@@ -232,24 +250,38 @@ def make_binary_mask(img: NDArray, mult_value: Union[int, float] = 255,
     return _mask
 
 
-def balance_image(img: NDArray) -> NDArray:
+def balance_image(img: NDArray, clip_limit: float = 0.01) -> NDArray:
     """
-    Apply contrast-limited adaptive histogram equalization (CLAHE) on an image, then apply a de-noising filter.
+    Apply contrast-limited adaptive histogram equalization (CLAHE) on an image.
 
     :param img: the image to balance.
+    :param clip_limit: Clipping limit, normalized between 0 and 1 (higher values give
+        more contrast).
     :return: **img_filt** -- the balanced, filtered image.
     """
-    img_eq = (255 * exposure.equalize_adapthist(img)).astype(np.uint8)
-    img_filt = filters.median(img_eq, footprint=disk(1))
-    return img_filt
+    return (255 * exposure.equalize_adapthist(img, clip_limit=clip_limit)).astype(np.uint8)
 
 
 # thanks to SO user Jamie for this answer
 # https://stackoverflow.com/a/14314054
-def _moving_average(a: NDArray, n: int = 5) -> NDArray:
+def _moving_average(a: NDArray, n: int = 5, size: Union[None, int] = None) -> NDArray:
     ret = np.cumsum(a)
     ret[n:] = ret[n:] - ret[:-n]
-    return ret[n - 1:] / n
+    ret = ret[n - 1:] / n
+
+    if size is None:
+        return ret
+
+    else:
+        pad_width = (size - ret.size) / 2
+        if pad_width % 1 == 0.5:
+            left_pad = int(pad_width + 0.5)
+            right_pad = int(pad_width - 0.5)
+        else:
+            left_pad = int(pad_width)
+            right_pad = int(pad_width)
+
+        return np.pad(ret, (left_pad, right_pad), 'linear_ramp', end_values=(a[0], a[-1]))
 
 
 # because sometimes, usgs adds a border with a bright white line on it

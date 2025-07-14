@@ -207,6 +207,7 @@ def preprocess_kh9_mc(steps: Union[str, list] = 'all', skip: Union[str, list] = 
     Additional optional steps can be included using the 'option' argument:
 
     - filter: use a 1-sigma gaussian filter to smooth the images before resampling. Done before resampling the images.
+    destripe: remove horizontal/vertical scanner-induced stripes from images
     - balance: use contrast-limited adaptive histogram equalization (clahe) to improve contrast in the image. Done
         after resampling the images.
     - schnaps: calls mm3d Schnaps to clean/filter tie points. Done after calling Tapioca and before calling Tapas.
@@ -251,7 +252,7 @@ def preprocess_kh9_mc(steps: Union[str, list] = 'all', skip: Union[str, list] = 
         print(f"Using {nproc} processors for steps that use multiprocessing.")
 
     proc_steps = ['extract', 'join', 'reseau', 'erase', 'resample', 'tapioca', 'tapas', 'aperi']
-    opt_steps = ['filter', 'balance', 'schnaps']
+    opt_steps = ['filter', 'destripe', 'balance', 'schnaps']
 
     do = _handle_steps(proc_steps, steps, skip, opt_steps=opt_steps, option=option)
 
@@ -341,12 +342,27 @@ def preprocess_kh9_mc(steps: Union[str, list] = 'all', skip: Union[str, list] = 
         for fn_img in imlist:
             shutil.move(fn_img + '.tif', 'Orig')
 
-    if do['balance']:
+    if do['destripe'] and do['balance']:
+        print('Removing scanner stripes by subtracting row/column median values.')
+        for fn_img in imlist:
+            print('OIS-Reech_' + fn_img)
+            img = io.imread('OIS-Reech_' + fn_img + '.tif')
+            img_adj = image.high_low_subtract(img)
+            img_adj = image.balance_image(img_adj, clip_limit=clip_limit)
+            io.imsave('OIS-Reech_' + fn_img + '.tif', img_adj.astype(np.uint8))
+    elif do['destripe']:
+        print('Removing scanner stripes by subtracting row/column median values.')
+        for fn_img in imlist:
+            print('OIS-Reech_' + fn_img)
+            img = io.imread('OIS-Reech_' + fn_img + '.tif')
+            img_adj = image.high_low_subtract(img)
+            io.imsave('OIS-Reech_' + fn_img + '.tif', img_adj.astype(np.uint8))
+    elif do['balance']:
         print('Using CLAHE to balance image contrast')
         for fn_img in imlist:
             print('OIS-Reech_' + fn_img)
             img = io.imread('OIS-Reech_' + fn_img + '.tif')
-            img_adj = 255 * exposure.equalize_adapthist(img, clip_limit=clip_limit)
+            img_adj = image.balance_image(img, clip_limit=clip_limit)
             io.imsave('OIS-Reech_' + fn_img + '.tif', img_adj.astype(np.uint8))
 
     # run tapioca
