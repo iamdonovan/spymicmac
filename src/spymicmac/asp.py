@@ -166,7 +166,7 @@ def cam_from_footprint(fn_img: str, flavor: str, scan_res: float, fn_dem: Union[
 
     if mean_el is None:
         dem = gu.Raster(fn_dem)
-        mask = gu.Vector(footprints.loc[footprints['ID'] == clean_name])
+        mask = gu.Vector(footprints.loc[footprints['ID'] == clean_name]).create_mask(dem)
         mean_el = dem[mask].mean()
 
     if _isaft(fn_img):
