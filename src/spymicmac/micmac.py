@@ -810,7 +810,7 @@ def write_cam_xml(fn_xml: Union[str, Path], cam_dict: dict, fraser: bool = True)
     rad_coefs = [p for p in cam_dict.keys() if 'K' in p]
 
     if fraser:
-        for param in ['P1', 'P2']:
+        for param in ['P1', 'P2', 'b1', 'b2']:
             if param not in cam_dict.keys():
                 cam_dict[param] = '0.0'
 
