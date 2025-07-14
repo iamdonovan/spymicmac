@@ -39,6 +39,8 @@ def _argparser():
                          help="strategy for generating GCPs. Must be one of: grid, random, or chebyshev. "
                               "Note that if 'random' is used, density is the approximate number of points, "
                               "rather than the distance between grid points (default: grid).")
+    _parser.add_argument('--dir_homol', action='store', type=str, default='Homol',
+                         help="the name of the Homol directory to use for Campari")
     _parser.add_argument('-density', action='store', type=int, default=200,
                          help='pixel spacing to look for GCPs (default: 200)')
     _parser.add_argument('-no_allfree', action='store_true',

@@ -138,7 +138,8 @@ def batch_resample(imlist: list, args) -> None:
     pool.join()
 
 
-def _handle_steps(proc_steps, steps, skips):
+def _handle_steps(proc_steps, steps, skips, opt_steps=[], option=None):
+
     if type(steps) is str:
         assert steps in set(proc_steps + ['all']), f"steps must be one of {['all'] + proc_steps}"
     else:
@@ -157,7 +158,21 @@ def _handle_steps(proc_steps, steps, skips):
         if type(steps) is not list: steps = [ steps ]
         do_step = [step in steps for step in proc_steps]
 
-    do = dict(zip(proc_steps, do_step))
+    if type(option) is str:
+        assert option in set(opt_steps + ['all', 'none']), f"option must be one of {['all', 'none'] + opt_steps}"
+    else:
+        for opt in option:
+            assert opt in opt_steps, f"{opt} not recognized"
+
+    if option == 'all':
+        do_step += [True] * len(opt_steps)
+    elif option == 'none':
+        do_step += [False] * len(opt_steps)
+    else:
+        if type(option) is not list: option = [ option ]
+        do_step += [step in option for step in opt_steps]
+
+    do = dict(zip(proc_steps + opt_steps, do_step))
 
     if skips != 'none':
         if type(skips) is not list: skips = [ skips ]
@@ -168,7 +183,8 @@ def _handle_steps(proc_steps, steps, skips):
     return do
 
 
-def preprocess_kh9_mc(steps: Union[str, list] = 'all', skip: Union[str, list] = 'none', nproc: Union[int, str] = 1,
+def preprocess_kh9_mc(steps: Union[str, list] = 'all', skip: Union[str, list] = 'none',
+                      option: Union[str, list] = 'none', nproc: Union[int, str] = 1,
                       add_sfs: bool = False, cam_csv: str = 'camera_defs.csv', tar_ext: str = '.tgz',
                       is_reversed: bool = False, overlap: int = 2000, block_size: int = 2000, blend: bool = False,
                       scale: int = 70, clip_limit: float = 0.005, res_low: int = 400, res_high: int = 1200,
@@ -183,20 +199,30 @@ def preprocess_kh9_mc(steps: Union[str, list] = 'all', skip: Union[str, list] = 
     - join: joins scanned image halves
     - reseau: finds reseau marker locations in the joined image
     - erase: erases reseau markers from image
-    - filter: use a 1-sigma gaussian filter to smooth the images before resampling
     - resample: resamples images to common size using the reseau marker locations
-    - balance: use contrast-limited adaptive histogram equalization (clahe) to improve contrast in the image
     - tapioca: calls mm3d Tapioca MulScale to find tie points
     - tapas: calls mm3d Tapas to calibrate camera model, find relative image orientation
     - aperi: calls mm3d AperiCloud to create point cloud using calibrated camera model
+
+    Additional optional steps can be included using the 'option' argument:
+
+    - filter: use a 1-sigma gaussian filter to smooth the images before resampling. Done before resampling the images.
+    - balance: use contrast-limited adaptive histogram equalization (clahe) to improve contrast in the image. Done
+        after resampling the images.
+    - schnaps: calls mm3d Schnaps to clean/filter tie points. Done after calling Tapioca and before calling Tapas.
 
     To run steps individually, pass them to the steps argument as a list. For example, to only run the 'reseau' and
     'erase' steps:
 
         preprocess_kh9_mc(steps=['reseau', 'erase'])
 
-    :param steps: The pre-processing steps to run
+    Similarly, to run the 'reseau', 'erase', and 'balance' steps:
+
+        preprocess_kh9_mc(steps=['reseau', 'erase'], option='balance')
+
+    :param steps: The default pre-processing steps to run
     :param skip: The pre-processing steps to skip
+    :param option: The optional pre-processing steps to run
     :param nproc: The number of sub-processes to use - either an integer value, or 'max'. If 'max',
         uses mp.cpu_count() to determine the total number of processors available.
     :param add_sfs: use SFS to help find tie points in low-contrast images
@@ -224,10 +250,10 @@ def preprocess_kh9_mc(steps: Union[str, list] = 'all', skip: Union[str, list] = 
         nproc = mp.cpu_count()
         print(f"Using {nproc} processors for steps that use multiprocessing.")
 
-    proc_steps = ['extract', 'join', 'reseau', 'erase', 'filter', 'resample',
-                  'balance', 'tapioca', 'tapas', 'aperi']
+    proc_steps = ['extract', 'join', 'reseau', 'erase', 'resample', 'tapioca', 'tapas', 'aperi']
+    opt_steps = ['filter', 'balance', 'schnaps']
 
-    do = _handle_steps(proc_steps, steps, skip)
+    do = _handle_steps(proc_steps, steps, skip, opt_steps=opt_steps, option=option)
 
     # initialize the xml files needed
     initialize_kh9_mc(add_sfs=add_sfs, cam_csv=cam_csv)
@@ -329,9 +355,19 @@ def preprocess_kh9_mc(steps: Union[str, list] = 'all', skip: Union[str, list] = 
         if exit_code != 0:
             raise RuntimeError('Error in mm3d Tapioca - check Tapioca output for details.')
 
+    # run schnaps
+    if do['schnaps']:
+        exit_code = micmac.schnaps("OIS.*tif")
+        if exit_code != 0:
+            raise RuntimeError('Error in mm3d Schnaps - check Schnaps output for details.')
+
     # run tapas
     if do['tapas']:
-        exit_code = micmac.tapas(camera_model, ori, in_cal=init_cal, lib_foc=lib_foc, lib_pp=lib_pp, lib_cd=lib_cd)
+        tapas_kwargs = {'in_cal': init_cal, 'lib_foc': lib_foc, 'lib_pp': lib_pp, 'lib_cd': lib_cd}
+        if do['schnaps']:
+            tapas_kwargs['dir_homol'] = 'Homol_mini'
+
+        exit_code = micmac.tapas(camera_model, ori, **tapas_kwargs)
         if exit_code != 0:
             raise RuntimeError('Error in mm3d Tapas - check Tapas output for details.')
 
