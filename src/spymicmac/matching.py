@@ -1709,5 +1709,5 @@ def match_halves(left: NDArray, right: NDArray, overlap: int, block_size: int = 
     num_inliers = [np.count_nonzero(inl) for inl in inliers]
     best_ind = np.argmax(num_inliers)
 
-    print(f"{np.count_nonzero(num_inliers[best_ind])} tie points found")
+    print(f"{num_inliers[best_ind]} tie points found")
     return models[best_ind], num_inliers[best_ind]
