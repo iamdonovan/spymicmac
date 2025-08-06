@@ -10,6 +10,7 @@ import numpy as np
 import pandas as pd
 from glob import glob
 from skimage import io, filters, exposure
+from skimage.restoration import denoise_bilateral
 from . import micmac, resample, matching, image
 from typing import Union
 
@@ -206,8 +207,9 @@ def preprocess_kh9_mc(steps: Union[str, list] = 'all', skip: Union[str, list] = 
 
     Additional optional steps can be included using the 'option' argument:
 
-    - filter: use a 1-sigma gaussian filter to smooth the images before resampling. Done before resampling the images.
-    destripe: remove horizontal/vertical scanner-induced stripes from images
+    - denoise: use bi-lateral denoising to remove grain from the images before resampling.
+    - filter: use a 1-sigma gaussian filter to smooth the images before resampling.
+    - destripe: remove horizontal/vertical scanner-induced stripes from images
     - balance: use contrast-limited adaptive histogram equalization (clahe) to improve contrast in the image. Done
         after resampling the images.
     - schnaps: calls mm3d Schnaps to clean/filter tie points. Done after calling Tapioca and before calling Tapas.
@@ -252,7 +254,7 @@ def preprocess_kh9_mc(steps: Union[str, list] = 'all', skip: Union[str, list] = 
         print(f"Using {nproc} processors for steps that use multiprocessing.")
 
     proc_steps = ['extract', 'join', 'reseau', 'erase', 'resample', 'tapioca', 'tapas', 'aperi']
-    opt_steps = ['filter', 'destripe', 'balance', 'schnaps']
+    opt_steps = ['filter', 'denoise', 'destripe', 'balance', 'schnaps']
 
     do = _handle_steps(proc_steps, steps, skip, opt_steps=opt_steps, option=option)
 
@@ -293,6 +295,13 @@ def preprocess_kh9_mc(steps: Union[str, list] = 'all', skip: Union[str, list] = 
                 image.join_hexagon(fn_img, **join_args)
                 shutil.move(fn_img + '_a.tif', 'halves')
                 shutil.move(fn_img + '_b.tif', 'halves')
+
+    if do['denoise']:
+        print('Removing noise from images using bilateral denoising.')
+        for fn_img in imlist:
+            print(fn_img)
+            img_adj = (255 * denoise_bilateral(io.imread(fn_img + '.tif'))).astype(np.uint8)
+            io.imsave(fn_img + '.tif', img_adj)
 
     if do['reseau']:
         # if we're doing all steps, check that we need to; if we explicitly asked to
@@ -350,6 +359,7 @@ def preprocess_kh9_mc(steps: Union[str, list] = 'all', skip: Union[str, list] = 
             img_adj = image.high_low_subtract(img)
             img_adj = image.balance_image(img_adj, clip_limit=clip_limit)
             io.imsave('OIS-Reech_' + fn_img + '.tif', img_adj.astype(np.uint8))
+
     elif do['destripe']:
         print('Removing scanner stripes by subtracting row/column median values.')
         for fn_img in imlist:
@@ -357,6 +367,7 @@ def preprocess_kh9_mc(steps: Union[str, list] = 'all', skip: Union[str, list] = 
             img = io.imread('OIS-Reech_' + fn_img + '.tif')
             img_adj = image.high_low_subtract(img)
             io.imsave('OIS-Reech_' + fn_img + '.tif', img_adj.astype(np.uint8))
+
     elif do['balance']:
         print('Using CLAHE to balance image contrast')
         for fn_img in imlist:
