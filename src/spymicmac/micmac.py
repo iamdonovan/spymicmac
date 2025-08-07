@@ -28,6 +28,8 @@ from typing import Union
 from numpy.typing import NDArray
 
 
+pd.options.mode.chained_assignment = None  # default='warn'
+
 ######################################################################################################################
 # MicMac interfaces - write xml files for MicMac to read
 ######################################################################################################################
@@ -936,7 +938,7 @@ def write_image_mesures(imlist: list, gcps: Union[pd.DataFrame, gpd.GeoDataFrame
         ort_img = gu.Raster.from_array(resample.downsample(ort_img.data, fact=10),
                                        (10 * dx, 0, xmin, 0, 10 * dy, ymin), None)
 
-        footprint = (ort_img > 0).polygonize().ds.union_all()
+        footprint = (ort_img > 0).polygonize().ds.union_all().minimum_rotated_rectangle
         valid = footprint.contains(gpd.points_from_xy(gcps.rel_x, gcps.rel_y))
 
         impts = pd.read_csv(f"Auto-{im}.txt", sep=' ', names=['j', 'i'])
@@ -1868,10 +1870,10 @@ def iterate_campari(gcps: pd.DataFrame, out_dir: str, match_pattern: str, subscr
 
     gcps['camp_xy'] = np.sqrt(gcps.camp_xres ** 2 + gcps.camp_yres ** 2)
 
-    while any([np.any(np.abs(gcps.camp_res - gcps.camp_res.median()) > 2 * register.nmad(gcps.camp_res)),
-               np.any(np.abs(gcps.camp_dist - gcps.camp_dist.median()) > 2 * register.nmad(gcps.camp_dist)),
-               gcps.camp_res.max() > 2]) and niter <= max_iter:
-        valid_inds = np.logical_and.reduce((np.abs(gcps.camp_dist - gcps.camp_dist.median()) < 2 * register.nmad(gcps.camp_dist),
+    while any([np.any(np.abs(gcps.camp_res - gcps.camp_res.median()) > 4 * register.nmad(gcps.camp_res)),
+               np.any(np.abs(gcps.camp_dist - gcps.camp_dist.median()) > 4 * register.nmad(gcps.camp_dist)),
+               gcps.camp_res.max() > 2]) and niter < max_iter:
+        valid_inds = np.logical_and.reduce((np.abs(gcps.camp_dist - gcps.camp_dist.median()) < 4 * register.nmad(gcps.camp_dist),
                                             gcps.camp_res < gcps.camp_res.max()))
         if np.count_nonzero(valid_inds) < 10:
             break

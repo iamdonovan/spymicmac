@@ -288,15 +288,29 @@ def _get_mask(footprints: gpd.GeoDataFrame, img: gu.Raster, imlist: list, landma
     mask.data[mask.data == 1] = 0
 
     if landmask is not None:
-        lmask = gu.Vector(landmask).create_mask(img)
+        lmask = _safe_rasterize(landmask, img, True)
         mask[~lmask] = 0
     if glacmask is not None:
-        gmask = gu.Vector(glacmask).create_mask(img)
+        gmask = _safe_rasterize(glacmask, img, False)
         mask[gmask] = 0
 
     mask[~fmask] = 0
 
     return mask, fmask, img
+
+
+def _safe_rasterize(shape, img, inclusive=True):
+    try:
+        _mask = gu.Vector(shape).create_mask(img)
+    except ValueError as e:
+        print("No valid geometry objects found to rasterize. Be sure to double-check your input files.")
+        _mask = img.copy(new_array=np.ones_like(img.data))
+        if inclusive:
+            _mask = _mask == 1
+        else:
+            _mask = _mask == 0
+
+    return _mask
 
 
 def _search_size(imshape):
@@ -617,19 +631,22 @@ def register_relative(dirmec: str, fn_dem: Union[str, Path], fn_ref: Union[str, 
     gcps['offset'] = np.sqrt(gcps['dj'] ** 2 + gcps['di'] ** 2)
     thresh = np.ceil(min(20, gcps['offset'].median() + 4 * nmad(gcps['offset'])))
 
-    Mref, inliers_ref = ransac((gcps[['search_j', 'search_i']].values, gcps[['match_j', 'match_i']].values),
-                               AffineTransform, min_samples=6, residual_threshold=thresh, max_trials=25000)
+    models = []
+    inliers = []
 
-    num_inliers = np.count_nonzero(inliers_ref)
-    niter = 0
+    for ii in range(20):
+        mod, inl = ransac((gcps[['search_j', 'search_i']].values, gcps[['match_j', 'match_i']].values),
+                          AffineTransform, min_samples=6, residual_threshold=thresh, max_trials=5000)
+        models.append(mod)
+        inliers.append(inl)
 
-    while num_inliers < 10 and niter < 10:
-        Mref, inliers_ref = ransac((gcps[['search_j', 'search_i']].values, gcps[['match_j', 'match_i']].values),
-                                   AffineTransform, min_samples=6, residual_threshold=thresh, max_trials=25000)
-        num_inliers = np.count_nonzero(inliers_ref)
-        niter += 1
+    num_inliers = [np.count_nonzero(inl) for inl in inliers]
+    best_ind = np.argmax(num_inliers)
 
-    if num_inliers < 10:
+    Mref = models[best_ind]
+    inliers_ref = inliers[best_ind]
+
+    if num_inliers[best_ind] < 10:
         raise ValueError("Unable to estimate valid transformation using matches found.")
 
     gcps['aff_resid'] = Mref.residuals(gcps[['search_j', 'search_i']].values,
@@ -673,14 +690,7 @@ def register_relative(dirmec: str, fn_dem: Union[str, Path], fn_ref: Union[str, 
     gcps = micmac.bascule(gcps, out_dir, match_pattern, subscript, ori)
     gcps['res_dist'] = np.sqrt(gcps.xres ** 2 + gcps.yres ** 2)
 
-    gcps = gcps.loc[np.abs(gcps.res_dist - gcps.res_dist.median()) < 3 * nmad(gcps.res_dist)]
-    # gcps = gcps[np.logical_and(np.abs(gcps.xres - gcps.xres.median()) < 2 * nmad(gcps.xres),
-    #                            np.abs(gcps.yres - gcps.yres.median()) < 2 * nmad(gcps.yres))]
-
-    micmac.save_gcps(gcps, out_dir, utm_str, subscript)
-    gcps = micmac.bascule(gcps, out_dir, match_pattern, subscript, ori)
-    gcps['res_dist'] = np.sqrt(gcps.xres ** 2 + gcps.yres ** 2)
-    gcps = gcps.loc[np.abs(gcps.res_dist - gcps.res_dist.median()) < 3 * nmad(gcps.res_dist)]
+    gcps = gcps.loc[np.abs(gcps.res_dist - gcps.res_dist.median()) < 4 * nmad(gcps.res_dist)]
     # gcps = gcps[np.logical_and(np.abs(gcps.xres - gcps.xres.median()) < 2 * nmad(gcps.xres),
     #                            np.abs(gcps.yres - gcps.yres.median()) < 2 * nmad(gcps.yres))]
 
