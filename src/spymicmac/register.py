@@ -2,6 +2,7 @@
 spymicmac.register is a collection of tools for registering images and finding GCPs.
 """
 import os
+import warnings
 from pathlib import Path
 import re
 import subprocess
@@ -20,6 +21,7 @@ from shapely.geometry.polygon import Polygon
 from skimage.measure import ransac
 from skimage.transform import AffineTransform, warp
 from . import data, image, matching, micmac, orientation
+from pyogrio.errors import DataSourceError
 from numpy.typing import NDArray
 from typing import Union
 from skimage.transform._geometric import _GeometricTransform
@@ -258,7 +260,8 @@ def _get_footprint_mask(shpfile: Union[gpd.GeoDataFrame, str], rast: gu.Raster,
         return maskout
 
 
-def _get_mask(footprints: gpd.GeoDataFrame, img: gu.Raster, imlist: list, landmask: Union[str, Path, None] = None,
+def _get_mask(footprints: gpd.GeoDataFrame, img: gu.Raster, imlist: list,
+              landmask: Union[str, Path, None] = None,
               glacmask: Union[str, Path, None] = None) -> tuple[gu.Mask, gu.Raster, gu.Raster]:
     """
     Create a mask for an image from different sources.
@@ -301,14 +304,24 @@ def _get_mask(footprints: gpd.GeoDataFrame, img: gu.Raster, imlist: list, landma
 
 def _safe_rasterize(shape, img, inclusive=True):
     try:
-        _mask = gu.Vector(shape).create_mask(img)
+        _mask = _load_mask_from_file(shape, img)
     except ValueError as e:
-        print("No valid geometry objects found to rasterize. Be sure to double-check your input files.")
+        warnings.warn("No valid geometry objects found to rasterize. Be sure to double-check your input files.", UserWarning)
         _mask = img.copy(new_array=np.ones_like(img.data))
         if inclusive:
             _mask = _mask == 1
         else:
             _mask = _mask == 0
+
+    return _mask
+
+
+def _load_mask_from_file(fn_mask, img):
+    try:
+        _mask = gu.Vector(fn_mask).create_mask(img)
+    except DataSourceError as e:
+        _mask = gu.Raster(fn_mask)
+        _mask = _mask.reproject(img) != 0
 
     return _mask
 
