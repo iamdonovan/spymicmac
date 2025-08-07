@@ -102,7 +102,7 @@ def optical_bar_cam(fn_img: str, flavor: str, out_name: str,
         cam = declass.get_declass_camera(fn_img)
         params = add_motion_comp(cam, params)
     else:
-        params['motion_comp'] = 1
+        params['motion_comp'] = 0.014
 
     with open(out_name, 'w') as f:
         print('VERSION_4', file=f)
