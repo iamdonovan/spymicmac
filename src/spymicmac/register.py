@@ -288,15 +288,29 @@ def _get_mask(footprints: gpd.GeoDataFrame, img: gu.Raster, imlist: list, landma
     mask.data[mask.data == 1] = 0
 
     if landmask is not None:
-        lmask = gu.Vector(landmask).create_mask(img)
+        lmask = _safe_rasterize(landmask, img, True)
         mask[~lmask] = 0
     if glacmask is not None:
-        gmask = gu.Vector(glacmask).create_mask(img)
+        gmask = _safe_rasterize(glacmask, img, False)
         mask[gmask] = 0
 
     mask[~fmask] = 0
 
     return mask, fmask, img
+
+
+def _safe_rasterize(shape, img, inclusive=True):
+    try:
+        _mask = gu.Vector(shape).create_mask(img)
+    except ValueError as e:
+        print("No valid geometry objects found to rasterize. Be sure to double-check your input files.")
+        _mask = img.copy(new_array=np.ones_like(img.data))
+        if inclusive:
+            _mask = _mask == 1
+        else:
+            _mask = _mask == 0
+
+    return _mask
 
 
 def _search_size(imshape):
