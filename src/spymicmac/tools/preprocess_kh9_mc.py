@@ -12,17 +12,16 @@ def _argparser():
     - join: joins scanned image halves
     - reseau: finds reseau marker locations in the joined image
     - erase: erases reseau markers from image
-    - filter: use a 1-sigma gaussian filter to smooth the images before resampling
     - resample: resamples images to common size using the reseau marker locations
-    - balance: use contrast-limited adaptive histogram equalization (clahe) to improve contrast in the image
     - tapioca: calls mm3d Tapioca MulScale to find tie points
-    - schnaps: calls mm3d Schnaps to clean/filter tie points    
     - tapas: calls mm3d Tapas to calibrate camera model, find relative image orientation
     - aperi: calls mm3d AperiCloud to create point cloud using calibrated camera model
 
     Additional optional steps can be included using the 'option' argument:
 
-    - filter: use a 1-sigma gaussian filter to smooth the images before resampling. Done before resampling the images.
+    - denoise: use bi-lateral denoising to remove grain from the images before resampling.
+    - filter: use a 1-sigma gaussian filter to smooth the images before resampling.
+    - destripe: remove horizontal/vertical scanner-induced stripes from images
     - balance: use contrast-limited adaptive histogram equalization (clahe) to improve contrast in the image. Done
         after resampling the images.
     - schnaps: calls mm3d Schnaps to clean/filter tie points. Done after calling Tapioca and before calling Tapas.
