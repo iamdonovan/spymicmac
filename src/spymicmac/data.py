@@ -361,7 +361,7 @@ def download_pgc_mosaic(flavor: str, imlist: Union[list, None] = None,
     elif isinstance(footprints, (str, Path)):
         footprints = gpd.read_file(footprints)
     elif isinstance(footprints, Polygon):
-        footprints = gpd.GeoDataFrame(geometry=footprints, crs='epsg:4326')
+        footprints = gpd.GeoDataFrame(geometry=[footprints], crs='epsg:4326')
 
     os.makedirs(flavor, exist_ok=True)
 
