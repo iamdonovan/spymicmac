@@ -161,6 +161,8 @@ def _handle_steps(proc_steps, steps, skips, opt_steps=[], option=None):
 
     if type(option) is str:
         assert option in set(opt_steps + ['all', 'none']), f"option must be one of {['all', 'none'] + opt_steps}"
+    elif option is None:
+        pass
     else:
         for opt in option:
             assert opt in opt_steps, f"{opt} not recognized"
