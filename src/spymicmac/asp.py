@@ -77,7 +77,8 @@ def add_motion_comp(cam: str, params: dict) -> dict:
 def optical_bar_cam(fn_img: str, flavor: str, out_name: str,
                     fprint: Union[Polygon, None] = None,
                     scan_res: float = 7e-6,
-                    mean_el: Union[float, int] = 1000) -> None:
+                    mean_el: Union[float, int] = 1000,
+                    use_3d_vel: bool = True) -> None:
     """
     Generate a sample ASP camera file for a KH-4 Optical Bar camera.
 
@@ -88,6 +89,7 @@ def optical_bar_cam(fn_img: str, flavor: str, out_name: str,
     :param fprint: an optional image, footprint used to estimate the initial camera position
     :param scan_res: the image scanning resolution, in m per pixel (e.g., 7 microns -> 7.0e-6)
     :param mean_el: the mean elevation covered by the image
+    :param use_3d_vel: use a 3D velocity vector, rather than a 1D speed. Requires ASP 3.6.0 or greater.
     """
     assert flavor in declass.sample_params.keys(), f"flavor must be one of {list(declass.sample_params.keys())}"
     ds = gdal.Open(fn_img)
@@ -127,17 +129,26 @@ def optical_bar_cam(fn_img: str, flavor: str, out_name: str,
         print(f'iC = {icx} {icy} {icz}', file=f)
         print('iR = 1 0 0 0 1 0 0 0 1', file=f)
 
-        print(f'speed = {params["speed"]}', file=f)
+        if use_3d_vel:
+            print('speed = 0', file=f)
+        else:
+            print(f'speed = {params["speed"]}', file=f)
         print('mean_earth_radius = 6371000', file=f)
         # need a better value than this
         print(f"mean_surface_elevation = {mean_el}", file=f)
         print(f"motion_compensation_factor = {params['motion_comp']}", file=f)
 
-        if _isaft(fn_img):
-            print('scan_dir = left', file=f)
-        else:
+        if use_3d_vel:
             print('scan_dir = right', file=f)
+        else:
+            if _isaft(fn_img):
+                print('scan_dir = left', file=f)
+            else:
+                print('scan_dir = right', file=f)
 
+        # new format
+        if use_3d_vel:
+            print('velocity = 0 0 0', file=f)
 
 def cam_from_footprint(fn_img: str, flavor: str, scan_res: float, fn_dem: Union[str, Path],
                        north_up: bool=True, footprints: gpd.GeoDataFrame=None, mean_el: Union[float, int]=1000):
