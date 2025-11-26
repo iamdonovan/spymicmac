@@ -308,3 +308,27 @@ def meas_to_asp_gcp(fn_gcp: Union[str, Path], fn_meas: Union[str, Path], imlist:
                     except IndexError as e:
                         continue
                 print(out_gcp, file=f)
+
+
+def mapproject(fn_dem: Union[str, Path], fn_img: Union[str, Path], fn_cam: Union[str, Path],
+               res: Union[None, float, int]=None, fn_out: Union[str, Path]=None):
+    """
+    Run mapproject to project an image using a DEM.
+
+    :param fn_dem: the filename of the DEM to use
+    :param fn_img: the filename of the image
+    :param fn_cam: the filename of the camera corresponding to the image
+    :param res: the resolution (ground sample distance) of the output file
+    :param fn_out: the filename of the output image
+    """
+
+    if fn_out is None:
+        fn_out = '.'.join([os.path.splitext(fn_img)[0], 'map', os.path.splitext(fn_img)[-1]])
+
+    cl_args = ['mapproject', fn_dem, fn_img, fn_cam, fn_out]
+
+    if res is not None:
+        cl_args.extend(['--tr', str(res)])
+
+    p = subprocess.Popen(cl_args)
+    p.wait()
