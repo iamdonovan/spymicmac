@@ -5,11 +5,14 @@ import os
 from pathlib import Path
 import multiprocessing as mp
 import PIL.Image
+import pandas as pd
 from osgeo import gdal
-from skimage import io
-from skimage.transform import AffineTransform, SimilarityTransform, warp
-from skimage.morphology import disk
+from skimage import io, filters
+from skimage.measure import ransac, LineModelND
+from skimage.transform import AffineTransform, warp
+from shapely.geometry import Point, Polygon, LineString, MultiPoint
 from scipy import ndimage
+from scipy.stats import rankdata
 import numpy as np
 from . import image, micmac, matching
 from numpy.typing import NDArray
@@ -93,56 +96,29 @@ def rotate_from_rails(img: NDArray, rails: NDArray) -> tuple[NDArray, float]:
     return ndimage.rotate(img, angle), angle
 
 
-def crop_panoramic(fn_img: Union[str, Path], flavor: str, marker_size: int = 31, fact: Union[int, None] = None,
-                   return_vals: bool = False) -> Union[None, tuple[tuple, float]]:
+def crop_panoramic(fn_img: Union[str, Path], fact: Union[int, None] = None,
+                   fn_coords: Union[None, str, Path] = None) -> None:
     """
-    Crop a declassified panoramic (KH4 or KH9) image, after rotating based on horizontal rail markers or "wagon wheel"
-    fiducial markers.
+    Crop a declassified panoramic (KH4 or KH9) image by finding the frame.
 
     :param fn_img: the filename of the image to rotate and crop
-    :param flavor: the camera type (KH4 or KH9)
-    :param marker_size: The approximate size of the wagon wheels to identify in the image (default: 31 pixels)
     :param fact: the number by which to divide the image width and height to scale the image (default: do not scale)
-    :param return_vals: Return estimated image border and rotation angle (default: False)
-    :returns:
-        - **border** -- the estimated image border (left, right, top, bot)
-        - **angle** -- the estimated rotation angle.
-          Only returned if **return_vals** is True.
-
+    :param fn_coords:
     """
-    assert flavor in ['KH4', 'KH9'], "flavor must be one of [KH4, KH9]"
-
     img = io.imread(fn_img)
-    if flavor == 'KH4':
-        rails = matching.find_rail_marks(img, marker=disk(marker_size))
-        rotated, angle = rotate_from_rails(img, rails)
+    img_lowres = downsample(img, fact=10)
 
-        # crop the lower part of the image to avoid introducing a bright line at the bottom
-        rotated = rotated[:-int(0.1 * rails[:, 0].mean()), :]
+    if fn_coords is not None:
+        box = _load_box(fn_coords)
     else:
-        rails = matching.ocm_show_wagon_wheels(img, size=marker_size)
+        box = _find_rectangle(img_lowres)
 
-        # restrict ourselves to the top rail
-        rails = rails[rails[:, 0] < 0.1 * img.shape[0]]
+    cropped, coords = box_transform(img, box)
 
-        # refine the choice to ensure the points are on the same line
-        valid = matching._refine_rail(rails)
-
-        rotated, angle = rotate_from_rails(img, rails[valid])
-
-    # get a rough idea of where the image frame should be
-    left, right, top, bot = image.get_rough_frame(rotated)
-
-    # buffer by 0.05% (left/right) or 0.5% (top/bottom) to ensure we have a clean image
-    left += (right - left) * 0.0005
-    right -= (right - left) * 0.0005
-
-    top += (bot - top) * 0.005
-    bot -= (bot - top) * 0.005
-
-    # crop the image to the buffered window
-    print(f'Cropping to window (left, right, top, bot): {int(left)}, {int(right)}, {int(top)}, {int(bot)}')
-    cropped = rotated[int(top):int(bot), int(left):int(right)]
+    src, dst = coords
+    coords = pd.DataFrame(data={'orig_x': src[:, 0], 'orig_y': src[:, 1],
+                                'new_x': dst[:, 0], 'new_y': dst[:, 1]})
+    coords.to_csv(f"{os.path.splitext(fn_img)[0]}_coords.csv", index=False)
 
     if fact is not None:
         cropped = downsample(cropped, fact=fact)
@@ -157,10 +133,106 @@ def crop_panoramic(fn_img: Union[str, Path], flavor: str, marker_size: int = 31,
     # save the resampled image
     io.imsave('OIS-Reech_' + fn_img, cropped.astype(np.uint8))
 
-    if return_vals:
-        return (left, right, top, bot), angle
+
+def _load_box(fn_coords):
+    coords = pd.read_csv(fn_coords)
+    return Polygon(zip(coords.orig_x, coords.orig_y))
+
+
+def _find_line(img, axis):
+    peaks = np.argmax(img, axis=axis)
+
+    if axis == 0:
+        xs = np.arange(0, img.shape[1])
     else:
-        return None
+        xs = np.arange(0, img.shape[0])
+
+    model, inliers = ransac(np.column_stack([xs, peaks]), LineModelND, min_samples=2, residual_threshold=5)
+    p = np.polyfit(xs[inliers], peaks[inliers], 1)
+
+    return p, xs[inliers], peaks[inliers]
+
+
+def _find_rectangle(img):
+    filtered = filters.sobel(filters.gaussian(img, 4))
+
+    cols = np.arange(0, filtered.shape[1], 100)
+    rows = np.arange(0, filtered.shape[0], 100)
+
+    row_width = int(0.3 * filtered.shape[0])
+    col_width = int(0.1 * filtered.shape[1])
+
+    p, xtop, ptop = _find_line(filtered[:row_width, :], 0)
+    top_line = LineString(list(zip(cols, np.polyval(p, cols))))
+
+    p, xbot, pbot = _find_line(filtered[-row_width:-100, :], 0)
+    bot_line = LineString(list(zip(cols, np.polyval(p, cols) + (filtered.shape[0] - row_width))))
+
+    p, xleft, pleft = _find_line(filtered[:, :col_width], 1)
+    left_line = LineString(list(zip(np.polyval(p, rows), rows)))
+
+    p, xright, pright = _find_line(filtered[:, -col_width:], 1)
+    right_line = LineString(list(zip(np.polyval(p, rows) + (filtered.shape[1] - col_width), rows)))
+
+    ul = top_line.intersection(left_line)
+    ur = top_line.intersection(right_line)
+    ll = bot_line.intersection(left_line)
+    lr = bot_line.intersection(right_line)
+
+    x_all = np.concatenate([xtop, xbot, pleft, pright + (filtered.shape[1] - col_width)])
+    p_all = np.concatenate([ptop, pbot + (filtered.shape[0] - row_width), xleft, xright])
+
+    points = np.array([Point(x, y) for x, y in zip(x_all, p_all)])
+    init_box = Polygon([ul, ur, lr, ll]).buffer(10, cap_style='square', join_style='mitre')
+
+    points = points[[pt.within(init_box) for pt in points]]
+
+    box = MultiPoint(points).minimum_rotated_rectangle.buffer(-13, join_style='mitre', cap_style='square')
+
+    bx, by = box.exterior.coords.xy
+
+    bx = np.array(bx) * 10
+    by = np.array(by) * 10
+
+    return Polygon(zip(bx, by))
+
+
+def box_transform(img: NDArray, rect: Polygon):
+    """
+    Crop an image to a rectangle while rotating so the image is horizontal, using an affine transformation.
+
+    :param img: the image to crop + rotate
+    :param rect: the rectangle representing the bounds of the new image
+    """
+    # get width/height of the rectangle
+    x, y = rect.exterior.coords.xy
+    edges = [Point(x[ind], y[ind]).distance(Point(x[ind + 1], y[ind + 1])) for ind in range(4)]
+
+    height = int(min(edges))
+    width = int(max(edges))
+
+    # rank the x, y values to find the lowest combined rank (should be UL corner)
+    # if the rectangle is given by minimum_rotated_rectangle, it is oriented - so we should be able
+    # to cycle around the corners counter-clockwise, starting from the upper left corner
+    comb_ranks = rankdata(x[:-1]) + rankdata(y[:-1])
+    ul_ind = np.argmin(comb_ranks)
+    ll_ind = (ul_ind + 1) % 4
+    lr_ind = (ll_ind + 1) % 4
+    ur_ind = (lr_ind + 1) % 4
+
+    ordered_x = [x[ul_ind], x[ll_ind], x[lr_ind], x[ur_ind]]
+    ordered_y = [y[ul_ind], y[ll_ind], y[lr_ind], y[ur_ind]]
+
+    new_x = [0, 0, width, width]
+    new_y = [0, height, height, 0]
+
+    src = np.column_stack([ordered_x, ordered_y])
+    dst = np.column_stack([new_x, new_y])
+
+    tfm = AffineTransform()
+    tfm.estimate(src, dst)
+
+    return warp(img, tfm.inverse, output_shape=(height, width), preserve_range=True, order=3), (src, dst)
 
 
 def crop_from_extent(fn_img: Union[str, Path], border: NDArray,

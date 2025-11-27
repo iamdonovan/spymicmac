@@ -507,26 +507,10 @@ def preprocess_pan(flavor: str, steps: Union[str, list] = 'all', skip: Union[str
         print('Rotating and cropping images')
         os.makedirs('Orig', exist_ok=True)
 
-        img_params = pd.DataFrame(columns=['fn_img', 'left', 'right', 'top', 'bot', 'angle'])
-
         for fn_img in imlist:
             print(fn_img)
-            border, angle = resample.crop_panoramic(fn_img + '.tif', flavor, marker_size=marker_size,
-                                                    fact=factor, return_vals=True)
-            left, right, top, bot = border
-
+            resample.crop_panoramic(fn_img + '.tif')
             shutil.move(fn_img + '.tif', 'Orig')
-
-            row = pd.Series()
-            row['fn_img'] = fn_img
-            row['left'] = int(left)
-            row['right'] = int(right)
-            row['top'] = int(top)
-            row['bot'] = int(bot)
-            row['angle'] = angle
-
-            img_params.loc[len(img_params)] = row
-            img_params.to_csv('crop_parameters.csv', index=False)
 
     if do['balance']:
         print('Using CLAHE to balance image contrast')
