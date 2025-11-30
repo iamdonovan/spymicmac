@@ -7,7 +7,8 @@ import multiprocessing as mp
 import PIL.Image
 import pandas as pd
 from osgeo import gdal
-from skimage import io, filters
+from skimage import io, filters, exposure
+from skimage.feature import peak_local_max, canny
 from skimage.measure import ransac, LineModelND
 from skimage.transform import AffineTransform, warp
 from shapely.geometry import Point, Polygon, LineString, MultiPoint
@@ -140,54 +141,80 @@ def _load_box(fn_coords):
 
 
 def _find_line(img, axis):
-    peaks = np.argmax(img, axis=axis)
+    row, col = img.nonzero()
 
     if axis == 0:
         xs = np.arange(0, img.shape[1])
     else:
         xs = np.arange(0, img.shape[0])
 
-    model, inliers = ransac(np.column_stack([xs, peaks]), LineModelND, min_samples=2, residual_threshold=5)
-    p = np.polyfit(xs[inliers], peaks[inliers], 1)
+    model, inliers = ransac(np.column_stack([col, row]), LineModelND, min_samples=2,
+                            residual_threshold=20, max_trials=25000, rng=0)
 
-    return p, xs[inliers], peaks[inliers]
+    for thresh in [10, 5]:
+        row, col = row[inliers], col[inliers]
+        model, inliers = ransac(np.column_stack([col, row]), LineModelND, min_samples=2,
+                                residual_threshold=thresh, max_trials=5000, rng=0)
+
+    p = np.polyfit(col[inliers], row[inliers], 1)
+
+    return p, col[inliers], row[inliers]
 
 
 def _find_rectangle(img):
-    filtered = filters.sobel(filters.gaussian(img, 4))
 
-    cols = np.arange(0, filtered.shape[1], 100)
-    rows = np.arange(0, filtered.shape[0], 100)
+    stretched = img.copy()
+    stretched[img > np.percentile(img[img > 0], 25)] = 255
+    edges = canny(stretched, sigma=3, low_threshold=np.percentile(img, 10), high_threshold=np.percentile(img, 25))
 
-    row_width = int(0.3 * filtered.shape[0])
-    col_width = int(0.1 * filtered.shape[1])
+    # parameter to tweak the width of the search window around each candidate line
+    width = 50
 
-    p, xtop, ptop = _find_line(filtered[:row_width, :], 0)
-    top_line = LineString(list(zip(cols, np.polyval(p, cols))))
+    cols = np.arange(0, edges.shape[1], 100)
+    rows = np.arange(0, edges.shape[0], 100)
 
-    p, xbot, pbot = _find_line(filtered[-row_width:-100, :], 0)
-    bot_line = LineString(list(zip(cols, np.polyval(p, cols) + (filtered.shape[0] - row_width))))
+    row_max = int(0.3 * edges.shape[0])
 
-    p, xleft, pleft = _find_line(filtered[:, :col_width], 1)
-    left_line = LineString(list(zip(np.polyval(p, rows), rows)))
+    col_max = int(0.1 * edges.shape[1])
 
-    p, xright, pright = _find_line(filtered[:, -col_width:], 1)
-    right_line = LineString(list(zip(np.polyval(p, rows) + (filtered.shape[1] - col_width), rows)))
+    # find big horizontal lines
+    hori = peak_local_max(edges.sum(axis=1), threshold_rel=0.3, min_distance=50, exclude_border=False)
+
+    top_ind = max(hori[hori < row_max])
+    bot_ind = min(hori[hori > (edges.shape[0] - row_max)])
+
+    p, xtop, ptop = _find_line(edges[top_ind-width:top_ind+width, :], 0)
+    top_line = LineString(list(zip(cols, np.polyval(p, cols) + (top_ind - width))))
+
+    p, xbot, pbot = _find_line(edges[bot_ind-width:bot_ind+width, :], 0)
+    bot_line = LineString(list(zip(cols, np.polyval(p, cols) + (bot_ind - width))))
+
+    # find big vertical lines
+    vert = peak_local_max(edges.sum(axis=0), threshold_rel=0.3, min_distance=50, exclude_border=False)
+
+    left_ind = max(vert[vert < col_max])
+    right_ind = min(vert[vert > (edges.shape[1] - col_max)])
+
+    p, xleft, pleft = _find_line(edges[:, left_ind-width:left_ind+width], 1)
+    left_line = LineString(list(zip(rows + (left_ind - width), np.polyval(p, rows))))
+
+    p, xright, pright = _find_line(edges[:, right_ind-width:right_ind+width], 1)
+    right_line = LineString(list(zip(rows + (right_ind - width), np.polyval(p, rows))))
 
     ul = top_line.intersection(left_line)
     ur = top_line.intersection(right_line)
     ll = bot_line.intersection(left_line)
     lr = bot_line.intersection(right_line)
 
-    x_all = np.concatenate([xtop, xbot, pleft, pright + (filtered.shape[1] - col_width)])
-    p_all = np.concatenate([ptop, pbot + (filtered.shape[0] - row_width), xleft, xright])
+    x_all = np.concatenate([xtop, xbot, xleft + (left_ind - width), xright + (right_ind - width)])
+    p_all = np.concatenate([ptop + (top_ind - width), pbot + (bot_ind - width), pleft, pright])
 
     points = np.array([Point(x, y) for x, y in zip(x_all, p_all)])
-    init_box = Polygon([ul, ur, lr, ll]).buffer(10, cap_style='square', join_style='mitre')
+    init_box = Polygon([ul, ur, lr, ll]).buffer(5, cap_style='square', join_style='mitre')
 
     points = points[[pt.within(init_box) for pt in points]]
 
-    box = MultiPoint(points).minimum_rotated_rectangle.buffer(-13, join_style='mitre', cap_style='square')
+    box = MultiPoint(points).minimum_rotated_rectangle.buffer(-15, join_style='mitre', cap_style='square')
 
     bx, by = box.exterior.coords.xy
 
