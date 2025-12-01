@@ -163,9 +163,12 @@ def _find_line(img, axis):
 
 def _find_rectangle(img):
 
+    border = np.concatenate([img[:200, :].flatten(), img[:, :200].flatten(),
+                             img[-200:, :].flatten(), img[:, -200:].flatten()])
+
     stretched = img.copy()
-    stretched[img > np.percentile(img[img > 0], 25)] = 255
-    edges = canny(stretched, sigma=3, low_threshold=np.percentile(img, 10), high_threshold=np.percentile(img, 25))
+    stretched[img > np.percentile(border, 75)] = 255
+    edges = canny(stretched, sigma=3, low_threshold=np.percentile(img, 10), high_threshold=np.percentile(img, 20))
 
     # parameter to tweak the width of the search window around each candidate line
     width = 50
