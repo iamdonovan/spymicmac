@@ -7,6 +7,7 @@ import subprocess
 import numpy as np
 import pyproj
 import geoutils as gu
+import pandas as pd
 import geopandas as gpd
 from osgeo import gdal
 from shapely.ops import split, orient
@@ -287,28 +288,7 @@ def meas_to_asp_gcp(fn_gcp: Union[str, Path], fn_meas: Union[str, Path], imlist:
 
     gcp_list = sorted(meas.name.unique())
 
-    with open(outname, 'w') as f:
-        for gcp in gcp_list:
-            _gcp = gcps.loc[gcp]
-            lon, lat = _gcp.geometry.x, _gcp.geometry.y
-
-            out_gcp = ','.join([gcp.strip('GCP'), str(lat), str(lon), str(_gcp.elevation), '1.0', '1.0', '1.0'])
-
-            if not singles:
-                if all([gcp in meas.loc[meas.image == img]['name'].values for img in imlist]):
-                    for img in sorted(imlist):
-                        row, col = meas.loc[(meas.image == img) & (meas.name == gcp), ['i', 'j']].values[0]
-                        out_gcp += ',' + ','.join([img, str(col / scale), str(row / scale), '1.0', '1.0'])
-                    print(out_gcp, file=f)
-            else:
-                for img in sorted(imlist):
-                    try:
-                        row, col = meas.loc[(meas.image == img) & (meas.name == gcp), ['i', 'j']].values[0]
-                        out_gcp += ',' + ','.join([img, str(col / scale), str(row / scale), '1.0', '1.0'])
-                    except IndexError as e:
-                        continue
-                print(out_gcp, file=f)
-
+    write_asp_gcp(outname, gcps, gcp_list, imlist=imlist, scale=scale, singles=singles, meas=meas)
 
 def mapproject(fn_dem: Union[str, Path], fn_img: Union[str, Path], fn_cam: Union[str, Path],
                res: Union[None, float, int]=None, fn_out: Union[str, Path]=None):
@@ -332,3 +312,115 @@ def mapproject(fn_dem: Union[str, Path], fn_img: Union[str, Path], fn_cam: Union
 
     p = subprocess.Popen(cl_args)
     p.wait()
+
+
+def write_asp_gcp(fn_gcp: Union[str, Path], gcp_df: gpd.GeoDataFrame,
+                  gcp_list: Union[None, list] = None, imlist: Union[None, list] = None,
+                  scale: int = 1, singles: bool = True, meas: Union[None, pd.DataFrame] = None,
+                  headers: Union[None, list[str]] = None) -> None:
+    """
+    Write GCPs in ASP format.
+
+    :param fn_gcp: the filename to write the GCPs to
+    :param gcp_df: a GeoDataFrame of GCP locations
+    :param gcp_list: a list of which GCPs to write
+    :param imlist: a list of what images to write GCPs for
+    :param scale: the scale to use for scaling image coordinates
+    :param singles: whether to write GCPs that are only found in one image
+    :param meas: a DataFrame of image measurements, as created by mm3d SaisieAppuis and read by micmac.parse_im_meas()
+    :param headers: the header rows from the original .gcp file
+    """
+    with open(fn_gcp, 'w') as f:
+        if gcp_list is not None:
+            for gcp in gcp_list:
+                _gcp = gcp_df.loc[gcp]
+                lon, lat = _gcp.geometry.x, _gcp.geometry.y
+
+                out_gcp = ','.join([gcp.strip('GCP'), str(lat), str(lon), str(_gcp.elevation), '1.0', '1.0', '1.0'])
+
+                if not singles:
+                    if all([gcp in meas.loc[meas.image == img]['name'].values for img in imlist]):
+                        for img in sorted(imlist):
+                            row, col = meas.loc[(meas.image == img) & (meas.name == gcp), ['i', 'j']].values[0]
+                            out_gcp += ',' + ','.join([img, str(col / scale), str(row / scale), '1.0', '1.0'])
+                        print(out_gcp, file=f)
+                else:
+                    for img in sorted(imlist):
+                        try:
+                            row, col = meas.loc[(meas.image == img) & (meas.name == gcp), ['i', 'j']].values[0]
+                            out_gcp += ',' + ','.join([img, str(col / scale), str(row / scale), '1.0', '1.0'])
+                        except IndexError as e:
+                            continue
+                    print(out_gcp, file=f)
+        else:
+            if headers is not None:
+                for header in headers:
+                    print(header, file=f)
+
+            for gcp in gcp_df.drop(columns=['geometry']).itertuples():
+                print(' '.join([str(c) for c in list(gcp)]), file=f)
+
+
+def _parse_gcp(fn_gcp):
+    cols = ['id', 'lat', 'lon', 'height_above_datum', 'sigma_x', 'sigma_y', 'sigma_z']
+    img_headers = ['image_name', 'pixel_x', 'pixel_y', 'sx_px', 'sy_px']
+
+
+    with open(fn_gcp, 'r') as f:
+        all_lines = f.readlines()
+
+        crs_wkt = all_lines[0].strip().replace('# ', '')
+
+        delim = ' '
+        ncols = len(all_lines[2].strip().split(delim))
+
+        if ncols < 2:
+            delim = ','
+            ncols = len(all_lines[2].strip().split(delim))
+
+    nimg = 0
+    while len(cols) < ncols:
+        nimg += 1
+        cols += ['.'.join([c, str(nimg)]) for c in img_headers]
+
+    cols += ['blank']
+    df = pd.read_csv(fn_gcp, skiprows=2, delimiter=delim, names=cols).set_index('id')
+    del df['blank']
+
+    return gpd.GeoDataFrame(df, geometry=gpd.points_from_xy(df.lon, df.lat, crs='epsg:4326'))
+
+
+def mask_asp_dem_gcps(fn_gcp: Union[str, Path],
+                      fn_inc: Union[None, str, Path, list[str], list[Path]] = None,
+                      fn_exc: Union[None, str, Path, list[str], list[Path]] = None) -> None:
+    """
+    Filter/mask GCPs from a .gcp file, using inclusion/exclusion masks. Inclusion masks indicate areas where points
+    inside should be included as stable terrain; exclusion masks indicate areas where points inside should be excluded.
+    At least one of fn_inc, fn_exc must be set in order to filter.
+
+    TODO: implement multiple masks (WIP)
+    :param fn_gcp: the .gcp file to filter
+    :param fn_inc: the inclusion mask(s) to use, pointing to a vector file format
+    :param fn_exc: the exclusion mask(s) to use, pointing to a vector file format
+    """
+    assert not all(el is None for el in [fn_inc, fn_exc]), "at least one mask has to be set!"
+
+    gcps = _parse_gcp(fn_gcp)
+    with open(fn_gcp, 'r') as f:
+        headers = [l.strip() for l in f.readlines() if l.strip()[0] == '#']
+
+    if fn_inc is not None:
+        inc_mask = gpd.read_file(fn_inc)
+        within_inc = inc_mask.sindex.query(gcps.geometry, predicate='intersects')[0]
+    else:
+        within_inc = gcps.index[~gcps.index.isin(gcps.index)]
+
+    if fn_exc is not None:
+        exc_mask = gpd.read_file(fn_exc)
+        within_exc = exc_mask.sindex.query(gcps.geometry, predicate='intersects')[0]
+    else:
+        within_exc = gcps.index
+
+    valid = gcps.index[(gcps.index.isin(within_inc)) & (~gcps.index.isin(within_exc))]
+
+    write_asp_gcp(fn_gcp, gcps.loc[valid], headers=headers)
