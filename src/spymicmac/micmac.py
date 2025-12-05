@@ -30,6 +30,8 @@ from numpy.typing import NDArray
 
 pd.options.mode.chained_assignment = None  # default='warn'
 
+gdal.UseExceptions()
+
 ######################################################################################################################
 # MicMac interfaces - write xml files for MicMac to read
 ######################################################################################################################

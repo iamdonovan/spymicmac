@@ -16,6 +16,9 @@ from . import data, declass, micmac
 from typing import Union
 
 
+gdal.UseExceptions()
+
+
 def _isaft(fn_img: str) -> bool:
     return os.path.splitext(fn_img)[0][-4] == 'A'
 

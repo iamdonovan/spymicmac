@@ -20,6 +20,9 @@ import geoutils as gu
 from typing import Union, List
 
 
+gdal.UseExceptions()
+
+
 def _check_data_dir() -> None:
     if not _data_dir().exists():
         os.makedirs(_data_dir(), exist_ok=True)
