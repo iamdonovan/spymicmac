@@ -20,6 +20,9 @@ from numpy.typing import NDArray
 from typing import Union
 
 
+gdal.UseExceptions()
+
+
 def downsample(img: NDArray, fact: Union[int, float] = 4) -> NDArray:
     """
     Rescale an image using Lanczos resampling
@@ -132,7 +135,14 @@ def crop_panoramic(fn_img: Union[str, Path], fact: Union[int, None] = None,
         cropped = np.fliplr(np.flipud(cropped))
 
     # save the resampled image
-    io.imsave('OIS-Reech_' + fn_img, cropped.astype(np.uint8))
+    io.imsave('tmp_' + fn_img, cropped.astype(np.uint8))
+
+    gdal.Translate('OIS-Reech_' + fn_img, 'tmp_' + fn_img,
+                   creationOptions={'TILED': 'YES', 'BLOCKXSIZE': 256, 'BLOCKYSIZE': 256,
+                                    'INTERLEAVE': 'BAND', 'compress': 'lzw'}
+                   )
+
+    os.remove('tmp_' + fn_img)
 
 
 def _load_box(fn_coords):
