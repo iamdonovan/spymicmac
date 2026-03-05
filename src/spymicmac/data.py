@@ -9,6 +9,8 @@ import zipfile
 import tarfile
 import geopandas as gpd
 import numpy as np
+import json
+from datetime import datetime, timedelta
 from pathlib import Path
 from glob import glob
 import pyproj
@@ -17,6 +19,7 @@ from rasterio.crs import CRS
 from shapely.geometry.polygon import Polygon
 from usgs import api, USGSAuthExpiredError
 import geoutils as gu
+import xdem
 from typing import Union, List
 
 
@@ -61,6 +64,8 @@ def _authenticate() -> dict:
     else:
         raise FileExistsError("Please ensure that your USGS M2M token is saved to ~/.usgs_token.")
 
+    _check_api_key()
+
     try:
         login = api.login(user, token)
     except USGSAuthExpiredError as e:
@@ -72,6 +77,18 @@ def _authenticate() -> dict:
     del user, token, creds
 
     return login
+
+
+def _check_api_key() -> None:
+    keyfile = os.path.expanduser('~/.usgs')
+    if os.path.exists(keyfile):
+        with open(keyfile, "r") as f:
+            api_key_info = json.load(f)
+
+            created = datetime.fromisoformat(api_key_info['created'])
+
+            if datetime.now() - created > timedelta(hours=2):
+                os.remove(keyfile)
 
 
 def _read_coords(result: dict) -> list:
