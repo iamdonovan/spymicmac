@@ -5,9 +5,10 @@ channels:
 dependencies:
   - python>=3.10
   - scikit-image
-  - geopandas<1.1.0
+  - geopandas
   - geoutils
-  - opencv<4.9.0
+  - xdem
+  - opencv
   - lxml
   - gdal
   - pyasn1
@@ -15,7 +16,7 @@ dependencies:
   - earthengine-api
   - imagemagick
   - exiftool
-  - pillow>9.1.0
+  - pillow
   - rtree
   - sphinx
   - sphinx-argparse
