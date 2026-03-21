@@ -416,3 +416,32 @@ def download_pgc_mosaic(flavor: str, imlist: Union[list, None] = None,
         with open(f'{flavor}_tiles.txt', 'w') as f:
             for ind, row in selection.iterrows():
                 print(row.fileurl, file=f)
+
+
+def crop_mask_dem(dem: Union[str, Path, xdem.DEM],
+                  footprints: Union[str, Path, gu.Vector],
+                  buff: Union[float, int] = 5000) -> xdem.DEM:
+    """
+    Crop and mask a DEM to the buffered extent of footprints. Mask is created using the minimum rotated rectangle of
+    the buffer of the union of all footprints.
+
+    :param dem: the DEM to crop
+    :param footprints: the footprints to use to crop and mask the DEM
+    :param buff: the distance to buffer the DEMs by
+    """
+
+    if isinstance(footprints, (str, Path)):
+        footprints = gu.Vector(footprints)
+
+    if isinstance(dem, (str, Path)):
+        dem = xdem.DEM(dem)
+
+    masked_area = footprints.union_all().to_crs(dem.crs) \
+        .buffer(buff, cap_style='square', join_style='mitre').minimum_rotated_rectangle()
+
+    masked = dem.crop(masked_area)
+
+    mask = masked_area.create_mask(masked)
+    masked[~mask] = np.nan
+
+    return masked
