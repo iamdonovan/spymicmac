@@ -7,7 +7,7 @@ import multiprocessing as mp
 import PIL.Image
 import pandas as pd
 from osgeo import gdal
-from skimage import io, filters, exposure
+from skimage import io, filters, exposure, morphology
 from skimage.feature import peak_local_max, canny
 from skimage.measure import ransac, LineModelND
 from skimage.transform import AffineTransform, warp
@@ -159,9 +159,9 @@ def _find_line(img, axis):
         xs = np.arange(0, img.shape[0])
 
     model, inliers = ransac(np.column_stack([col, row]), LineModelND, min_samples=2,
-                            residual_threshold=20, max_trials=25000, rng=0)
+                            residual_threshold=25, max_trials=25000, rng=0)
 
-    for thresh in [10, 5]:
+    for thresh in [20, 10, 5]:
         row, col = row[inliers], col[inliers]
         model, inliers = ransac(np.column_stack([col, row]), LineModelND, min_samples=2,
                                 residual_threshold=thresh, max_trials=5000, rng=0)
@@ -177,11 +177,13 @@ def _find_rectangle(img):
                              img[-200:, :].flatten(), img[:, -200:].flatten()])
 
     stretched = img.copy()
-    stretched[img > np.percentile(border, 75)] = 255
-    edges = canny(stretched, sigma=3, low_threshold=np.percentile(img, 10), high_threshold=np.percentile(img, 20))
+    stretched[img > max(np.percentile(border, 75), 10)] = 255
+    edges = canny(morphology.erosion(stretched), sigma=3,
+                  low_threshold=np.percentile(img, 10),
+                  high_threshold=np.percentile(img, 20))
 
     # parameter to tweak the width of the search window around each candidate line
-    width = 50
+    width = 100
 
     cols = np.arange(0, edges.shape[1], 100)
     rows = np.arange(0, edges.shape[0], 100)
@@ -191,7 +193,7 @@ def _find_rectangle(img):
     col_max = int(0.1 * edges.shape[1])
 
     # find big horizontal lines
-    hori = peak_local_max(edges.sum(axis=1), threshold_rel=0.3, min_distance=50, exclude_border=False)
+    hori = peak_local_max(edges.sum(axis=1), threshold_rel=0.25, min_distance=50, exclude_border=False)
 
     top_ind = max(hori[hori < row_max])
     bot_ind = min(hori[hori > (edges.shape[0] - row_max)])
