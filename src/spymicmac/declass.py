@@ -9,8 +9,10 @@ from typing import Union
 # default initial parameters for panoramic cameras
 sample_params = {
     'KH4': {'f': 0.61, 'tilt': np.deg2rad(15), 'scan_time': 0.36, 'speed': 7700},
-    'KH9': {'f': 1.524, 'tilt': np.deg2rad(10), 'scan_time': 0.7, 'speed': 8000}
+    'KH9': {'f': 1.524, 'tilt': np.deg2rad(10), 'scan_time': 0.174, 'speed': 8000}
 }
+# note: scan time has to change for KH9 - depends on scan angle, assume 3.3 rad/sec (~190 deg/sec)
+# count the number of dots? 500 / sec
 
 
 # dataset names for searching from USGS EarthExplorer API
