@@ -23,6 +23,8 @@ def _argparser():
                          help='path to shapefile of image outlines. If not set, will look for Footprints.gpkg '
                               'in the current directory. If this file does not exist, will attempt to download '
                               'from USGS using imgsource.')
+    _parser.add_argument('-globstr', action='store', type=str, default='OIS*.tif',
+                         help='the search string to use to find images in the current directory (OIS*.tif)')
     _parser.add_argument('-im_subset', action='store', type=str, default=None, nargs='+',
                          help='subset of raw images to work with (default: all)')
     _parser.add_argument('-b', '--block_num', action='store', type=str, default=None,

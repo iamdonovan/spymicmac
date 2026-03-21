@@ -103,20 +103,24 @@ def _sliding_window_filter(img_shape: NDArray, pts_df: pd.DataFrame, winsize: in
     return np.array(_out_inds)
 
 
-def _get_imlist(im_subset: Union[list, str, None]) -> tuple[list, str]:
+def _get_imlist(im_subset: Union[list, str, None], globstr: str = 'OIS*.tif') -> tuple[list, str]:
     """
     Given either a list of filenames or a regex match pattern, return a list of filenames and a pattern to provide
     to MicMac.
 
     :param im_subset: a list of filenames or a match pattern (e.g., ['OIS.*tif']) representing filenames. If None,
         returns all images matching "OIS.*tif"
+    :param globstr: the search string to use to find images in the current directory
     :return:
         - **imlist** -- the list of filenames matching the provided pattern.
         - **match_pattern** -- the match pattern to be provided to MicMac.
     """
     if im_subset is None:
-        imlist = glob('OIS*.tif')
-        match_pattern = 'OIS.*.tif'
+        imlist = glob(globstr)
+        if '*.' in globstr:
+            match_pattern = globstr.replace('*.', '.*')
+        else:
+            match_pattern = globstr
     else:
         if len(im_subset) > 1:
             imlist = im_subset
@@ -124,7 +128,7 @@ def _get_imlist(im_subset: Union[list, str, None]) -> tuple[list, str]:
             # match_pattern = '|'.join(imlist)
         else:
             match_pattern = im_subset[0] + '.*tif'
-            imlist = [f for f in glob('OIS*.tif') if re.search(match_pattern, f)]
+            imlist = [f for f in glob(globstr) if re.search(match_pattern, f)]
 
     imlist.sort()
 
@@ -248,9 +252,9 @@ def _get_footprint_mask(shpfile: Union[gpd.GeoDataFrame, str], rast: gu.Raster,
     tmp_gdf = gpd.GeoDataFrame(columns=['geometry'])
     tmp_gdf.loc[0, 'geometry'] = fprint
     tmp_gdf.crs = rast.crs
-    tmp_gdf.to_file('tmp_fprint.shp')
+    tmp_gdf.to_file('tmp_fprint.gpkg')
 
-    maskout = gu.Vector('tmp_fprint.shp').create_mask(rast)
+    maskout = gu.Vector('tmp_fprint.gpkg').create_mask(rast)
 
     for f in glob('tmp_fprint.*'):
         os.remove(f)
@@ -435,7 +439,7 @@ def _chebyshev_grid(img, spacing, tfm):
 def register_relative(dirmec: str, fn_dem: Union[str, Path], fn_ref: Union[str, Path, None] = None,
                       fn_ortho: Union[str, Path, None] = None, glacmask: Union[str, Path, None] = None,
                       landmask: Union[str, Path, None] = None, footprints: Union[str, Path, None] = None,
-                      im_subset: Union[str, None] = None, block_num: Union[str, None] = None,
+                      globstr: str = 'OIS*.tif', im_subset: Union[str, None] = None, block_num: Union[str, None] = None,
                       subscript: Union[str, None] = None, ori: str ='Relative', ortho_res: Union[float, int] = 8.,
                       imgsource: str = 'DECLASSII', strategy: str = 'grid', density: int = 200,
                       out_dir: Union[str, Path, None] = None, allfree: bool = True, dir_homol: str = 'Homol',
@@ -452,6 +456,7 @@ def register_relative(dirmec: str, fn_dem: Union[str, Path], fn_ref: Union[str, 
     :param landmask: path to file of land outlines (i.e., an inclusion mask)
     :param footprints: path to shapefile of image outlines. If not set, will look for Footprints.gpkg in the current
         directory. If this file does not exist, will attempt to download from USGS using imgsource.
+    :param globstr: the search string to use to find images in the current directory
     :param im_subset: subset of raw images to work with
     :param block_num: block number to use if processing multiple image blocks
     :param subscript: optional subscript to use for output filenames
@@ -496,7 +501,7 @@ def register_relative(dirmec: str, fn_dem: Union[str, Path], fn_ref: Union[str, 
     # use the supplied dirmec to get the ortho directory
     ort_dir = 'Ortho-' + dirmec
 
-    imlist, match_pattern = _get_imlist(im_subset)
+    imlist, match_pattern = _get_imlist(im_subset, globstr)
 
     # if we're using the ortho image, load the reference ortho
     if useortho:
