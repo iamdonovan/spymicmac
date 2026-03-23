@@ -1513,7 +1513,8 @@ def tapas(cam_model: str, ori_out: Union[str, None] = None, img_pattern: str = '
 
 
 def apericloud(ori: str, img_pattern: str = 'OIS.*tif',
-               fn_out: Union[str, None] = None, with_points: bool = True) -> int:
+               fn_out: Union[str, None] = None, with_points: bool = True,
+               with_cam: bool = True) -> int:
     """
     Run mm3d AperiCloud to create a point cloud layer
 
@@ -1521,6 +1522,7 @@ def apericloud(ori: str, img_pattern: str = 'OIS.*tif',
     :param img_pattern: the image pattern to pass to AperiCloud
     :param fn_out: the output filename (default: AperiCloud_{ori}.ply)
     :param with_points: display the point cloud
+    :param with_cam: display the cameras
     """
     if os.name == 'nt':
         echo = subprocess.Popen('echo', stdout=subprocess.PIPE, shell=True)
@@ -1533,7 +1535,10 @@ def apericloud(ori: str, img_pattern: str = 'OIS.*tif',
         args.append(f"Out={fn_out}")
 
     if not with_points:
-        args.append(f"WithPoints=0")
+        args.append("WithPoints=0")
+
+    if not with_cam:
+        args.append("WithCam=0")
 
     p = subprocess.Popen(args, stdin=echo.stdout)
 
