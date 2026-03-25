@@ -234,7 +234,7 @@ def load_all_orientation(ori: str, imlist: Union[list, None] = None) -> pd.DataF
 
     if imlist is None:
         imlist = [os.path.basename(g).split('Orientation-')[1].split('.xml')[0] for g in
-                  glob(Path(ori, 'Orientation*.xml'))]
+                  glob(str(Path(ori, 'Orientation*.xml')))]
         imlist.sort()
 
     for i, fn_img in enumerate(imlist):
@@ -530,7 +530,11 @@ def transform_centers(rel: gu.Raster, ref: gu.Raster, imlist: list, footprints: 
     else:
         raise ValueError("footprint geometry contains mixed types - please ensure that only Point or Polygon is used.")
 
-    footprints['name'] = 'OIS-Reech_' + footprints['ID'] + '.tif'
+    # get image IDs to find in the list of filenames
+    id_pattern = '|'.join(footprints['ID'])
+
+    # add an ID column by extracting the image ID from the filename
+    rel_ori.insert(0, 'ID', rel_ori['name'].str.extract("(" + id_pattern + ')', expand=False))
 
     join = footprints.set_index('name').join(rel_ori.set_index('name'), lsuffix='abs', rsuffix='rel')
     join.dropna(subset='geometryrel', inplace=True)
