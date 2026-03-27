@@ -2107,8 +2107,9 @@ def post_process(projstr: Union[str, int], out_name: str, dirmec: str,
 
     # first, the stuff in MEC
     dem_list = sorted(glob('Z_Num*STD-MALT.tif', root_dir=dirmec))
-    level = int(re.findall(r'\d+', dem_list[-1].split('_')[1])[0])
-    zoomf = int(re.findall(r'\d+', dem_list[-1].split('_')[2])[0])
+
+    level = max([int(re.findall(r'\d+', fn.split('_')[1])[0]) for fn in dem_list])
+    zoomf = min([int(re.findall(r'\d+', fn.split('_')[2])[0]) for fn in dem_list])
 
     shutil.copy(Path(dirmec, f'Z_Num{level}_DeZoom{zoomf}_STD-MALT.tfw'),
                 Path(dirmec, f'Correl_STD-MALT_Num_{level-1}.tfw'))
