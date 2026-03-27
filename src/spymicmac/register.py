@@ -573,7 +573,7 @@ def register_relative(dirmec: str, fn_dem: Union[str, Path], fn_ref: Union[str, 
         model = Minit
 
     rough_geo = ref_img.copy(new_array=rough_tfm)
-    rough_geo.save(f"Register{subscript}_rough_geo.tif")
+    rough_geo.save(f"Register{subscript}_rough_geo.tif", co_opts={'BIGTIFF': 'IF_NEEDED'})
 
     fig, axs = plt.subplots(1, 2, figsize=(7, 5))
     axs[0].imshow(rough_tfm[::10, ::10], extent=[0, rough_tfm.shape[1], rough_tfm.shape[0], 0], cmap='gray',
