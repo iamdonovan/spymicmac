@@ -536,7 +536,7 @@ def transform_centers(rel: gu.Raster, ref: gu.Raster, imlist: list, footprints: 
     # add an ID column by extracting the image ID from the filename
     rel_ori.insert(0, 'ID', rel_ori['name'].str.extract("(" + id_pattern + ')', expand=False))
 
-    join = footprints.set_index('name').join(rel_ori.set_index('name'), lsuffix='abs', rsuffix='rel')
+    join = footprints.set_index('ID').join(rel_ori.set_index('ID'), lsuffix='abs', rsuffix='rel')
     join.dropna(subset='geometryrel', inplace=True)
 
     if join.shape[0] > 3:
