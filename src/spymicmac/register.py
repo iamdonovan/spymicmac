@@ -702,7 +702,10 @@ def register_relative(dirmec: str, fn_dem: Union[str, Path], fn_ref: Union[str, 
 
     # print('searching for points in orthorectified images')
     print('finding image measures')
-    micmac.write_image_mesures(imlist, gcps, out_dir, subscript, ort_dir=ort_dir)
+    if Path(ort_dir).exists():
+        micmac.write_image_mesures(imlist, gcps, out_dir, subscript, ort_dir=ort_dir)
+    else:
+        micmac.write_image_mesures(imlist, gcps, out_dir, subscript, ort_dir=None, ori=ori)
 
     print('running mm3d GCPBascule to estimate terrain errors')
     gcps = micmac.bascule(gcps, out_dir, match_pattern, subscript, ori)
@@ -726,7 +729,11 @@ def register_relative(dirmec: str, fn_dem: Union[str, Path], fn_ref: Union[str, 
 
         micmac.write_auto_mesures(cps, subscript, out_dir, outname='AutoCPMeasures')
         micmac.get_autogcp_locations(f"Ori-{ori}", Path(out_dir, f"AutoCPMeasures{subscript}.txt"), imlist)
-        micmac.write_image_mesures(imlist, cps, out_dir, subscript, ort_dir=ort_dir, outname='AutoCPMeasures')
+
+        if Path(ort_dir).exists():
+            micmac.write_image_mesures(imlist, cps, out_dir, subscript, ort_dir=ort_dir, outname='AutoCPMeasures')
+        else:
+            micmac.write_image_mesures(imlist, cps, out_dir, subscript, ort_dir=None, outname='AutoCPMeasures', ori=ori)
 
     # now, iterate campari to refine the orientation
     gcps = micmac.iterate_campari(gcps, out_dir, match_pattern, subscript, ref_img.res[0], ortho_res,

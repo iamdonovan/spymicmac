@@ -920,7 +920,7 @@ def get_valid_image_points(shape: tuple[int, int], pts: pd.DataFrame, pts_nodist
 
 def write_image_mesures(imlist: list, gcps: Union[pd.DataFrame, gpd.GeoDataFrame],
                         outdir: str = '.', sub: str = '', ort_dir: str = 'Ortho-MEC-Relative',
-                        outname: str = 'AutoMeasures') -> None:
+                        outname: str = 'AutoMeasures', ori: Union[str, None] = None) -> None:
     """
     Create a Measures-S2D.xml file (row, pixel) for each GCP in each image from a list of image names.
 
@@ -930,18 +930,30 @@ def write_image_mesures(imlist: list, gcps: Union[pd.DataFrame, gpd.GeoDataFrame
     :param sub: the name of the block, if multiple blocks are being used (e.g., '_block1').
     :param ort_dir: the Ortho-MEC directory where the images are located
     :param outname: the base name of the file to write
+    :param ori: the name of the Ori- directory (e.g., Terrain for Ori-Terrain). If set, uses the
+        projected footprints from mm3d DroneFootprint to determine valid points in the image, rather
+        than the orthoimage footprint.
     """
     E = builder.ElementMaker()
     MesureSet = E.SetOfMesureAppuisFlottants()
 
+    if ori is not None:
+        drone_footprint(f"({'|'.join(imlist)})", ori)
+        footprints = gpd.read_file(f"{ori}_footprints.gpkg").set_index('filename')
+
     for im in imlist:
         print(im)
-        ort_img = gu.Raster(Path(ort_dir, f"Ort_{im}"))
-        dx, _, xmin, _, dy, ymin, _, _, _ = ort_img.transform
-        ort_img = gu.Raster.from_array(resample.downsample(ort_img.data, fact=10),
-                                       (10 * dx, 0, xmin, 0, 10 * dy, ymin), None)
 
-        footprint = (ort_img > 0).polygonize().ds.union_all().minimum_rotated_rectangle
+        if ori is None:
+            ort_img = gu.Raster(Path(ort_dir, f"Ort_{im}"))
+            dx, _, xmin, _, dy, ymin, _, _, _ = ort_img.transform
+            ort_img = gu.Raster.from_array(resample.downsample(ort_img.data, fact=10),
+                                           (10 * dx, 0, xmin, 0, 10 * dy, ymin), None)
+
+            footprint = (ort_img > 0).polygonize().ds.union_all().minimum_rotated_rectangle
+        else:
+            footprint = footprints.loc[im, 'geometry']
+
         valid = footprint.contains(gpd.points_from_xy(gcps.rel_x, gcps.rel_y))
 
         impts = pd.read_csv(f"Auto-{im}.txt", sep=' ', names=['j', 'i'])
