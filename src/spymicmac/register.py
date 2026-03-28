@@ -791,8 +791,8 @@ def register_relative(dirmec: str, fn_dem: Union[str, Path], fn_ref: Union[str, 
 
     print('cleaning up.')
 
-    for txtfile in glob('Auto-OIS*.tif.txt') + \
-                   glob('NoDist-OIS*.tif.txt'):
+    for txtfile in glob('Auto*.tif.txt') + \
+                   glob('NoDist*.tif.txt'):
         os.remove(txtfile)
     print('end.')
     # embed()
