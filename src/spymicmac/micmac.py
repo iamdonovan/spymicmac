@@ -2045,33 +2045,75 @@ def mosaic_micmac_tiles(filename: str, dirname: Union[str, Path] = '.') -> None:
     :param filename: MicMac filename to mosaic together (e.g., Orthophotomosaic)
     :param dirname: directory containing images to mosaic
     """
-    filelist = glob(f"{filename}_Tile*", root_dir=dirname)
+    filelist = glob(f"{filename}_Tile*.tif", root_dir=dirname)
     if len(filelist) == 0:
         print(f"No tiles found for {Path(dirname, filename)}; exiting.")
         return
+    else:
+        print(f"Mosaicking {Path(dirname, filename)}...", end=' ')
 
-    tiled = arrange_tiles(filelist, filename, dirname)
-    I, J = tiled.shape
+    combine_tiles(filelist, filename, dirname)
 
-    arr_cols = []
-    for j in range(J):
-        arr_cols.append(np.concatenate(tiled[:, j], axis=0))
+    # gdalbuildvrt
+    out_vrt = gdal.BuildVRT(Path(dirname, filename + '.vrt'), [Path(dirname, fn) for fn in filelist])
+    out_vrt = None
 
-    img = np.concatenate(arr_cols, axis=1)
+    # gdaltranslate
+    out_tif = gdal.Translate(Path(dirname, filename + '.tif'), Path(dirname, filename + '.vrt'))
+    out_tif = None
 
-    imsave(Path(dirname, f"{filename}.tif"), img)
+    # remove vrt
+    os.remove(Path(dirname, filename + '.vrt'))
+
+    print('done.')
 
 
-def arrange_tiles(flist: list, filename: str, dirname: Union[str, Path] = '.') -> NDArray:
+def combine_tiles(flist: list, filename: str, dirname: Union[str, Path] = '.') -> NDArray:
     tmp_inds = [os.path.splitext(f)[0].split('Tile_')[-1].split('_') for f in flist]
     arr_inds = np.array([[int(a) for a in ind] for ind in tmp_inds])
-    nrows = arr_inds[:, 1].max() + 1
-    ncols = arr_inds[:, 0].max() + 1
-    img_arr = np.array(np.zeros((nrows, ncols)), dtype='object')
-    for i in range(nrows):
-        for j in range(ncols):
-            img_arr[i, j] = imread(Path(dirname, f"{filename}_Tile_{j}_{i}.tif"))
-    return img_arr
+
+    arr_inds.max(axis=1)
+    numcols, numrows = arr_inds.max(axis=0)
+
+    if Path(dirname, filename + '.tfw').exists():
+        is_geo = True
+        with open(Path(dirname, filename + '.tfw'), 'r') as f:
+            tfw_full = [float(l.strip()) for l in f.readlines()]
+    else:
+        is_geo = False
+        tfw_full = [1, 0, 0, 1, 0, 0]
+
+    left = []
+    top = []
+
+    fnames = []
+
+    this_row = 0
+    for row in range(numrows + 1):
+        this_col = 0
+        for col in range(numcols + 1):
+            fnames.append(f"{filename}_Tile_{col}_{row}.tif")
+
+            tmp = gu.Raster(Path(dirname, f"{filename}_Tile_{col}_{row}.tif"))
+            nrows, ncols = tmp.shape
+
+            left.append(tfw_full[4] + tfw_full[0] * this_col)
+            top.append(tfw_full[5] + tfw_full[3] * this_row)
+
+            this_col += ncols
+
+        this_row += nrows
+
+    for ind in range(len(fnames)):
+        with open(Path(dirname, fnames[ind].replace('.tif', '.tfw')), 'w') as tfw:
+            for ii in range(3):
+                print(tfw_full[ii], file=tfw)
+            if is_geo:
+                print(tfw_full[3], file=tfw)
+            else:
+                print(-tfw_full[3], file=tfw)
+            print(left[ind], file=tfw)
+            print(top[ind], file=tfw)
 
 
 def _gdal_calc() -> list:
