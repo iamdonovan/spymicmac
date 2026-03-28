@@ -4,6 +4,7 @@ XML and other files created/used by MicMac.
 """
 import os
 from pathlib import Path
+import json
 import sys
 import re
 import subprocess
@@ -1765,6 +1766,49 @@ def checkpoints(img_pattern: str, ori: str, fn_cp: Union[str, Path], fn_meas: Un
 
     if fn_resids is not None and ret_df:
         return pd.read_csv(str(fn_resids) + '_RollCtrl.txt', delimiter=r'\s+', names=['id', 'xres', 'yres', 'zres'])
+
+
+def drone_footprint(img_pattern: str, ori: str, fn_out: str = None) -> None:
+    """
+    Use mm3d DroneFootprint to create a .gpkg file with image footprints projected using
+    the given orientation directory.
+
+    :param img_pattern: the match pattern for the images
+    :param ori: the name of the Ori- directory (e.g., Terrain for Ori-Terrain)
+    :param fn_out: the output name to use for the .gpkg file, minus the extension.
+        Defaults to {ori}_footprints.gpkg.
+    """
+
+    if fn_out is None:
+        fn_out = ori + '_footprints'
+
+    args = ['mm3d', 'DroneFootprint', img_pattern, ori, f"Out={fn_out}"]
+
+    p = subprocess.Popen(args)
+    p.wait()
+
+    with open(f"{fn_out}.geojson", 'r') as f:
+        dumped = ''.join([l.strip() for l in f.readlines()])
+
+    dumped = dumped.replace(',)', ')').replace(',]', ']').replace(',}', '}')
+    loaded = json.loads(dumped)
+
+    with open(f"{fn_out}.geojson", 'w') as f:
+        json.dump(loaded, f, ensure_ascii=False, indent=4)
+
+    gdf = gpd.read_file(f"{fn_out}.geojson")
+    gdf = gdf.loc[gdf.geom_type == 'Polygon']
+
+    if '|' in img_pattern:
+        gdf['filename'] = sorted(img_pattern.strip('()').split('|'))
+    else:
+        gdf['filename'] = sorted(glob(img_pattern.replace('.*', '*.')))
+
+    gdf.crs = None
+    gdf.to_file(f"{fn_out}.gpkg")
+
+    os.remove(fn_out)
+    os.remove(f"{fn_out}.geojson")
 
 
 def banana(fn_dem: Union[str, Path], fn_ref: Union[str, Path], deg: int = 2,
