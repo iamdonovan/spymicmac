@@ -357,6 +357,7 @@ def _load_auto_mask(dirmec):
 def _read_gcps(fn_gcp, ref_img):
     gcps = gpd.read_file(fn_gcp)
     gcps = gcps.rename(columns={'z': 'elevation', 'name': 'id'})
+    gcps[['x', 'y', 'elevation']] = gcps[['x', 'y', 'elevation']].astype(float)
 
     if isinstance(gcps, gpd.GeoDataFrame):
         gcps = gcps.to_crs(ref_img.crs)
