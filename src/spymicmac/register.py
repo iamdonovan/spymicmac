@@ -554,6 +554,7 @@ def register_relative(dirmec: str, fn_dem: Union[str, Path], fn_ref: Union[str, 
 
     Minit, _, centers = orientation.transform_centers(reg_img, ref_img, imlist, footprints, f"Ori-{ori}")
     rough_tfm = warp(reg_img.data, Minit, output_shape=ref_img.shape, preserve_range=True, cval=tfm_fill)
+    rough_tfm = rough_tfm.astype(reg_img.data.dtype)
 
     rough_spacing = max(1000, np.round(max(ref_img.shape) / 20 / 1000) * 1000)
 
@@ -568,6 +569,7 @@ def register_relative(dirmec: str, fn_dem: Union[str, Path], fn_ref: Union[str, 
             raise ValueError()
 
         rough_tfm = warp(reg_img.data, model, output_shape=ref_img.shape, preserve_range=True, cval=tfm_fill)
+        rough_tfm = rough_tfm.astype(reg_img.data.dtype)
 
     except ValueError as e:
         print('Unable to refine transformation with rough GCPs. Using transform estimated from footprints.')
@@ -575,6 +577,8 @@ def register_relative(dirmec: str, fn_dem: Union[str, Path], fn_ref: Union[str, 
 
     rough_geo = ref_img.copy(new_array=rough_tfm)
     rough_geo.save(f"Register{subscript}_rough_geo.tif", co_opts={'BIGTIFF': 'YES'})
+
+    np.savetxt(f"Register{subscript}_rough_tfm.csv", model.params, delimiter=',')
 
     fig, axs = plt.subplots(1, 2, figsize=(7, 5))
     axs[0].imshow(rough_tfm[::10, ::10], extent=[0, rough_tfm.shape[1], rough_tfm.shape[0], 0], cmap='gray',
