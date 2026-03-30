@@ -18,6 +18,7 @@ from scipy import stats
 from shapely.ops import unary_union
 from shapely.geometry.point import Point
 from shapely.geometry.polygon import Polygon
+from skimage.filters import gaussian
 from skimage.measure import ransac
 from skimage.transform import AffineTransform, warp
 from . import data, image, matching, micmac, orientation
@@ -445,7 +446,8 @@ def register_relative(dirmec: str, fn_dem: Union[str, Path], fn_ref: Union[str, 
                       imgsource: str = 'DECLASSII', strategy: str = 'grid', density: int = 200,
                       out_dir: Union[str, Path, None] = None, allfree: bool = True, dir_homol: str = 'Homol',
                       useortho: bool = False, max_iter: int = 5, use_cps: bool = False, cp_frac: float = 0.2,
-                      use_orb: bool = False, fn_gcps: Union[str, Path, None] = None) -> None:
+                      use_orb: bool = False, fn_gcps: Union[str, Path, None] = None,
+                      use_blur: bool = False, use_highpass: bool = True) -> None:
     """
     Register a relative DEM or orthoimage to a reference DEM and/or orthorectified image.
 
@@ -478,8 +480,10 @@ def register_relative(dirmec: str, fn_dem: Union[str, Path], fn_ref: Union[str, 
     :param cp_frac: the fraction of GCPs to use as CPs when splitting into GCPs and CPs
     :param use_orb: use skimage.feature.ORB to identify GCP locations in the reference image
         (default: use regular grid for matching)
-    :param str fn_gcps: (optional) shapefile or CSV of GCP coordinates to use. Column names should be [(name | id),
+    :param fn_gcps: (optional) shapefile or CSV of GCP coordinates to use. Column names should be [(name | id),
         (z | elevation), x, y]. If CSV is used, x,y should have the same CRS as the reference image.
+    :param use_blur: use a gaussian blur on the relative image before matching
+    :param use_highpass: match templates using a highpass filter
     """
     assert strategy in ['grid', 'random', 'chebyshev'], f"{strategy} must be one of [grid, random, chebyshev]"
     print('start.')
@@ -592,10 +596,13 @@ def register_relative(dirmec: str, fn_dem: Union[str, Path], fn_ref: Union[str, 
     fig.savefig(f"initial_transformation{subscript}.png", dpi=200, bbox_inches='tight')
     plt.close(fig)
 
+    if use_blur:
+        rough_tfm = gaussian(rough_tfm, 3)
+
     if fn_gcps is not None:
         gcps = _read_gcps(fn_gcps, ref_img)
         gcps = matching.find_matches(rough_tfm, ref_img, mask_full.data.data, points=gcps, initM=model,
-                                     spacing=density, dstwin=_search_size(rough_tfm.shape))
+                                     spacing=density, dstwin=_search_size(rough_tfm.shape), use_highpass=use_highpass)
     else:
         if use_orb:
             ref_hp = image.highpass_filter(ref_img.data)
@@ -606,7 +613,7 @@ def register_relative(dirmec: str, fn_dem: Union[str, Path], fn_ref: Union[str, 
 
             gcps = pd.DataFrame(data=keypoints, columns=['search_i', 'search_j'])
             gcps = matching.find_matches(rough_tfm, ref_img, mask_full.data.data, points=gcps, initM=model,
-                                         dstwin=_search_size(rough_tfm.shape))
+                                         dstwin=_search_size(rough_tfm.shape), use_highpass=use_highpass)
         elif strategy == 'chebyshev':
             gridpts = _chebyshev_grid(reg_img, density, model)
             gcps = pd.DataFrame(data=gridpts, columns=['search_j', 'search_i'])
@@ -618,10 +625,10 @@ def register_relative(dirmec: str, fn_dem: Union[str, Path], fn_ref: Union[str, 
             gcps = gcps.loc[~masked]
 
             gcps = matching.find_matches(rough_tfm, ref_img, mask_full.data.data, points=gcps, initM=model,
-                                         dstwin=_search_size(rough_tfm.shape))
+                                         dstwin=_search_size(rough_tfm.shape), use_highpass=use_highpass)
         else:
             gcps = matching.find_matches(rough_tfm, ref_img, mask_full.data.data, initM=model, strategy=strategy,
-                                         spacing=density, dstwin=_search_size(rough_tfm.shape))
+                                         spacing=density, dstwin=_search_size(rough_tfm.shape), use_highpass=use_highpass)
 
     x, y = ref_img.ij2xy(gcps['search_i'], gcps['search_j'])
     gcps = gpd.GeoDataFrame(gcps, geometry=gpd.points_from_xy(x, y, crs=ref_img.crs))

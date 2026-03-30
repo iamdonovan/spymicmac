@@ -1385,7 +1385,7 @@ def _match_grid(refgeo, spacing, srcwin):
 
 def find_matches(tfm_img: NDArray, refgeo: gu.Raster, mask: NDArray, points: Union[gpd.GeoDataFrame, None] = None,
                  initM: Union[ProjectiveTransform, None] = None, strategy: str = 'grid',
-                 spacing: int = 200, srcwin: int = 60, dstwin: int = 600) -> pd.DataFrame:
+                 spacing: int = 200, srcwin: int = 60, dstwin: int = 600, use_highpass: bool = True) -> pd.DataFrame:
     """
     Find matches between two images using normalized cross-correlation template matching. If point locations are not
     given, generates a two-dimensional grid of evenly spaced points.
@@ -1401,6 +1401,7 @@ def find_matches(tfm_img: NDArray, refgeo: gu.Raster, mask: NDArray, points: Uni
     :param spacing: the grid spacing, in pixels
     :param srcwin: the half-size of the template window.
     :param dstwin: the half-size of the search window.
+    :param use_highpass: match templates using a highpass filter
     :return: **gcps** -- a DataFrame with GCP locations, match strength, and other information.
     """
     assert strategy in ['grid', 'random', 'chebyshev'], f"{strategy} must be one of [grid, random]"
@@ -1423,7 +1424,8 @@ def find_matches(tfm_img: NDArray, refgeo: gu.Raster, mask: NDArray, points: Uni
 
     for _i, _j in zip(ii, jj):
         search_pts.append((_j, _i))
-        match, z_corr, peak_corr = do_match(tfm_img, refgeo.data, mask, (int(_i), int(_j)), srcwin, dstwin)
+        match, z_corr, peak_corr = do_match(tfm_img, refgeo.data, mask, (int(_i), int(_j)),
+                                            srcwin, dstwin, use_highpass)
         match_pts.append(match)
         z_corrs.append(z_corr)
         peak_corrs.append(peak_corr)
@@ -1459,7 +1461,7 @@ def find_matches(tfm_img: NDArray, refgeo: gu.Raster, mask: NDArray, points: Uni
 
 
 def do_match(dest_img: NDArray, ref_img: NDArray, mask: NDArray, pt: tuple[int, int],
-             srcwin: int, dstwin: int) -> tuple[tuple, float, float]:
+             srcwin: int, dstwin: int, use_highpass: bool) -> tuple[tuple, float, float]:
     """
     Find a match between two images using normalized cross-correlation template matching.
 
@@ -1469,6 +1471,7 @@ def do_match(dest_img: NDArray, ref_img: NDArray, mask: NDArray, pt: tuple[int, 
     :param pt: the index (i, j) to search for a match for.
     :param srcwin: the half-size of the template window.
     :param dstwin: the half-size of the search window.
+    :param use_highpass: match templates using a highpass filter
     :return:
         - **match_pt** (*tuple*) -- the matching point (j, i) found in dest_img
         - **z_corr** (*float*) -- number of standard deviations (z-score) above other potential matches
@@ -1489,8 +1492,12 @@ def do_match(dest_img: NDArray, ref_img: NDArray, mask: NDArray, pt: tuple[int, 
         testchip[np.isnan(testchip)] = 0
         dst_chip[np.isnan(dst_chip)] = 0
 
-        test = image.highpass_filter(testchip)
-        dest = image.highpass_filter(dst_chip)
+        if use_highpass:
+            test = image.highpass_filter(testchip)
+            dest = image.highpass_filter(dst_chip)
+        else:
+            test = testchip
+            dest = dst_chip
 
         testmask = binary_dilation(testchip == 0, footprint=disk(8))
         destmask = binary_dilation(dst_chip == 0, footprint=disk(8))

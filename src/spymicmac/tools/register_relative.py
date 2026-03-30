@@ -64,6 +64,10 @@ def _argparser():
                          help='(optional) shapefile or CSV of GCP coordinates to use. Column names should be '
                               '[(name | id), (z | elevation), x, y]. If CSV is used, x,y should have the same '
                               'CRS as the reference image.')
+    _parser.add_argument('-blur', action='store_true',
+                         help='use a gaussian blur on the relative image before matching.')
+    _parser.add_argument('-hp', '--use_highpass', action='store_true',
+                         help='match templates using a highpass filter.')
     return _parser
 
 
