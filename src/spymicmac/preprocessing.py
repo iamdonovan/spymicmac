@@ -17,6 +17,8 @@ from typing import Union
 from .matching import find_reseau_grid
 
 
+mp.set_start_method('fork', force=True)
+
 def initialize_kh9_mc(add_sfs: bool = False, cam_csv: str = 'camera_defs.csv', overwrite: bool = False) -> None:
     """
     Initialize the following files needed for processing KH-9 MC images, if they do not already exist:

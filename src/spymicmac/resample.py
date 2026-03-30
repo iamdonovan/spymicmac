@@ -22,6 +22,7 @@ from typing import Union
 
 gdal.UseExceptions()
 
+mp.set_start_method('fork', force=True)
 
 def downsample(img: NDArray, fact: Union[int, float] = 4) -> NDArray:
     """
