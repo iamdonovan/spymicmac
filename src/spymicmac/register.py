@@ -11,6 +11,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import geopandas as gpd
 import geoutils as gu
+import xdem
 from glob import glob
 import pandas as pd
 from rtree import index
@@ -438,6 +439,26 @@ def _chebyshev_grid(img, spacing, tfm):
     return tfm.inverse(np.array([XX.flatten(), YY.flatten()]).T)
 
 
+def _prepare_hillshades(dem, tfm_img, **hillshade_kwargs):
+
+    # stretch tfm_img to approximate dem
+    min_el = dem[np.isfinite(tfm_img)].min()
+    max_el = dem[np.isfinite(tfm_img)].max()
+
+    stretched = image.stretch_image(tfm_img, (0.01, 0.99), 1, 0, np.float32)
+
+    dem_hs = xdem.DEM(dem).hillshade(**hillshade_kwargs)
+
+    if 'z_factor' in hillshade_kwargs.keys():
+        hillshade_kwargs.update({'z_factor': hillshade_kwargs['z_factor'] * (max_el - min_el)})
+    else:
+        hillshade_kwargs.update({'z_factor': 2 * (max_el - min_el)})
+
+    tfm_hs = xdem.DEM(dem_hs.copy(new_array=stretched)).hillshade(**hillshade_kwargs)
+
+    return dem_hs, tfm_hs
+
+
 def register_relative(dirmec: str, fn_dem: Union[str, Path], fn_ref: Union[str, Path, None] = None,
                       fn_ortho: Union[str, Path, None] = None, glacmask: Union[str, Path, None] = None,
                       landmask: Union[str, Path, None] = None, footprints: Union[str, Path, None] = None,
@@ -447,7 +468,8 @@ def register_relative(dirmec: str, fn_dem: Union[str, Path], fn_ref: Union[str, 
                       out_dir: Union[str, Path, None] = None, allfree: bool = True, dir_homol: str = 'Homol',
                       useortho: bool = False, max_iter: int = 5, use_cps: bool = False, cp_frac: float = 0.2,
                       use_orb: bool = False, fn_gcps: Union[str, Path, None] = None,
-                      use_blur: bool = False, use_highpass: bool = True) -> None:
+                      use_blur: bool = False, use_highpass: bool = True,
+                      use_hillshade: bool = False, hillshade_kwargs: dict = {}) -> None:
     """
     Register a relative DEM or orthoimage to a reference DEM and/or orthorectified image.
 
@@ -484,6 +506,8 @@ def register_relative(dirmec: str, fn_dem: Union[str, Path], fn_ref: Union[str, 
         (z | elevation), x, y]. If CSV is used, x,y should have the same CRS as the reference image.
     :param use_blur: use a gaussian blur on the relative image before matching
     :param use_highpass: match templates using a highpass filter
+    :param use_hillshade: match templates using DEM hillshade rather than elevation
+    :param hillshade_kwargs: kwargs to pass to xdem.DEM.hillshade()
     """
     assert strategy in ['grid', 'random', 'chebyshev'], f"{strategy} must be one of [grid, random, chebyshev]"
     print('start.')
@@ -579,7 +603,19 @@ def register_relative(dirmec: str, fn_dem: Union[str, Path], fn_ref: Union[str, 
         print('Unable to refine transformation with rough GCPs. Using transform estimated from footprints.')
         model = Minit
 
-    rough_geo = ref_img.copy(new_array=rough_tfm)
+    if use_blur:
+        print("Smoothing relative image with a Gaussian blur.")
+        rough_tfm = gaussian(rough_tfm, 2)
+
+    if use_hillshade:
+        print("Using DEM hillshades for matching.")
+        ref_img, rough_tfm = _prepare_hillshades(ref_img, rough_tfm, **hillshade_kwargs)
+
+    if not use_hillshade:
+        rough_geo = ref_img.copy(new_array=rough_tfm)
+    else:
+        rough_geo = rough_tfm
+
     rough_geo.save(f"Register{subscript}_rough_geo.tif", co_opts={'BIGTIFF': 'YES'})
 
     np.savetxt(f"Register{subscript}_rough_tfm.csv", model.params, delimiter=',')
@@ -595,9 +631,6 @@ def register_relative(dirmec: str, fn_dem: Union[str, Path], fn_ref: Union[str, 
 
     fig.savefig(f"initial_transformation{subscript}.png", dpi=200, bbox_inches='tight')
     plt.close(fig)
-
-    if use_blur:
-        rough_tfm = gaussian(rough_tfm, 3)
 
     if fn_gcps is not None:
         gcps = _read_gcps(fn_gcps, ref_img)
@@ -640,7 +673,7 @@ def register_relative(dirmec: str, fn_dem: Union[str, Path], fn_ref: Union[str, 
     gcps.dropna(inplace=True)
     print(f"{gcps.shape[0]} potential matches found")
 
-    if useortho:
+    if useortho or use_hillshade:
         print('loading dems')
         dem = gu.Raster(fn_dem)
     else:
@@ -723,7 +756,7 @@ def register_relative(dirmec: str, fn_dem: Union[str, Path], fn_ref: Union[str, 
     gcps = micmac.bascule(gcps, out_dir, match_pattern, subscript, ori)
     gcps['res_dist'] = np.sqrt(gcps.xres ** 2 + gcps.yres ** 2)
 
-    gcps = gcps.loc[np.abs(gcps.res_dist - gcps.res_dist.median()) < 4 * nmad(gcps.res_dist)]
+    gcps = gcps.loc[np.abs(gcps.res_dist - gcps.res_dist.median()) < 2 * nmad(gcps.res_dist)]
     # gcps = gcps[np.logical_and(np.abs(gcps.xres - gcps.xres.median()) < 2 * nmad(gcps.xres),
     #                            np.abs(gcps.yres - gcps.yres.median()) < 2 * nmad(gcps.yres))]
 

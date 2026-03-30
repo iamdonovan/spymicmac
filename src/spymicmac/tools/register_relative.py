@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 import argparse
+import json
 from spymicmac.register import register_relative
 
 
@@ -64,10 +65,14 @@ def _argparser():
                          help='(optional) shapefile or CSV of GCP coordinates to use. Column names should be '
                               '[(name | id), (z | elevation), x, y]. If CSV is used, x,y should have the same '
                               'CRS as the reference image.')
-    _parser.add_argument('-blur', action='store_true',
+    _parser.add_argument('-blur', '--use_blur', action='store_true',
                          help='use a gaussian blur on the relative image before matching.')
-    _parser.add_argument('-hp', '--use_highpass', action='store_true',
+    _parser.add_argument('-no_hp', '--no_highpass', action='store_true',
                          help='match templates using a highpass filter.')
+    _parser.add_argument('-hs', '--use_hillshade', action='store_true',
+                         help='match templates using DEM hillshade rather than elevation.')
+    _parser.add_argument('--hillshade_kwargs', action='store', type=str, default='{}',
+                         help='kwargs to pass to xdem.DEM.hillshade(), formatted as a dictionary.')
     return _parser
 
 
@@ -77,6 +82,11 @@ def main():
 
     args.allfree = not args.no_allfree
     delattr(args, 'no_allfree')
+
+    args.use_highpass = not args.no_highpass
+    delattr(args, 'no_highpass')
+
+    args.hillshade_kwargs = json.loads(args.hillshade_kwargs)
 
     register_relative(**vars(args))
 
