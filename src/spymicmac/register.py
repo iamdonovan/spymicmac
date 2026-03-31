@@ -17,8 +17,7 @@ import pandas as pd
 from rtree import index
 from scipy import stats
 from shapely.ops import unary_union
-from shapely.geometry.point import Point
-from shapely.geometry.polygon import Polygon
+from shapely.geometry import Point, Polygon, LineString
 from skimage.filters import gaussian
 from skimage.measure import ransac
 from skimage.transform import AffineTransform, warp
@@ -422,11 +421,55 @@ def _plot_residuals(gdf, res='camp'):
     return fig
 
 
-def _chebyshev_grid(img, spacing, tfm):
-    rady, radx = img.shape
+def _get_rectangle_rotation(box):
 
-    xx = np.cos(np.arange(0, int(radx / spacing)) * np.pi / int(radx / spacing))
-    yy = np.cos(np.arange(0, int(rady / spacing)) * np.pi / int(rady / spacing))
+    coords = box.exterior.coords
+    sides = [LineString([pt1, pt2]) for pt1, pt2 in zip(coords, coords[1:])]
+    dists = [s.length for s in sides]
+
+    long_ax = max(sides, key=lambda x: x.length)
+    short_ax = min(sides, key=lambda x: x.length)
+
+    if np.allclose(dists[0], long_ax.length):
+        rect_coords = np.array([(0, 0),
+                                (0, short_ax.length),
+                                (long_ax.length, short_ax.length),
+                                (long_ax.length, 0)])
+    else:
+        rect_coords = np.array([(0, 0),
+                                (long_ax.length, 0),
+                                (long_ax.length, short_ax.length),
+                                (0, short_ax.length)])
+
+    img_coords = np.array(box.exterior.coords)[:-1]
+
+    rect_tfm = AffineTransform()
+    rect_tfm.estimate(rect_coords, img_coords)
+
+    return rect_tfm, long_ax, short_ax
+
+
+def _chebyshev_grid(img, spacing, tfm, mask = None):
+
+    if mask is None:
+        rady, radx = img.shape
+
+        nptsx = int(radx / spacing)
+        nptsy = int(rady / spacing)
+
+    else:
+        dx, dy = img.res
+
+        rect_tfm, long_ax, short_ax = _get_rectangle_rotation(mask)
+
+        radx = long_ax.length
+        rady = short_ax.length
+
+        nptsx = int(radx / dx / spacing)
+        nptsy = int(rady / dy / spacing)
+
+    xx = np.cos(np.arange(0, nptsx) * np.pi / nptsx)
+    yy = np.cos(np.arange(0, nptsy) * np.pi / nptsy)
 
     xx += 1
     yy += 1
@@ -436,7 +479,12 @@ def _chebyshev_grid(img, spacing, tfm):
 
     XX, YY = np.meshgrid(xx, yy)
 
-    return tfm.inverse(np.array([XX.flatten(), YY.flatten()]).T)
+    if mask is None:
+        return tfm.inverse(np.array([XX.flatten(), YY.flatten()]).T)
+    else:
+        img_pts = rect_tfm(np.array([XX.flatten(), YY.flatten()]).T)
+        yi, xi = img.xy2ij(img_pts[:, 0], img_pts[:, 1])
+        return tfm.inverse(np.array([xi, yi]).T)
 
 
 def _prepare_hillshades(dem, tfm_img, **hillshade_kwargs):
@@ -647,8 +695,23 @@ def register_relative(dirmec: str, fn_dem: Union[str, Path], fn_ref: Union[str, 
             gcps = pd.DataFrame(data=keypoints, columns=['search_i', 'search_j'])
             gcps = matching.find_matches(rough_tfm, ref_img, mask_full.data.data, points=gcps, initM=model,
                                          dstwin=_search_size(rough_tfm.shape), use_highpass=use_highpass)
+
         elif strategy == 'chebyshev':
-            gridpts = _chebyshev_grid(reg_img, density, model)
+            rel_mask = warp(mask_full.data.data, model.inverse,
+                            output_shape=reg_img.shape,
+                            preserve_range=True, cval=0).astype(np.uint8)
+
+            rel_tfm = list(reg_img.transform)[:6]
+            rel_tfm[0] *= 10
+            rel_tfm[4] *= 10
+
+            rel_mask = gu.Raster.from_array(rel_mask[::10, ::10],
+                                            transform=tuple(rel_tfm[:6]),
+                                            crs=None)
+
+            mask_bounds = (rel_mask > 0).polygonize().ds.union_all().minimum_rotated_rectangle
+
+            gridpts = _chebyshev_grid(reg_img, density, model, mask_bounds)
             gcps = pd.DataFrame(data=gridpts, columns=['search_j', 'search_i'])
             interior = np.logical_and.reduce([0 <= gcps.search_j, gcps.search_j <= ref_img.shape[1],
                                               0 <= gcps.search_i, gcps.search_i <= ref_img.shape[0]])
