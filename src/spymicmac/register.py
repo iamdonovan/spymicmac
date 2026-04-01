@@ -200,6 +200,61 @@ def _to_tfw(gt):
     # convert from gdal GeoTransform to TFW format
     return [gt[1], gt[2], gt[4], gt[5], gt[0], gt[3]]
 
+def _tfm_from_corners(rel_img, ref_img, model):
+    rel_corners = np.array([(0, 0),
+                            (rel_img.shape[1], 0),
+                            (rel_img.shape[1], rel_img.shape[0]),
+                            (0, rel_img.shape[0])])
+    ref_corners = model.inverse(rel_corners)
+
+    rel_xy = np.array(rel_img.ij2xy(rel_corners[:,1], rel_corners[:,0])).T
+    ref_xy = np.array(ref_img.ij2xy(ref_corners[:,1], ref_corners[:,0])).T
+
+    new_model = AffineTransform()
+    new_model.estimate(rel_xy, ref_xy)
+
+    return new_model
+
+def _corners_from_tfm(rel_img, ref_img, model):
+    rel_corners = np.array([(0, 0),
+                            (rel_img.shape[1], 0),
+                            (rel_img.shape[1], rel_img.shape[0]),
+                            (0, rel_img.shape[0])])
+    rel_xy = np.array(rel_img.ij2xy(rel_corners[:,1], rel_corners[:,0])).T
+
+    ref_xy = model(rel_xy)
+    ref_corners = np.array(ref_img.xy2ij(ref_xy[:,0], ref_xy[:,1])).T[:, ::-1]
+
+    new_model = AffineTransform()
+    new_model.estimate(ref_corners, rel_corners)
+
+    return new_model
+
+
+def _reproject_footprint(poly: Polygon, img: gu.Raster, model: AffineTransform, invert: bool = True):
+    x, y = poly.exterior.coords.xy
+
+    src = np.array(img.xy2ij(x, y)).T[:, ::-1]
+
+    if invert:
+        return model.inverse(src)
+    else:
+        return model(src)
+
+
+def _reproject_footprints(fprints: gpd.GeoDataFrame, rel_img: gu.Raster,
+                          ref_img: gu.Raster, model: AffineTransform) -> gpd.GeoDataFrame:
+
+    geoms = []
+    for poly in fprints['geometry']:
+        coords = _reproject_footprint(poly, rel_img, model, invert=True)
+        x, y = ref_img.ij2xy(coords[:, 1], coords[:, 0])
+        geoms.append(Polygon(zip(x, y)))
+
+    ids = [im.split('OIS-Reech_')[-1].split('.tif')[0] for im in fprints.index]
+
+    return gpd.GeoDataFrame(data={'filename': fprints.index, 'ID': ids}, geometry=geoms, crs=ref_img.crs)
+
 
 def _get_footprint_overlap(fprints: gpd.GeoDataFrame) -> Polygon:
     """
@@ -626,15 +681,15 @@ def register_relative(dirmec: str, fn_dem: Union[str, Path], fn_ref: Union[str, 
     else:
         footprints = gpd.read_file(footprints)
 
-    mask_full, _, ref_img = _get_mask(footprints, ref_img, imlist, landmask, glacmask)
+    mask_full, _, ref_img_crop = _get_mask(footprints, ref_img, imlist, landmask, glacmask)
 
-    Minit, _, centers = orientation.transform_centers(reg_img, ref_img, imlist, footprints, f"Ori-{ori}")
-    rough_tfm = warp(reg_img.data, Minit, output_shape=ref_img.shape, preserve_range=True, cval=tfm_fill)
+    Minit, _, centers = orientation.transform_centers(reg_img, ref_img_crop, imlist, footprints, f"Ori-{ori}")
+    rough_tfm = warp(reg_img.data, Minit, output_shape=ref_img_crop.shape, preserve_range=True, cval=tfm_fill)
     rough_tfm = rough_tfm.astype(reg_img.data.dtype)
 
     rough_spacing = max(1000, np.round(max(ref_img.shape) / 20 / 1000) * 1000)
 
-    rough_gcps = matching.find_matches(rough_tfm, ref_img, mask_full.data.data, initM=Minit,
+    rough_gcps = matching.find_matches(rough_tfm, ref_img_crop, mask_full.data.data, initM=Minit,
                                        spacing=int(rough_spacing), dstwin=int(rough_spacing))
 
     try:
@@ -644,12 +699,24 @@ def register_relative(dirmec: str, fn_dem: Union[str, Path], fn_ref: Union[str, 
         if model is None or np.count_nonzero(inliers) < 6:
             raise ValueError()
 
-        rough_tfm = warp(reg_img.data, model, output_shape=ref_img.shape, preserve_range=True, cval=tfm_fill)
-        rough_tfm = rough_tfm.astype(reg_img.data.dtype)
-
     except ValueError as e:
         print('Unable to refine transformation with rough GCPs. Using transform estimated from footprints.')
         model = Minit
+
+    # re-do the mask and the footprints with the re-projected relative footprints
+    micmac.drone_footprint(f"({'|'.join(imlist)})", ori)
+    rel_footprints = gpd.read_file(f"{ori}_footprints.gpkg").set_index('filename')
+    new_footprints = _reproject_footprints(rel_footprints, reg_img, ref_img_crop, model)
+
+    # transformation from relative coords to absolute coords
+    rel2abs = _tfm_from_corners(reg_img, ref_img_crop, model)
+
+    # re-do the mask with the new footprints
+    mask_full, _, ref_img = _get_mask(new_footprints, ref_img, imlist, landmask, glacmask)
+
+    model = _corners_from_tfm(reg_img, ref_img, rel2abs)
+    rough_tfm = warp(reg_img.data, model, output_shape=ref_img.shape, preserve_range=True, cval=tfm_fill)
+    rough_tfm = rough_tfm.astype(reg_img.data.dtype)
 
     if use_blur:
         print("Smoothing relative image with a Gaussian blur.")
@@ -755,7 +822,7 @@ def register_relative(dirmec: str, fn_dem: Union[str, Path], fn_ref: Union[str, 
     # run ransac to find the matches between the transformed image and the master image make a coherent transformation
     # residual_threshold is 20 pixels to allow for some local distortions, but get rid of the big blunders
     gcps['offset'] = np.sqrt(gcps['dj'] ** 2 + gcps['di'] ** 2)
-    thresh = np.ceil(min(20, gcps['offset'].median() + 4 * nmad(gcps['offset'])))
+    thresh = np.ceil(min(20, gcps['offset'].median() + 2 * nmad(gcps['offset'])))
 
     models = []
     inliers = []
