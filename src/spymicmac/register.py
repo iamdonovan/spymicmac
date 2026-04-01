@@ -591,9 +591,9 @@ def register_relative(dirmec: str, fn_dem: Union[str, Path], fn_ref: Union[str, 
     :param ori: name of orientation directory (after Ori-)
     :param ortho_res: approx. ground sampling distance (pixel resolution) of ortho image
     :param imgsource: USGS dataset name for images
-    :param strategy: strategy for generating GCPs. Must be one of 'grid', 'random', or 'chebyshev'. Note that if
-        'random' is used, density is the approximate number of points, rather than the distance between
-        grid points.
+    :param strategy: strategy for generating GCPs. Must be one of 'grid', 'random', 'chebyshev', or 'peaks'. Note that
+        if 'random' is used, density is the approximate number of points, rather than the distance between grid points.
+        If 'peaks' is used, peaks will be spaced by at least (density/2) pixels.
     :param density: pixel spacing to look for GCPs
     :param out_dir: output directory to save auto GCP files to
     :param allfree: run Campari setting all parameters free
@@ -612,7 +612,8 @@ def register_relative(dirmec: str, fn_dem: Union[str, Path], fn_ref: Union[str, 
     :param use_hillshade: match templates using DEM hillshade rather than elevation
     :param hillshade_kwargs: kwargs to pass to xdem.DEM.hillshade()
     """
-    assert strategy in ['grid', 'random', 'chebyshev'], f"{strategy} must be one of [grid, random, chebyshev]"
+    assert strategy in ['grid', 'random', 'chebyshev', 'peaks'], \
+        f"{strategy} must be one of [grid, random, chebyshev, peaks]"
     print('start.')
 
     if fn_ortho is not None or useortho:
@@ -749,8 +750,6 @@ def register_relative(dirmec: str, fn_dem: Union[str, Path], fn_ref: Union[str, 
 
     if fn_gcps is not None:
         gcps = _read_gcps(fn_gcps, ref_img)
-        gcps = matching.find_matches(rough_tfm, ref_img, mask_full.data.data, points=gcps, initM=model,
-                                     spacing=density, dstwin=_search_size(rough_tfm.shape), use_highpass=use_highpass)
     else:
         if use_orb:
             ref_hp = image.highpass_filter(ref_img.data)
@@ -760,8 +759,6 @@ def register_relative(dirmec: str, fn_dem: Union[str, Path], fn_ref: Union[str, 
                                                      detector_kwargs={'n_keypoints': 5})
 
             gcps = pd.DataFrame(data=keypoints, columns=['search_i', 'search_j'])
-            gcps = matching.find_matches(rough_tfm, ref_img, mask_full.data.data, points=gcps, initM=model,
-                                         dstwin=_search_size(rough_tfm.shape), use_highpass=use_highpass)
 
         elif strategy == 'chebyshev':
             rel_mask = warp(mask_full.data.data, model.inverse,
@@ -787,11 +784,18 @@ def register_relative(dirmec: str, fn_dem: Union[str, Path], fn_ref: Union[str, 
             masked = mask_full.data.data[gcps.search_i.astype(int), gcps.search_j.astype(int)] == 0
             gcps = gcps.loc[~masked]
 
-            gcps = matching.find_matches(rough_tfm, ref_img, mask_full.data.data, points=gcps, initM=model,
-                                         dstwin=_search_size(rough_tfm.shape), use_highpass=use_highpass)
+        elif strategy == 'peaks':
+            ref_hp = image.highpass_filter(ref_img.data)
+            ref_hp[np.isnan(ref_hp)] = 0
+
+            gridpts = matching.peaks(ref_hp, int(density / 2), mask_full.data.data)
+            gcps = pd.DataFrame(data=gridpts, columns=['search_i', 'search_j'])
+
         else:
-            gcps = matching.find_matches(rough_tfm, ref_img, mask_full.data.data, initM=model, strategy=strategy,
-                                         spacing=density, dstwin=_search_size(rough_tfm.shape), use_highpass=use_highpass)
+            gcps = None
+
+    gcps = matching.find_matches(rough_tfm, ref_img, mask_full.data.data, points=gcps, initM=model, strategy=strategy,
+                                 spacing=density, dstwin=_search_size(rough_tfm.shape), use_highpass=use_highpass)
 
     x, y = ref_img.ij2xy(gcps['search_i'], gcps['search_j'])
     gcps = gpd.GeoDataFrame(gcps, geometry=gpd.points_from_xy(x, y, crs=ref_img.crs))

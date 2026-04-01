@@ -1384,6 +1384,24 @@ def _match_grid(refgeo, spacing, srcwin):
     return jj.astype(int).flatten(), ii.astype(int).flatten()
 
 
+def peaks(img: NDArray, spacing: int, mask: Union[NDArray, None]) -> NDArray:
+    """
+
+
+    """
+
+    maxs = peak_local_max(img, min_distance=spacing, threshold_rel=0.02, exclude_border=False)
+    mins = peak_local_max(-img, min_distance=spacing, threshold_rel=0.02, exclude_border=False)
+
+    gridpts = np.concatenate([maxs, mins], axis=0)
+
+    if mask is not None:
+        masked = mask[gridpts[:, 0], gridpts[:, 1]] == 0
+        return gridpts[~masked]
+    else:
+        return gridpts
+
+
 def find_matches(tfm_img: NDArray, refgeo: gu.Raster, mask: NDArray, points: Union[gpd.GeoDataFrame, None] = None,
                  initM: Union[ProjectiveTransform, None] = None, strategy: str = 'grid',
                  spacing: int = 200, srcwin: int = 60, dstwin: int = 600, use_highpass: bool = True) -> pd.DataFrame:
@@ -1405,7 +1423,8 @@ def find_matches(tfm_img: NDArray, refgeo: gu.Raster, mask: NDArray, points: Uni
     :param use_highpass: match templates using a highpass filter
     :return: **gcps** -- a DataFrame with GCP locations, match strength, and other information.
     """
-    assert strategy in ['grid', 'random', 'chebyshev'], f"{strategy} must be one of [grid, random]"
+    assert strategy in ['grid', 'random', 'chebyshev', 'peaks'],\
+        f"{strategy} must be one of [grid, random, chebyshev, peaks]"
 
     match_pts = []
     z_corrs = []
@@ -1416,7 +1435,7 @@ def find_matches(tfm_img: NDArray, refgeo: gu.Raster, mask: NDArray, points: Uni
             jj, ii = np.array(_match_grid(refgeo, spacing, srcwin))
         elif strategy == 'random':
             jj, ii = _random_points(mask, spacing)
-        elif strategy == 'chebyshev':
+        elif strategy == 'chebyshev' or strategy == 'peaks':
             pass
     else:
         jj, ii = points.search_j, points.search_i

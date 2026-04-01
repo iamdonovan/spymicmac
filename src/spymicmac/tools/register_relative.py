@@ -39,9 +39,10 @@ def _argparser():
     _parser.add_argument('-imgsource', action='store', type=str, default='DECLASSII',
                          help='USGS dataset name for images (default: DECLASSII).')
     _parser.add_argument('-strategy', action='store', type=str, default='grid',
-                         help="strategy for generating GCPs. Must be one of: grid, random, or chebyshev. "
+                         help="strategy for generating GCPs. Must be one of: grid, random, chebyshev, or peaks. "
                               "Note that if 'random' is used, density is the approximate number of points, "
-                              "rather than the distance between grid points (default: grid).")
+                              "rather than the distance between grid points. If 'peaks' is used, peaks will be"
+                              "spaced by at least (density / 2) pixels. (default: grid).")
     _parser.add_argument('--dir_homol', action='store', type=str, default='Homol',
                          help="the name of the Homol directory to use for Campari")
     _parser.add_argument('-density', action='store', type=int, default=200,
