@@ -1712,8 +1712,9 @@ def bascule(in_gcps: pd.DataFrame, outdir: str, img_pattern: str, sub: str, ori:
     return out_gcps
 
 
-def campari(in_gcps: pd.DataFrame, outdir: str, img_pattern: str, sub: str, dx: Union[int, float],
-            ortho_res: Union[int, float], allfree: bool = True, fn_gcp: str = 'AutoGCPs',
+def campari(in_gcps: pd.DataFrame, outdir: str, img_pattern: str, sub: str, dx: Union[int, float, None] = None,
+            sig_abs: Union[int, float, None] = None, sig_pix: Union[int, float, None] = 0.5,
+            allfree: bool = True, fn_gcp: str = 'AutoGCPs',
             fn_meas: str = 'AutoMeasures', inori: str = 'TerrainRelAuto',
             outori: str = 'TerrainFinal', homol: str = 'Homol') -> pd.DataFrame:
     """
@@ -1723,8 +1724,10 @@ def campari(in_gcps: pd.DataFrame, outdir: str, img_pattern: str, sub: str, dx: 
     :param outdir: the output directory where the AutoGCPs.xml file is saved.
     :param img_pattern: the match pattern for the images being input to Campari (e.g., "OIS.*tif")
     :param sub: the name of the block, if multiple blocks are being used (e.g., '_block1'). If not, use ''.
-    :param dx: the pixel resolution of the reference image.
-    :param ortho_res: the pixel resolution of the orthoimage being used.
+    :param dx: the pixel resolution of the reference image. If set, sig_abs is calculated as dx / 4. One of
+        dx or sig_abs must be set.
+    :param sig_abs: the absolute uncertainty in position for the GCP location. One of dx or sig_abs must be set.
+    :param sig_rel: the uncertainty in position for the GCP location in the image.
     :param allfree: run Campari with AllFree=1 (True), meaning that all camera parameters will be optimized,
         or AllFree=0 (False), meaning that only the orientation will be optimized.
     :param fn_gcp: the filename pattern for the GCP file. The file that will be loaded will be
@@ -1736,6 +1739,8 @@ def campari(in_gcps: pd.DataFrame, outdir: str, img_pattern: str, sub: str, dx: 
     :param homol: the Homologue directory to use
     :return: **out_gcps** -- the input gcps with the updated Campari residuals.
     """
+    assert dx is not None or sig_abs is not None, "one of dx or sig_abs must be set."
+
     if os.name == 'nt':
         echo = subprocess.Popen('echo', stdout=subprocess.PIPE, shell=True)
     else:
@@ -1744,12 +1749,17 @@ def campari(in_gcps: pd.DataFrame, outdir: str, img_pattern: str, sub: str, dx: 
     fn_gcp = fn_gcp + sub + '.xml'
     fn_meas = fn_meas + sub + '-S2D.xml'
 
-    p = subprocess.Popen(['mm3d', 'Campari', img_pattern,
-                          inori + sub,
-                          outori + sub,
-                          f"GCP=[{Path(outdir, fn_gcp)},{np.abs(dx) / 4},{Path(outdir, fn_meas)},{0.5}]",
-                          f"SH={homol}",
-                          f"AllFree={int(allfree)}"], stdin=echo.stdout)
+    args = ['mm3d', 'Campari', img_pattern, inori + sub, outori + sub]
+
+    if dx is not None:
+        args.append(f"GCP=[{Path(outdir, fn_gcp)},{np.abs(dx) / 4},{Path(outdir, fn_meas)},{sig_pix}]")
+    else:
+        args.append(f"GCP=[{Path(outdir, fn_gcp)},{sig_abs},{Path(outdir, fn_meas)},{sig_pix}]")
+
+    args.append(f"SH={homol}")
+    args.append(f"AllFree={int(allfree)}")
+
+    p = subprocess.Popen(args, stdin=echo.stdout)
     p.wait()
 
     out_gcps = get_campari_residuals(Path(f"Ori-{outori+sub}", "Residus.xml"), in_gcps)
@@ -1894,8 +1904,10 @@ def remove_worst_mesures(fn_meas: Union[str, Path], ori: str) -> None:
     out_xml.write(fn_meas, encoding="utf-8", xml_declaration=True)
 
 
-def iterate_campari(gcps: pd.DataFrame, out_dir: str, match_pattern: str, subscript: str, dx: Union[int, float],
-                    ortho_res: Union[int, float], fn_gcp: str = 'AutoGCPs', fn_meas: str = 'AutoMeasures',
+def iterate_campari(gcps: pd.DataFrame, out_dir: str, match_pattern: str, subscript: str,
+                    dx: Union[int, float, None] = None, sig_abs: Union[int, float, None] = None,
+                    sig_pix: Union[int, float, None] = 0.5,
+                    fn_gcp: str = 'AutoGCPs', fn_meas: str = 'AutoMeasures',
                     rel_ori: str = 'Relative', inori: str = 'TerrainRelAuto', outori: str = 'TerrainFinal',
                     homol: str = 'Homol', allfree: bool = True, max_iter: int = 5) -> pd.DataFrame:
     """
@@ -1906,8 +1918,10 @@ def iterate_campari(gcps: pd.DataFrame, out_dir: str, match_pattern: str, subscr
     :param out_dir: the output directory where the GCP and Measures files are located.
     :param match_pattern: the match pattern for the images being input to Campari (e.g., "OIS.*tif")
     :param subscript: the name of the block, if multiple blocks are being used (e.g., '_block1'). If not, use ''.
-    :param dx: the pixel resolution of the reference image.
-    :param ortho_res: the pixel resolution of the orthoimage being used.
+    :param dx: the pixel resolution of the reference image. If set, sig_abs is calculated as dx / 4. One of
+        dx or sig_abs must be set.
+    :param sig_abs: the absolute uncertainty in position for the GCP location. One of dx or sig_abs must be set.
+    :param sig_rel: the uncertainty in position for the GCP location in the image.
     :param fn_gcp: the filename pattern for the GCP file. The file that will be loaded will be
         fn_gcp + sub + '.xml' (e.g., default: AutoGCPs -> AutoGCPs_block0.xml)
     :param fn_meas: the filename pattern for the measures file. The file that will be loaded will be
@@ -1921,13 +1935,15 @@ def iterate_campari(gcps: pd.DataFrame, out_dir: str, match_pattern: str, subscr
     :param max_iter: the maximum number of iterations to run.
     :return: **gcps** -- the gcps with updated residuals after the iterative process.
     """
+    assert dx is not None or sig_abs is not None, "one of dx or sig_abs must be set."
+
     niter = 0
 
     gcps = bascule(gcps, out_dir, match_pattern, subscript, rel_ori, fn_gcp=fn_gcp, fn_meas=fn_meas, outori=inori)
 
     gcps['res_dist'] = np.sqrt(gcps.xres ** 2 + gcps.yres ** 2)
 
-    gcps = campari(gcps, out_dir, match_pattern, subscript, dx, ortho_res,
+    gcps = campari(gcps, out_dir, match_pattern, subscript, dx=dx, sig_abs=sig_abs, sig_pix=sig_pix,
                    inori=inori, outori=outori, fn_gcp=fn_gcp, fn_meas=fn_meas,
                    allfree=allfree)
 
@@ -1948,9 +1964,8 @@ def iterate_campari(gcps: pd.DataFrame, out_dir: str, match_pattern: str, subscr
                        fn_meas=fn_meas, outori=inori)
         gcps['res_dist'] = np.sqrt(gcps.xres ** 2 + gcps.yres ** 2)
 
-        gcps = campari(gcps, out_dir, match_pattern, subscript, dx, ortho_res,
-                       inori=inori, outori=outori, fn_gcp=fn_gcp, fn_meas=fn_meas,
-                       allfree=allfree, homol=homol)
+        gcps = campari(gcps, out_dir, match_pattern, subscript, dx=dx, sig_abs=sig_abs, sig_pix=sig_pix,
+                       inori=inori, outori=outori, fn_gcp=fn_gcp, fn_meas=fn_meas, allfree=allfree)
 
         gcps['camp_xy'] = np.sqrt(gcps.camp_xres ** 2 + gcps.camp_yres ** 2)
         niter += 1

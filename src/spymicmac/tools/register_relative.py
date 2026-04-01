@@ -34,8 +34,6 @@ def _argparser():
                          help='optional subscript to use for output filenames.')
     _parser.add_argument('-ori', action='store', type=str, default='Relative',
                          help='name of orientation directory (after Ori-) (default: Relative).')
-    _parser.add_argument('-ortho_res', action='store', type=float, default=8,
-                         help='approx. ground sampling distance (pixel resolution) of ortho image. (default: 8 m)')
     _parser.add_argument('-imgsource', action='store', type=str, default='DECLASSII',
                          help='USGS dataset name for images (default: DECLASSII).')
     _parser.add_argument('-strategy', action='store', type=str, default='grid',

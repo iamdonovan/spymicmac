@@ -589,7 +589,6 @@ def register_relative(dirmec: str, fn_dem: Union[str, Path], fn_ref: Union[str, 
     :param block_num: block number to use if processing multiple image blocks
     :param subscript: optional subscript to use for output filenames
     :param ori: name of orientation directory (after Ori-)
-    :param ortho_res: approx. ground sampling distance (pixel resolution) of ortho image
     :param imgsource: USGS dataset name for images
     :param strategy: strategy for generating GCPs. Must be one of 'grid', 'random', 'chebyshev', or 'peaks'. Note that
         if 'random' is used, density is the approximate number of points, rather than the distance between grid points.
@@ -916,7 +915,7 @@ def register_relative(dirmec: str, fn_dem: Union[str, Path], fn_ref: Union[str, 
             micmac.write_image_mesures(imlist, cps, out_dir, subscript, ort_dir=None, outname='AutoCPMeasures', ori=ori)
 
     # now, iterate campari to refine the orientation
-    gcps = micmac.iterate_campari(gcps, out_dir, match_pattern, subscript, ref_img.res[0], ortho_res,
+    gcps = micmac.iterate_campari(gcps, out_dir, match_pattern, subscript, dx=ref_img.res[0],
                                   rel_ori=ori, allfree=allfree, max_iter=max_iter, homol=dir_homol)
 
     if use_cps:
