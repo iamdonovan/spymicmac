@@ -548,14 +548,14 @@ def _prepare_hillshades(dem, tfm_img, **hillshade_kwargs):
     min_el = dem[np.isfinite(tfm_img)].min()
     max_el = dem[np.isfinite(tfm_img)].max()
 
-    stretched = image.stretch_image(tfm_img, (0.01, 0.99), 1, 0, np.float32)
+    stretched = image.stretch_image(tfm_img, (0.005, 0.995), 1, 0, np.float32)
 
     dem_hs = xdem.DEM(dem).hillshade(**hillshade_kwargs)
 
     if 'z_factor' in hillshade_kwargs.keys():
         hillshade_kwargs.update({'z_factor': hillshade_kwargs['z_factor'] * (max_el - min_el)})
     else:
-        hillshade_kwargs.update({'z_factor': 2 * (max_el - min_el)})
+        hillshade_kwargs.update({'z_factor': 4 * (max_el - min_el)})
 
     tfm_hs = xdem.DEM(dem_hs.copy(new_array=stretched)).hillshade(**hillshade_kwargs)
 
@@ -795,7 +795,8 @@ def register_relative(dirmec: str, fn_dem: Union[str, Path], fn_ref: Union[str, 
             gcps = None
 
     gcps = matching.find_matches(rough_tfm, ref_img, mask_full.data.data, points=gcps, initM=model, strategy=strategy,
-                                 spacing=density, dstwin=_search_size(rough_tfm.shape), use_highpass=use_highpass)
+                                 spacing=density, srcwin=100, dstwin=_search_size(rough_tfm.shape),
+                                 use_highpass=use_highpass)
 
     x, y = ref_img.ij2xy(gcps['search_i'], gcps['search_j'])
     gcps = gpd.GeoDataFrame(gcps, geometry=gpd.points_from_xy(x, y, crs=ref_img.crs))
@@ -826,7 +827,7 @@ def register_relative(dirmec: str, fn_dem: Union[str, Path], fn_ref: Union[str, 
     # run ransac to find the matches between the transformed image and the master image make a coherent transformation
     # residual_threshold is 20 pixels to allow for some local distortions, but get rid of the big blunders
     gcps['offset'] = np.sqrt(gcps['dj'] ** 2 + gcps['di'] ** 2)
-    thresh = np.ceil(min(20, gcps['offset'].median() + 2 * nmad(gcps['offset'])))
+    thresh = np.ceil(min(20, gcps['offset'].median() + 4 * nmad(gcps['offset'])))
 
     models = []
     inliers = []
