@@ -1414,9 +1414,10 @@ def find_matches(tfm_img: NDArray, refgeo: gu.Raster, mask: NDArray, points: Uni
     :param mask: a mask indicating areas that should be used for matching.
     :param points: a GeoDataFrame of point locations
     :param initM: the model used for transforming the initial, non-georeferenced image.
-    :param strategy: strategy for generating points. Must be one of 'grid' or 'random'. Note that if
-        'random' is used, density is the approximate number of points, rather than the distance between
-        grid points
+    :param strategy: strategy for generating points. Must be one of 'grid', 'random', 'chebyshev', or 'peaks'. Note that
+        if 'random' is used, density is the approximate number of points, rather than the distance between grid points.
+        If 'chebyshev' or 'peaks' is used, the search points should be generated beforehand, then passed using the
+        points argument as a DataFrame with ['search_j', 'search_i'] representing the search point column/row coordinates.
     :param spacing: the grid spacing, in pixels
     :param srcwin: the half-size of the template window.
     :param dstwin: the half-size of the search window.
