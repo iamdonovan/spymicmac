@@ -11,6 +11,7 @@ def _argparser():
         - Hillshade: post_processed/{out_name}_HS.tif
         - Correlation: post_processed/{out_name}_CORR.tif
         - Orthomosaic: post_processed/{out_name}_Ortho.tif
+        - Pointcloud (.ply): post_processed/{out_name}.ply
     """
     parser = argparse.ArgumentParser(description=helpstr,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -27,6 +28,8 @@ def _argparser():
                              'that you have run mm3d Tawny with Out=Orthophotomosaic first.')
     parser.add_argument('--ind_ortho', action='store_true',
                         help='Post-process the individual orthophotos in  in Ortho-{dirmec}, as well.')
+    parser.add_argument('--do_ply', action='store_true',
+                        help='run mm3d Nuage2Ply to create point cloud in PLY format.')
     return parser
 
 
