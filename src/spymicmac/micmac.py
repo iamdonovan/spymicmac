@@ -1384,7 +1384,8 @@ def batch_saisie_fids(imlist: list, flavor: str = 'qt', fn_cam: Union[None, str]
 
 
 def tapioca(img_pattern: str = 'OIS.*tif', res_low: int = 400, res_high: int = 1200,
-            fn_neighbours: Union[str, Path, None] = None, exp_txt: bool = False) -> int:
+            fn_neighbours: Union[str, Path, None] = None, exp_txt: bool = False,
+            subscript: Union[None, str] = None) -> int:
     """
     Run mm3d Tapioca to find image tie points.
 
@@ -1393,6 +1394,7 @@ def tapioca(img_pattern: str = 'OIS.*tif', res_low: int = 400, res_high: int = 1
     :param res_high: the size of the largest image axis, in pixels, for high-resolution matching
     :param fn_neighbours: filename for an optional XML file containing image pairs
     :param exp_txt: export the tie points in txt (ascii) format
+    :param subscript: the subscript to append to the Homol directory name (default is no subscript)
     """
     if os.name == 'nt':
         echo = subprocess.Popen('echo', stdout=subprocess.PIPE, shell=True)
@@ -1406,6 +1408,9 @@ def tapioca(img_pattern: str = 'OIS.*tif', res_low: int = 400, res_high: int = 1
 
     if exp_txt:
         args.append(f"ExpTxt={int(exp_txt)}")
+
+    if subscript is not None:
+        args.append(f"PostFix={subscript}")
 
     p = subprocess.Popen(args, stdin=echo.stdout)
 
