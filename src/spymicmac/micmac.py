@@ -1558,6 +1558,34 @@ def apericloud(ori: str, img_pattern: str = 'OIS.*tif',
     return p.wait()
 
 
+def nuage2ply(dirmec, fn_out: Union[Path, str, None] = None) -> int:
+    """
+    Convert the Nuage (point cloud) XML to a PLY file for the last Etape (level) found in a given MEC directory.
+
+    :param dirmec: the name of the MEC directory to use (e.g., MEC-Malt).
+    :param fn_out: optional output filename/path, ending in .ply. If not set, output will be
+        dirmec/NuageImProf_STD-MALT_Etape_{level}.ply
+    """
+    if os.name == 'nt':
+        echo = subprocess.Popen('echo', stdout=subprocess.PIPE, shell=True)
+    else:
+        echo = subprocess.Popen('echo', stdout=subprocess.PIPE)
+
+    xml_list = sorted(glob('NuageImProf_STD-MALT_Etape_*.xml', root_dir=dirmec))
+
+    level = max([int(re.findall(r'\d+', fn.split('_')[-1])[0]) for fn in xml_list])
+    fn_xml = Path(dirmec, f"NuageImProf_STD-MALT_Etape_{level}.xml")
+
+    args = ['mm3d', 'Nuage2Ply', fn_xml]
+
+    if fn_out is not None:
+        args.append(f"Out={fn_out}")
+
+    p = subprocess.Popen(args, stdin=echo.stdout)
+
+    return p.wait()
+
+
 def malt(imlist: Union[str, list], ori: str, zoomf: int = 1, zoomi: Union[None, int] = None,
          dirmec: str = 'MEC-Malt', seed_img: Union[str, Path, None] = None, seed_xml: Union[str, Path, None] = None,
          resol_terr: Union[float, int, None] = None, resol_ort: Union[float, int, None] = None,
@@ -2197,7 +2225,7 @@ def _gdal_calc() -> list:
 
 
 def post_process(projstr: Union[str, int], out_name: str, dirmec: str,
-                 do_ortho: bool = True, ind_ortho: bool = False) -> None:
+                 do_ortho: bool = True, ind_ortho: bool = False, do_ply: bool = False) -> None:
     """
     Apply georeferencing and masking to the final DEM and Correlation images (optionally, the orthomosaic as well).
 
@@ -2206,6 +2234,7 @@ def post_process(projstr: Union[str, int], out_name: str, dirmec: str,
         - Hillshade: post_processed/{out_name}_HS.tif
         - Correlation: post_processed/{out_name}_CORR.tif
         - Orthomosaic: post_processed/{out_name}_Ortho.tif
+        - Pointcloud (.ply): post_processed/{out_name}.ply
 
     :param projstr: A string corresponding to the DEM's CRS that GDAL can use to georeference the rasters, or
         an int corresponding to the EPSG code for the DEM's CRS.
@@ -2214,6 +2243,7 @@ def post_process(projstr: Union[str, int], out_name: str, dirmec: str,
     :param do_ortho: Post-process the orthomosaic in Ortho-{dirmec}, as well. Assumes that you have run
         mm3d Tawny with Out=Orthophotomosaic first.
     :param ind_ortho: apply a mask to each individual ortho image
+    :param do_ply: run mm3d Nuage2Ply to create point cloud in PLY format.
     """
 
     os.makedirs('post_processed', exist_ok=True)
@@ -2286,6 +2316,10 @@ def post_process(projstr: Union[str, int], out_name: str, dirmec: str,
                 mosaic_micmac_tiles(f"Ort_{os.path.splitext(fn_img)[0]}", 'Ortho-' + dirmec)
 
             _mask_ortho(fn_img, out_name, dirmec, projstr)
+
+    if do_ply:
+        nuage2ply(dirmec, fn_out=Path('post_processed', out_name + '.ply'))
+
 
 def _needs_mosaic(fn_img: str) -> bool:
     fn_tile = os.path.splitext(fn_img)[0] + '_Tile_0_0.tif'
