@@ -1744,7 +1744,7 @@ def campari(in_gcps: pd.DataFrame, outdir: str, img_pattern: str, sub: str, dx: 
             sig_abs: Union[int, float, None] = None, sig_pix: Union[int, float, None] = 0.5,
             allfree: bool = True, fn_gcp: str = 'AutoGCPs',
             fn_meas: str = 'AutoMeasures', inori: str = 'TerrainRelAuto',
-            outori: str = 'TerrainFinal', homol: str = 'Homol') -> pd.DataFrame:
+            outori: str = 'TerrainFinal', dir_homol: str = 'Homol') -> pd.DataFrame:
     """
     Interface for running mm3d Campari and reading the residuals from the residual xml file.
 
@@ -1764,7 +1764,7 @@ def campari(in_gcps: pd.DataFrame, outdir: str, img_pattern: str, sub: str, dx: 
         fn_meas + sub + '-S2D.xml'
     :param inori: the input orientation to Campari
     :param outori: the output orientation from Campari
-    :param homol: the Homologue directory to use
+    :param dir_homol: the Homologue directory to use
     :return: **out_gcps** -- the input gcps with the updated Campari residuals.
     """
     assert dx is not None or sig_abs is not None, "one of dx or sig_abs must be set."
@@ -1784,7 +1784,7 @@ def campari(in_gcps: pd.DataFrame, outdir: str, img_pattern: str, sub: str, dx: 
     else:
         args.append(f"GCP=[{Path(outdir, fn_gcp)},{sig_abs},{Path(outdir, fn_meas)},{sig_pix}]")
 
-    args.append(f"SH={homol}")
+    args.append(f"SH={dir_homol}")
     args.append(f"AllFree={int(allfree)}")
 
     p = subprocess.Popen(args, stdin=echo.stdout)
