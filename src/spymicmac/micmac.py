@@ -1384,7 +1384,7 @@ def batch_saisie_fids(imlist: list, flavor: str = 'qt', fn_cam: Union[None, str]
 
 
 def tapioca(img_pattern: str = 'OIS.*tif', res_low: int = 400, res_high: int = 1200,
-            fn_neighbours: Union[str, Path, None] = None) -> int:
+            fn_neighbours: Union[str, Path, None] = None, exp_txt: bool = False) -> int:
     """
     Run mm3d Tapioca to find image tie points.
 
@@ -1392,6 +1392,7 @@ def tapioca(img_pattern: str = 'OIS.*tif', res_low: int = 400, res_high: int = 1
     :param res_low: the size of the largest image axis, in pixels, for low-resolution matching
     :param res_high: the size of the largest image axis, in pixels, for high-resolution matching
     :param fn_neighbours: filename for an optional XML file containing image pairs
+    :param exp_txt: export the tie points in txt (ascii) format
     """
     if os.name == 'nt':
         echo = subprocess.Popen('echo', stdout=subprocess.PIPE, shell=True)
@@ -1403,6 +1404,9 @@ def tapioca(img_pattern: str = 'OIS.*tif', res_low: int = 400, res_high: int = 1
     else:
         args = ['mm3d', 'Tapioca', 'File', str(fn_neighbours), str(res_high)]
 
+    if exp_txt:
+        args.append(f"ExpTxt={int(exp_txt)}")
+
     p = subprocess.Popen(args, stdin=echo.stdout)
 
     return p.wait()
@@ -1411,7 +1415,8 @@ def tapioca(img_pattern: str = 'OIS.*tif', res_low: int = 400, res_high: int = 1
 def schnaps(img_pattern: str = 'OIS.*tif',
             nb_win: Union[None, int] = None,
             min_pct_coverage: Union[None, float, int] = None,
-            move_bad: bool = False) -> int:
+            move_bad: bool = False,
+            exp_txt: bool = False) -> int:
     """
     Run mm3d Schnaps, which removes dubious tie points in image geometry. Helps improve
         performance of Tapas and Martini steps.
@@ -1422,6 +1427,7 @@ def schnaps(img_pattern: str = 'OIS.*tif',
     :param min_pct_coverage: the minimum percent coverage to use to accept an image; only used if also
         moving "bad" images (default: 30)
     :param move_bad: move bad images to a folder called "Poubelle"
+    :param exp_txt: tie points (Homol) are in txt (ascii) format
     """
     if os.name == 'nt':
         echo = subprocess.Popen('echo', stdout=subprocess.PIPE, shell=True)
@@ -1439,13 +1445,16 @@ def schnaps(img_pattern: str = 'OIS.*tif',
     if move_bad:
         args.append(f"MoveBadImgs={int(move_bad)}")
 
+    if exp_txt:
+        args.append(f"ExpTxt={int(exp_txt)}")
+
     p = subprocess.Popen(args, stdin=echo.stdout)
 
     return p.wait()
 
 
 def martini(img_pattern: str = 'OIS.*tif', in_ori: Union[None, str] = None, ori_out: Union[None, str] = None,
-            quick: bool = True) -> int:
+            quick: bool = True, exp_txt: bool = False) -> int:
     """
     Run mm3d Martini, which provides a quick way to orient images without solving for camera parameters.
 
@@ -1453,6 +1462,7 @@ def martini(img_pattern: str = 'OIS.*tif', in_ori: Union[None, str] = None, ori_
     :param in_ori: the orientation directory to use to initialize the calibration
     :param ori_out: the name of the output orientation directory
     :param quick: run Martini in "quick" mode
+    :param exp_txt: tie points (Homol) are in txt (ascii) format
     """
     if os.name == 'nt':
         echo = subprocess.Popen('echo', stdout=subprocess.PIPE, shell=True)
@@ -1467,6 +1477,9 @@ def martini(img_pattern: str = 'OIS.*tif', in_ori: Union[None, str] = None, ori_
     if ori_out is not None:
         args.append(f"OriOut={ori_out}")
 
+    if exp_txt:
+        args.append(f"ExpTxt={int(exp_txt)}")
+
     args.append(f"Quick={int(quick)}")
 
     p = subprocess.Popen(args, stdin=echo.stdout)
@@ -1476,7 +1489,8 @@ def martini(img_pattern: str = 'OIS.*tif', in_ori: Union[None, str] = None, ori_
 
 def tapas(cam_model: str, ori_out: Union[str, None] = None, img_pattern: str = 'OIS.*tif',
           in_cal: Union[str, None] = None, in_ori: Union[str, None] = None, lib_foc: bool = True,
-          lib_pp: bool = True, lib_cd: bool = True, dir_homol: Union[str, None] = None) -> int:
+          lib_pp: bool = True, lib_cd: bool = True, dir_homol: Union[str, None] = None,
+          exp_txt: bool = False) -> int:
     """
     Run mm3d Tapas with a given camera calibration model.
 
@@ -1498,6 +1512,7 @@ def tapas(cam_model: str, ori_out: Union[str, None] = None, img_pattern: str = '
     :param lib_pp: allow the principal point to be calibrated
     :param lib_cd: allow the center of distortion to be calibrated
     :param dir_homol: the name of the Homol directory to use (default: Homol)
+    :param exp_txt: tie points (Homol) are in txt (ascii) format
     """
     if os.name == 'nt':
         echo = subprocess.Popen('echo', stdout=subprocess.PIPE, shell=True)
@@ -1520,6 +1535,9 @@ def tapas(cam_model: str, ori_out: Union[str, None] = None, img_pattern: str = '
     if dir_homol is not None:
         args.append('SH=' + dir_homol)
 
+    if exp_txt:
+        args.append(f"ExpTxt={int(exp_txt)}")
+
     p = subprocess.Popen(args, stdin=echo.stdout)
 
     return p.wait()
@@ -1527,7 +1545,7 @@ def tapas(cam_model: str, ori_out: Union[str, None] = None, img_pattern: str = '
 
 def apericloud(ori: str, img_pattern: str = 'OIS.*tif',
                fn_out: Union[str, None] = None, with_points: bool = True,
-               with_cam: bool = True) -> int:
+               with_cam: bool = True, exp_txt: bool = False) -> int:
     """
     Run mm3d AperiCloud to create a point cloud layer
 
@@ -1536,6 +1554,7 @@ def apericloud(ori: str, img_pattern: str = 'OIS.*tif',
     :param fn_out: the output filename (default: AperiCloud_{ori}.ply)
     :param with_points: display the point cloud
     :param with_cam: display the cameras
+    :param exp_txt: tie points (Homol) are in txt (ascii) format
     """
     if os.name == 'nt':
         echo = subprocess.Popen('echo', stdout=subprocess.PIPE, shell=True)
@@ -1552,6 +1571,9 @@ def apericloud(ori: str, img_pattern: str = 'OIS.*tif',
 
     if not with_cam:
         args.append("WithCam=0")
+
+    if exp_txt:
+        args.append(f"ExpTxt={int(exp_txt)}")
 
     p = subprocess.Popen(args, stdin=echo.stdout)
 
@@ -1744,7 +1766,7 @@ def campari(in_gcps: pd.DataFrame, outdir: str, img_pattern: str, sub: str, dx: 
             sig_abs: Union[int, float, None] = None, sig_pix: Union[int, float, None] = 0.5,
             allfree: bool = True, fn_gcp: str = 'AutoGCPs',
             fn_meas: str = 'AutoMeasures', inori: str = 'TerrainRelAuto',
-            outori: str = 'TerrainFinal', dir_homol: str = 'Homol') -> pd.DataFrame:
+            outori: str = 'TerrainFinal', dir_homol: str = 'Homol', exp_txt: bool = False) -> pd.DataFrame:
     """
     Interface for running mm3d Campari and reading the residuals from the residual xml file.
 
@@ -1765,6 +1787,7 @@ def campari(in_gcps: pd.DataFrame, outdir: str, img_pattern: str, sub: str, dx: 
     :param inori: the input orientation to Campari
     :param outori: the output orientation from Campari
     :param dir_homol: the Homologue directory to use
+    :param exp_txt: tie points (Homol) are in txt (ascii) format
     :return: **out_gcps** -- the input gcps with the updated Campari residuals.
     """
     assert dx is not None or sig_abs is not None, "one of dx or sig_abs must be set."
@@ -1786,6 +1809,9 @@ def campari(in_gcps: pd.DataFrame, outdir: str, img_pattern: str, sub: str, dx: 
 
     args.append(f"SH={dir_homol}")
     args.append(f"AllFree={int(allfree)}")
+
+    if exp_txt:
+        args.append(f"ExpTxt={int(exp_txt)}")
 
     p = subprocess.Popen(args, stdin=echo.stdout)
     p.wait()
