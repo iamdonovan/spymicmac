@@ -814,8 +814,8 @@ def register_relative(dirmec: str, fn_dem: Union[str, Path], fn_ref: Union[str, 
         dem = ref_img
 
     if 'elevation' not in gcps.columns:
-        gcps['elevation'] = dem.interp_points((gcps.geometry.x, gcps.geometry.y))
-    gcps['el_rel'] = rel_dem.interp_points((gcps.rel_x, gcps.rel_y))
+        gcps['elevation'] = dem.interp_points((gcps.geometry.x, gcps.geometry.y), as_array=True)
+    gcps['el_rel'] = rel_dem.interp_points((gcps.rel_x, gcps.rel_y), as_array=True)
 
     # drop any gcps where we don't have a DEM value or a valid match
     if dem.nodata is not None:
