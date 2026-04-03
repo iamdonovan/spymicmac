@@ -1702,16 +1702,22 @@ def tawny(dirmec: str, radiomegal: bool = False) -> int:
     return p.wait()
 
 
-def block_malt(imlist: list, nimg: int = 3, ori: str = 'Relative', zoomf: int = 8) -> None:
+def block_malt(imlist: list, ori: str, nimg: int = 3, malt_kwargs: dict = {}) -> None:
     """
-    Run mm3d Malt Ortho and mm3d Tawny on successive blocks of images.
+    Run mm3d Malt Ortho successive blocks of images.
 
     :param imlist: an iterable object of image filenames, or an iterable object of lists of image filenames
+    :param ori: the orientation directory to use for Malt.
     :param nimg: the number of images to use in a block
-    :param ori: the name of the orientation directory (e.g., Ori-Relative).
-    :param zoomf: the final Zoom level to use
+    :param malt_kwargs: additional keyword arguments to pass to malt().
     """
-    dirmec = 'MEC-' + ori
+
+    if 'dirmec' not in malt_kwargs.keys():
+        dirmec = 'MEC-Malt'
+    else:
+        dirmec = malt_kwargs['dirmec']
+        del malt_kwargs['dirmec']
+
 
     if type(imlist[0]) is str:
         inds = range(0, len(imlist) - (nimg - 1), nimg - 1)
@@ -1723,12 +1729,7 @@ def block_malt(imlist: list, nimg: int = 3, ori: str = 'Relative', zoomf: int = 
 
     for block, imgs in enumerate(blocklist):
         print(imgs)
-
-        malt(imgs, ori, dirmec=f"{dirmec}_block{block}", zoomf=zoomf)
-
-        tawny(f"{dirmec}_block{block}")
-
-        mosaic_micmac_tiles('Orthophotomosaic', f"{dirmec}_block{block}")
+        malt(imgs, ori, dirmec=f"{dirmec}_block{block}", **malt_kwargs)
 
 
 def bascule(in_gcps: pd.DataFrame, outdir: str, img_pattern: str, sub: str, ori: str,
