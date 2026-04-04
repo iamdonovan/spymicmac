@@ -2350,7 +2350,9 @@ def post_process(projstr: Union[str, int], out_name: str, dirmec: str,
             _mask_ortho(fn_img, out_name, dirmec, projstr)
 
     if do_ply:
+        print(f"saving pointcloud to {Path('post_processed', out_name + '.ply')} ...", end=' ')
         nuage2ply(dirmec, fn_out=Path('post_processed', out_name + '.ply'))
+        print('done.')
 
 
 def _needs_mosaic(fn_img: str) -> bool:
