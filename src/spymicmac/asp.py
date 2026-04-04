@@ -3,6 +3,7 @@ spymicmac.asp is a collection of tools for interfacing with Ames Stereo Pipeline
 """
 import os
 from pathlib import Path
+from glob import glob
 import subprocess
 import numpy as np
 import pyproj
@@ -21,6 +22,26 @@ gdal.UseExceptions()
 
 def _isaft(fn_img: str) -> bool:
     return os.path.splitext(fn_img)[0][-4] == 'A'
+
+
+def sorted_framelist(globstr: str, split_ext: bool = False, root_dir: Union[str, Path] = '.') -> list:
+    """
+    Get a list of images in the current directory, sorted by forward/aft camera and then frame type.
+
+    :param globstr: the glob pattern get a list of filenames (e.g., "D3C*.tif" for KH-9 PC images)
+    :param split_ext: remove extension from filenames
+    :param root_dir: the root directory to search for image files
+    """
+    fn_imgs = [fn for fn in glob(globstr, root_dir=root_dir) if 'map' not in fn]
+
+    if split_ext:
+        fn_imgs = [os.path.splitext(fn)[0] for fn in fn_imgs]
+
+    imgs = pd.DataFrame(data={'filename': fn_imgs})
+    imgs['is_aft'] = [_isaft(fn) for fn in imgs['filename']]
+    imgs['frame'] = [os.path.splitext(fn)[0][-3:] for fn in imgs['filename']]
+
+    return list(imgs.sort_values(['is_aft', 'frame'])['filename'])
 
 
 def _parse_cam(fn_cam: str) -> dict:
@@ -252,18 +273,81 @@ def _stanrogers(fprint: Polygon, north_up: bool) -> tuple[tuple[float, float], .
     return (ul.x, ul.y), (ur.x, ur.y), (lr.x, lr.y), (ll.x, ll.y)
 
 
-def bundle_adjust_from_gcp(fn_img: str, fn_cam: str, fn_out: str, fn_gcp: str) -> None:
+def bundle_adjust(fn_imgs: Union[list[Union[str, Path]], str],
+                  out_prefix: str,
+                  cam_prefix: Union[str, Path] = '',
+                  map_suffix: Union[str, None] = None,
+                  session_type: Union[str, None] = None,
+                  gcp_patt: Union[str, None] = None,
+                  num_iter: int = 20,
+                  num_pass: int = 2,
+                  ba_kwargs: dict = {},
+                  ba_flags: list = []) -> None:
     """
-    Use an ASP GCP file to refine a camera position
+    Run bundle_adjust on a given set of images. For more information about bundle_adjust, see the ASP documentation.
 
-    :param str fn_img: the filename of the image to generate a camera for
-    :param str fn_cam: the camera filename to use for refinement
-    :param str fn_out: the output folder and prefix to write the updated camera to
-    :param str fn_gcp: the GCP filename
+    :param fn_imgs: the filename of the images to run bundle_adjust on.
+    :param out_prefix: the output prefix to use for the files produced by bundle_adjust.
+    :param cam_prefix: the prefix/path to use for the camera (e.g., .tsai) files.
+    :param map_suffix: the suffix used for the map-projected images, if map-projected images are being used. One of
+        session_type or map_suffix must be specified.
+    :param session_type: the stereo session type to use for processing. One of session_type or map_suffix must be
+        specified.
+    :param gcp_patt: the matching pattern for the GCP file(s) to use in the bundle adjustment.
+    :param num_iter: the maximum number of iterations.
+    :param num_pass: how many passes of bundle adjustment to do, with given number of iterations in each pass.
+        For more than one pass, outliers will be removed between passes using --remove-outliers-params, and
+        re-optimization will take place. Residual files and a copy of the match files with the outliers removed
+        (*-clean.match) will be written to disk.
+    :param ba_kwargs: additional kwargs to pass to bundle_adjust, for any arguments/flags that take a value.
+        Keys should not include the '--' prefix - for example, use 'intrinsics-to-float' to define which
+        intrinsics should be floated, rather than '--intrinsics-to-float'.
+    :param ba_flags: additional flags to pass to bundle adjust, for any arguments/flags that do not take a value.
+        Flags should not include the '--' prefix - for example, use 'fix-gcp-xyz' rather than '--fix-gcp-xyz'.
     """
-    cl_args = ['bundle_adjust', fn_img, fn_cam, fn_gcp, '-t', 'opticalbar', '--inline-adjustments',
-               '--num-passes', '1', '--camera-weight', '0', '--ip-detect-method', '1', '-o', fn_out,
-               '--max-iterations', '30', '--fix-gcp-xyz']
+    if map_suffix is None and session_type is None:
+        raise KeyError('One of map_suffix or session_type must be specified.')
+
+    if isinstance(fn_imgs, str):
+        fn_imgs = sorted_framelist(fn_imgs)
+
+    # get a list of image names without extensions
+    clean_names = [os.path.splitext(fn)[0] for fn in fn_imgs]
+
+    cl_args = ['bundle_adjust']
+
+    # add the images
+    cl_args.extend(fn_imgs)
+
+    # add the cam files
+    fn_cams = [str(Path(cam_prefix, fn + '.tsai')) for fn in clean_names]
+    cl_args.extend(fn_cams)
+
+    if gcp_patt is not None:
+        fn_gcp = glob(gcp_patt)
+        cl_args.extend(fn_gcp)
+
+    if map_suffix is not None:
+        map_args = ['--mapprojected-data']
+        fn_map = ['.'.join([fn, map_suffix]) for fn in clean_names]
+        map_args.append(' '.join(fn_map))
+
+        cl_args.extend(map_args)
+
+    if session_type is not None:
+        cl_args.extend(['-t', session_type])
+
+    cl_args.extend(['-o', out_prefix])
+    cl_args.extend(['--num_iterations', num_iter])
+    cl_args.extend(['--num-passes', num_pass])
+
+    for arg in ba_flags:
+        cl_args.append('--' + arg)
+
+    for kwarg in ba_kwargs:
+        cl_args.extend(['--' + kwarg, str(ba_kwargs[kwarg])])
+
+    print(cl_args)
 
     p = subprocess.Popen(cl_args)
     p.wait()
