@@ -338,8 +338,8 @@ def bundle_adjust(fn_imgs: Union[list[Union[str, Path]], str],
         cl_args.extend(['-t', session_type])
 
     cl_args.extend(['-o', out_prefix])
-    cl_args.extend(['--num_iterations', num_iter])
-    cl_args.extend(['--num-passes', num_pass])
+    cl_args.extend(['--num-iterations', str(num_iter)])
+    cl_args.extend(['--num-passes', str(num_pass)])
 
     for arg in ba_flags:
         cl_args.append('--' + arg)
