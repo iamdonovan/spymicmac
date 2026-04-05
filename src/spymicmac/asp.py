@@ -401,6 +401,71 @@ def mapproject(fn_dem: Union[str, Path], fn_img: Union[str, Path], fn_cam: Union
     p.wait()
 
 
+def camera_footprint(fn_img: Union[str, Path],
+                     fn_cam: Union[str, Path],
+                     fn_dem: Union[str, Path],
+                     fn_out: Union[str, Path],
+                     quick: bool = True,
+                     crs = None) -> None:
+    """
+    Project camera footprint to a shapefile using a camera file and a DEM.
+
+    :param fn_img: the image filename
+    :param fn_cam: the camera filename
+    :param fn_dem: the DEM filename
+    :param fn_out: the output filename
+    :param quick: use a faster, less accurate projection.
+    """
+    cl_args = ['camera_footprint', fn_img, fn_cam]
+
+    cl_args.extend(['--output-kml', 'tmp.kml'])
+    cl_args.extend(['--dem-file', fn_dem])
+
+    if quick:
+        cl_args.append('--quick')
+
+    p = subprocess.Popen(cl_args)
+    p.wait()
+
+    tmp = gpd.read_file('tmp.kml')
+    fp = Polygon(tmp.loc[0, 'geometry'])
+
+    if crs is not None:
+        out = gpd.GeoDataFrame(data={'filename': [os.path.splitext(fn_img)[0]], 'geometry': [fp]}, crs=tmp.crs).to_crs(crs)
+    else:
+        out = gpd.GeoDataFrame(data={'filename': [os.path.splitext(fn_img)[0]], 'geometry': [fp]}, crs=tmp.crs)
+
+    out.to_file(fn_out)
+
+    os.remove('tmp.kml')
+
+
+def mapprojected_footprint(fn_img, out_crs=None, nodata=None) -> gpd.GeoDataFrame:
+    """
+    Get the footprint of the valid (not nodata) areas of a raster.
+
+    :param fn_img: the image filename
+    :param out_crs: the output CRS of the footprint
+    :param nodata: the nodata value to use. If not provided, uses the image nodata value if it is set; otherwise, 0.
+    """
+    img = gu.Raster(fn_img)
+
+    if nodata is None:
+        if img.nodata is None:
+            nodata = 0
+        else:
+            nodata = img.nodata
+
+    tmp = (img != nodata).polygonize()
+
+    fp = tmp.union_all().ds.loc[0, 'geometry']
+
+    if out_crs is None:
+        return gpd.GeoDataFrame(data={'filename': fn_img, 'geometry': fp}, index=[0], crs=img.crs)
+    else:
+        return gpd.GeoDataFrame(data={'filename': fn_img, 'geometry': fp}, index=[0], crs=img.crs).to_crs(out_crs)
+
+
 def write_asp_gcp(fn_gcp: Union[str, Path], gcp_df: gpd.GeoDataFrame,
                   gcp_list: Union[None, list] = None, imlist: Union[None, list] = None,
                   scale: int = 1, singles: bool = True, meas: Union[None, pd.DataFrame] = None,
