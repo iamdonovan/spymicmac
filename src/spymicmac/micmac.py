@@ -79,7 +79,7 @@ def write_neighbour_images(imlist: Union[list, None] = None,
 def pairs_from_footprints(imlist: list,
                           footprints: Union[str, Path, gpd.GeoDataFrame, None] = None,
                           name_field: str = 'ID', prefix: str = 'OIS-Reech_', file_ext: str = '.tif',
-                          dataset='AERIAL_COMBIN') -> list:
+                          dataset='AERIAL_COMBIN', return_overlap: bool = False) -> Union[list, tuple[list, list]]:
     """
     Using a list of images and a collection of image footprints, return a list of potential image pairs for processing
     with Tapioca.
@@ -91,7 +91,10 @@ def pairs_from_footprints(imlist: list,
     :param prefix: the prefix attached to the image name read by Tapioca
     :param file_ext: the file extension for the images read by Tapioca
     :param dataset: the USGS dataset name to search if no footprints are provided
-    :return: **pairs** -- a list of tuples representing image pairs
+    :param return_overlap: return the percent overlap for each pair
+    :return:
+        - **pairs** -- a list of tuples representing image pairs
+        - **overlaps** -- a list of the percent overlap for each pair, if return_overlap is True
     """
 
     if footprints is None:
@@ -106,6 +109,7 @@ def pairs_from_footprints(imlist: list,
     s = STRtree([f for f in footprints['geometry'].values])
 
     all_pairs = []
+    pct_overlap = []
 
     for ind, row in footprints.iterrows():
         fn = row[name_field]
@@ -116,6 +120,7 @@ def pairs_from_footprints(imlist: list,
         res = s.query(fp)
         intersects = [footprints.loc[c, 'geometry'] for c in res if fp.intersection(footprints.loc[c, 'geometry']).area > 0]
         fnames = [footprints[name_field][footprints['geometry'] == c].values[0] for c in intersects]
+        pct_overlap += [fp.intersection(c).area / fp.area for c in intersects if c != fp]
         try:
             fnames.remove(fn)
         except ValueError:
@@ -123,7 +128,10 @@ def pairs_from_footprints(imlist: list,
 
         all_pairs += [(prefix + fn + file_ext, prefix + fn_match + file_ext) for fn_match in fnames]
 
-    return all_pairs
+    if not return_overlap:
+        return all_pairs
+    else:
+        return all_pairs, pct_overlap
 
 
 def _get_pairs(fn_img: str, dir_homol: Union[str, Path]) -> list:
