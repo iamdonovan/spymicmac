@@ -420,14 +420,17 @@ def download_pgc_mosaic(flavor: str, imlist: Union[list, None] = None,
 
 def crop_mask_dem(dem: Union[str, Path, xdem.DEM],
                   footprints: Union[str, Path, gu.Vector],
-                  buff: Union[float, int] = 5000) -> xdem.DEM:
+                  buff: Union[float, int] = 5000,
+                  use_rect: bool = True) -> xdem.DEM:
     """
-    Crop and mask a DEM to the buffered extent of footprints. Mask is created using the minimum rotated rectangle of
-    the buffer of the union of all footprints.
+    Crop and mask a DEM to the buffered extent of footprints. By default, nask is created using the minimum rotated
+    rectangle of the buffer of the union of all footprints.
 
     :param dem: the DEM to crop
     :param footprints: the footprints to use to crop and mask the DEM
     :param buff: the distance to buffer the DEMs by
+    :param use_rect: use the minimum rotated rectangle of the union of the footprints. If false, uses the buffered
+        union of the footprints.
     """
 
     if isinstance(footprints, (str, Path)):
@@ -436,8 +439,13 @@ def crop_mask_dem(dem: Union[str, Path, xdem.DEM],
     if isinstance(dem, (str, Path)):
         dem = xdem.DEM(dem)
 
-    masked_area = footprints.union_all().to_crs(dem.crs) \
-        .buffer(buff, cap_style='square', join_style='mitre').minimum_rotated_rectangle()
+    if use_rect:
+        masked_area = footprints.union_all().to_crs(dem.crs) \
+            .buffer(buff, cap_style='square', join_style='mitre').minimum_rotated_rectangle()
+    else:
+        masked_area = footprints.union_all().to_crs(dem.crs) \
+            .buffer(buff, cap_style='square', join_style='mitre')
+
 
     masked = dem.crop(masked_area)
 
