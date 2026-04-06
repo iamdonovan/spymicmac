@@ -576,3 +576,121 @@ def mask_asp_dem_gcps(fn_gcp: Union[str, Path],
     valid = gcps.index[(gcps.index.isin(within_inc)) & (~gcps.index.isin(within_exc))]
 
     write_asp_gcp(fn_gcp, gcps.loc[valid], headers=headers)
+
+
+def gcps_from_dem(img_pair: tuple[str, str],
+                  fn_dem: Union[str, Path],
+                  fn_ref: Union[str, Path],
+                  camera_prefix: str,
+                  fn_gcp: str,
+                  warp_prefix: str = 'warp/run',
+                  ps_kwargs: dict = {},
+                  ps_args: list = [],
+                  gcp_kwargs: dict = {},
+                  gcp_args: list = []) -> None:
+    """
+    Use ASP's parallel_stereo and dem2gcp to generate a GCP file for a pair of images.
+
+    Runs the following steps, in order:
+        - uses dem_mosaic to blur the input (warped) dem
+        - uses gdaldem hillshade to generate a hillshade of the blurred warped dem
+        - masks the reference DEM to the valid areas of the blurred warped DEM hillshade
+        - uses gdaldem hillshade to generate a hillshade of the cropped, blurred reference dem
+        - runs parallel_stereo in correlator-mode to find the disparity between the two DEM hillshade (if do_corr=True)
+        - runs dem2gcp to generate a .gcp file with GCPs for the two input images.
+
+    :param img_pair: the names of the two images to use. Should be ordered as (left_img, right_img), the same way that
+        parallel_stereo was used to generate the warped DEM.
+    :param fn_dem: the filename of the input (warped) DEM.
+    :param fn_ref: the filename of the reference DEM.
+    :param camera_prefix: the prefix of the camera files for the two input images (e.g., ba/run)
+    :param fn_gcp: the filename of the output GCP file. Should use the extension .gcp
+    :param warp_prefix: the prefix to save the output of parallel_stereo to. Defaults to warp/run
+    :param ps_kwargs: optional keyword parameters for parallel_stereo, for any arguments/flags that take a value.
+        Keys should not include the '--' prefix - for example, use 'stereo-algorithm' to define which stereo algorithm
+        to use, rather than '--stereo-algorithm'.
+    :param ps_args: optional flags to pass to parallel_stereo, for any arguments/flags that do not take a value.
+        Flags should not include the '--' prefix.
+    :param gcp_kwargs: optional keyword parameters for dem2gcp, for any arguments/flags that take a value.
+        Keys should not include the '--' prefix - for example, use 'gcp-sigma' to set the GCP uncertainty
+        to use, rather than '--gcp-sigma'.
+    :param gcp_args: optional flags to pass to dem2gcp, for any arguments/flags that do not take a value.
+        Flags should not include the '--' prefix.
+    """
+
+    left, right = img_pair
+
+    print(f"Running dem_mosaic on {fn_dem}.")
+    p = subprocess.Popen(['dem_mosaic', '--dem-blur-sigma', '5', fn_dem,
+                          '-o', 'tmp_warp_dem.tif'])
+    p.wait()
+
+    print('Creating hillshade of warped DEM')
+    p = subprocess.Popen(['gdaldem', 'hillshade', '-multidirectional', '-compute_edges',
+                          'tmp_warp_dem.tif', 'tmp_warp_dem_hs.tif'])
+    p.wait()
+
+    print('Cropping/masking reference DEM to valid area of warped DEM.')
+    mapprojected_footprint('tmp_warp_dem_hs.tif').to_file('tmp_mask.gpkg')
+    tmp_masked = data.crop_mask_dem(fn_ref,
+                                    'tmp_mask.gpkg',
+                                    buff=1000,
+                                    use_rect=False)
+    tmp_masked.to_file('tmp_dem.tif')
+
+    print("Running dem_mosaic on cropped/masked reference DEM.")
+    p = subprocess.Popen(['dem_mosaic', '--dem-blur-sigma', '5', 'tmp_dem.tif',
+                          '-o', 'tmp_blur.tif'])
+    p.wait()
+
+    print('Creating hillshade of cropped/masked reference DEM')
+    p = subprocess.Popen(['gdaldem', 'hillshade', '-multidirectional', '-compute_edges',
+                          'tmp_blur.tif', 'tmp_blur_hs.tif'])
+    p.wait()
+
+    if not ps_kwargs:
+        ps_kwargs = {'stereo-algorithm': 'asp_mgm', 'subpixel-mode': 9, 'ip-per-tile': 1000}
+    elif 'stereo-algorithm' not in ps_kwargs:
+        ps_kwargs['stereo-algorithm'] = 'asp_mgm'
+
+    ps_cl_args = ['parallel_stereo', '--correlator-mode']
+    for kwarg in ps_kwargs:
+        ps_cl_args.extend(['--' + kwarg, str(ps_kwargs[kwarg])])
+
+    for arg in ps_args:
+        ps_cl_args.append('--' + arg)
+
+    ps_cl_args.extend(['tmp_warp_dem_hs.tif', 'tmp_blur_hs.tif', warp_prefix])
+
+    p = subprocess.Popen(ps_cl_args)
+    p.wait()
+
+    # now, call dem2gcp on the output
+    gcp_cl_args = ['dem2gcp', '--warped-dem', 'tmp_warp_dem_hs.tif', '--ref-dem', 'tmp_dem.tif',
+                   '--warped-to-ref-disparity', f"{warp_prefix}-F.tif",
+                   '--left-image', left,
+                   '--right-image', right,
+                   '--left-camera', f"{camera_prefix}-{left.replace('.tif', '')}.tsai",
+                   '--right-camera', f"{camera_prefix}-{right.replace('.tif', '')}.tsai",
+                   '--match-file', f"{camera_prefix}-{left.replace('.tif', '')}__{right.replace('.tif', '')}-clean.match",
+                   '--output-gcp', fn_gcp]
+
+    if not gcp_kwargs:
+        gcp_kwargs = {'max-num-gcp': 20000}
+
+    if 'gcp-sigma' not in gcp_kwargs:
+        dem = gu.Raster('tmp_dem.tif')
+        gcp_kwargs['gcp-sigma'] = dem.res[0] / 4
+
+    for kwarg in gcp_kwargs:
+        gcp_cl_args.extend(['--' + kwarg, str(gcp_kwargs[kwarg])])
+
+    p = subprocess.Popen(gcp_cl_args)
+    p.wait()
+
+    tmp_files = ['tmp_dem.tif', 'tmp_blur.tif', 'tmp_blur_hs.tif',
+                 'tmp_warp_dem.tif', 'tmp_warp_dem_hs.tif', 'tmp_mask.gpkg']
+    log_files = glob('tmp_warp_dem.tif*.txt')
+
+    for fn_tmp in tmp_files + log_files:
+        os.remove(fn_tmp)
