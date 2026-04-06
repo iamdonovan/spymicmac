@@ -183,7 +183,8 @@ def optical_bar_cam(fn_img: str, flavor: str, out_name: str,
             print('velocity = 0 0 0', file=f)
 
 def cam_from_footprint(fn_img: str, flavor: str, scan_res: float, fn_dem: Union[str, Path],
-                       north_up: bool=True, footprints: gpd.GeoDataFrame=None, mean_el: Union[float, int]=1000):
+                       north_up: bool=True, footprints: gpd.GeoDataFrame=None,
+                       mean_el: Union[float, int]=1000, use_3d_vel: bool = True):
     """
     Generate a camera (.tsai) file from an image footprint.
 
@@ -196,6 +197,7 @@ def cam_from_footprint(fn_img: str, flavor: str, scan_res: float, fn_dem: Union[
         provided, will attempt to download from USGS.
     :param mean_el: the mean surface elevation covered by the image. If None, uses DEM and footprint to
         calculate the value.
+    :param use_3d_vel: use a 3D velocity vector, rather than a 1D speed. Requires ASP 3.6.0 or greater.
     :return:
     """
     clean_name = fn_img.split('OIS-Reech_')[-1].split('.tif')[0]
@@ -213,10 +215,12 @@ def cam_from_footprint(fn_img: str, flavor: str, scan_res: float, fn_dem: Union[
         mean_el = dem[mask].mean()
 
     if _isaft(fn_img):
-        optical_bar_cam(fn_img, flavor, 'samp_aft.tsai', fprint, scan_res=scan_res, mean_el=mean_el)
+        optical_bar_cam(fn_img, flavor, 'samp_aft.tsai', fprint,
+                        scan_res=scan_res, mean_el=mean_el, use_3d_vel=use_3d_vel)
         fn_samp = 'samp_aft.tsai'
     else:
-        optical_bar_cam(fn_img, flavor, 'samp_for.tsai', fprint, scan_res=scan_res, mean_el=mean_el)
+        optical_bar_cam(fn_img, flavor, 'samp_for.tsai', fprint,
+                        scan_res=scan_res, mean_el=mean_el, use_3d_vel=use_3d_vel)
         fn_samp = 'samp_for.tsai'
 
     coords = _stanrogers(fprint, north_up)
@@ -698,6 +702,7 @@ def gcps_from_dem(img_pair: tuple[str, str],
     tmp_files = ['tmp_dem.tif', 'tmp_blur.tif', 'tmp_blur_hs.tif',
                  'tmp_warp_dem.tif', 'tmp_warp_dem_hs.tif', 'tmp_mask.gpkg']
     log_files = glob('tmp_warp_dem.tif*.txt')
+    log_files = glob('tmp_blur.tif*.txt')
 
     for fn_tmp in tmp_files + log_files:
         os.remove(fn_tmp)
