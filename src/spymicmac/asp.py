@@ -131,6 +131,13 @@ def optical_bar_cam(fn_img: str, flavor: str, out_name: str,
     else:
         params['motion_comp'] = 0.014
 
+        frame_width_cm = scan_res * width * 100 # frame width in cm
+        scan_time, scan_angle = declass.match_scan_angle(frame_width_cm)
+        print(f"Estimate frame width is {frame_width_cm} cm, corresponding to a {scan_angle}° scan.")
+        print(f"Using initial scan time guess of {scan_time:.4f} s.")
+
+        params['scan_time'] = scan_time
+
     with open(out_name, 'w') as f:
         print('VERSION_4', file=f)
         print('OPTICAL_BAR', file=f)
