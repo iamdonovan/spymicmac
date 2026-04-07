@@ -1780,7 +1780,8 @@ def campari(in_gcps: pd.DataFrame, outdir: str, img_pattern: str, sub: str, dx: 
             sig_abs: Union[int, float, None] = None, sig_pix: Union[int, float, None] = 0.5,
             allfree: bool = True, fn_gcp: str = 'AutoGCPs',
             fn_meas: str = 'AutoMeasures', inori: str = 'TerrainRelAuto',
-            outori: str = 'TerrainFinal', dir_homol: str = 'Homol', exp_txt: bool = False) -> pd.DataFrame:
+            outori: str = 'TerrainFinal', dir_homol: str = 'Homol',
+            exp_txt: bool = False, rap_txt: Union[str, Path, None] = None) -> pd.DataFrame:
     """
     Interface for running mm3d Campari and reading the residuals from the residual xml file.
 
@@ -1802,6 +1803,7 @@ def campari(in_gcps: pd.DataFrame, outdir: str, img_pattern: str, sub: str, dx: 
     :param outori: the output orientation from Campari
     :param dir_homol: the Homologue directory to use
     :param exp_txt: tie points (Homol) are in txt (ascii) format
+    :param rap_txt: filename for the per-point residual report, if desired
     :return: **out_gcps** -- the input gcps with the updated Campari residuals.
     """
     assert dx is not None or sig_abs is not None, "one of dx or sig_abs must be set."
@@ -1826,6 +1828,9 @@ def campari(in_gcps: pd.DataFrame, outdir: str, img_pattern: str, sub: str, dx: 
 
     if exp_txt:
         args.append(f"ExpTxt={int(exp_txt)}")
+
+    if rap_txt is not None:
+        args.append(f"RapTxt={rap_txt}")
 
     p = subprocess.Popen(args, stdin=echo.stdout)
     p.wait()
