@@ -702,7 +702,7 @@ def gcps_from_dem(img_pair: tuple[str, str],
     tmp_files = ['tmp_dem.tif', 'tmp_blur.tif', 'tmp_blur_hs.tif',
                  'tmp_warp_dem.tif', 'tmp_warp_dem_hs.tif', 'tmp_mask.gpkg']
     log_files = glob('tmp_warp_dem.tif*.txt')
-    log_files = glob('tmp_blur.tif*.txt')
+    log_files += glob('tmp_blur.tif*.txt')
 
     for fn_tmp in tmp_files + log_files:
         os.remove(fn_tmp)
