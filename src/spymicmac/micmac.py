@@ -1982,7 +1982,8 @@ def iterate_campari(gcps: pd.DataFrame, out_dir: str, match_pattern: str, subscr
                     sig_pix: Union[int, float, None] = 0.5,
                     fn_gcp: str = 'AutoGCPs', fn_meas: str = 'AutoMeasures',
                     rel_ori: str = 'Relative', inori: str = 'TerrainRelAuto', outori: str = 'TerrainFinal',
-                    homol: str = 'Homol', allfree: bool = True, max_iter: int = 5) -> pd.DataFrame:
+                    homol: str = 'Homol', allfree: bool = True, max_iter: int = 5,
+                    rap_txt: Union[str, Path, None] = None) -> pd.DataFrame:
     """
     Run Campari iteratively, refining the orientation by removing outlier GCPs and Measures, based on their fit to the
     estimated camera model.
@@ -2007,6 +2008,7 @@ def iterate_campari(gcps: pd.DataFrame, out_dir: str, match_pattern: str, subscr
         or AllFree=0 (False), meaning that only the orientation will be optimized.
     :param max_iter: the maximum number of iterations to run.
     :return: **gcps** -- the gcps with updated residuals after the iterative process.
+    :param rap_txt: filename for the per-point residual report, if desired
     """
     assert dx is not None or sig_abs is not None, "one of dx or sig_abs must be set."
 
@@ -2018,7 +2020,7 @@ def iterate_campari(gcps: pd.DataFrame, out_dir: str, match_pattern: str, subscr
 
     gcps = campari(gcps, out_dir, match_pattern, subscript, dx=dx, sig_abs=sig_abs, sig_pix=sig_pix,
                    inori=inori, outori=outori, fn_gcp=fn_gcp, fn_meas=fn_meas,
-                   allfree=allfree)
+                   allfree=allfree, rap_txt=rap_txt)
 
     gcps['camp_xy'] = np.sqrt(gcps.camp_xres ** 2 + gcps.camp_yres ** 2)
 
@@ -2038,7 +2040,7 @@ def iterate_campari(gcps: pd.DataFrame, out_dir: str, match_pattern: str, subscr
         gcps['res_dist'] = np.sqrt(gcps.xres ** 2 + gcps.yres ** 2)
 
         gcps = campari(gcps, out_dir, match_pattern, subscript, dx=dx, sig_abs=sig_abs, sig_pix=sig_pix,
-                       inori=inori, outori=outori, fn_gcp=fn_gcp, fn_meas=fn_meas, allfree=allfree)
+                       inori=inori, outori=outori, fn_gcp=fn_gcp, fn_meas=fn_meas, allfree=allfree, rap_txt=rap_txt)
 
         gcps['camp_xy'] = np.sqrt(gcps.camp_xres ** 2 + gcps.camp_yres ** 2)
         niter += 1

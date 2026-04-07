@@ -572,7 +572,8 @@ def register_relative(dirmec: str, fn_dem: Union[str, Path], fn_ref: Union[str, 
                       useortho: bool = False, max_iter: int = 5, use_cps: bool = False, cp_frac: float = 0.2,
                       use_orb: bool = False, fn_gcps: Union[str, Path, None] = None,
                       use_blur: bool = False, use_highpass: bool = True,
-                      use_hillshade: bool = False, hillshade_kwargs: dict = {}) -> None:
+                      use_hillshade: bool = False, hillshade_kwargs: dict = {},
+                      rap_txt: Union[str, Path, None] = None) -> None:
     """
     Register a relative DEM or orthoimage to a reference DEM and/or orthorectified image.
 
@@ -610,6 +611,7 @@ def register_relative(dirmec: str, fn_dem: Union[str, Path], fn_ref: Union[str, 
     :param use_highpass: match templates using a highpass filter
     :param use_hillshade: match templates using DEM hillshade rather than elevation
     :param hillshade_kwargs: kwargs to pass to xdem.DEM.hillshade()
+    :param rap_txt: filename for the per-point residual report from Campari, if desired
     """
     assert strategy in ['grid', 'random', 'chebyshev', 'peaks'], \
         f"{strategy} must be one of [grid, random, chebyshev, peaks]"
@@ -916,7 +918,7 @@ def register_relative(dirmec: str, fn_dem: Union[str, Path], fn_ref: Union[str, 
 
     # now, iterate campari to refine the orientation
     gcps = micmac.iterate_campari(gcps, out_dir, match_pattern, subscript, dx=ref_img.res[0],
-                                  rel_ori=ori, allfree=allfree, max_iter=max_iter, homol=dir_homol)
+                                  rel_ori=ori, allfree=allfree, max_iter=max_iter, homol=dir_homol, rap_txt=rap_txt)
 
     if use_cps:
         cp_resids = micmac.checkpoints(match_pattern, f"Ori-TerrainFinal{subscript}",
