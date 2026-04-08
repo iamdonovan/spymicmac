@@ -1386,8 +1386,12 @@ def _match_grid(refgeo, spacing, srcwin):
 
 def peaks(img: NDArray, spacing: int, mask: Union[NDArray, None]) -> NDArray:
     """
+    Find peaks (and inverse peaks) in an image using skimage.feature.peak_local_max. Peaks must be at least 2% of the
+    maximum value of the image.
 
-
+    :param img: the image to find peaks in
+    :param spacing: the minimum spacing between peaks
+    :param mask: an optional mask to use for exclusion. Values of 0 will be excluded.
     """
 
     maxs = peak_local_max(img, min_distance=spacing, threshold_rel=0.02, exclude_border=False)
