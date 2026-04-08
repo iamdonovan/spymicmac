@@ -62,11 +62,11 @@ def highpass_filter(img: NDArray) -> NDArray:
     """
     v = img.copy()
     v[np.isnan(img)] = 0
-    vv = ndimage.gaussian_filter(v, 3)
+    vv = ndimage.gaussian_filter(v, 3).astype(np.float32)
 
     w = 0 * img.copy() + 1
     w[np.isnan(img)] = 0
-    ww = ndimage.gaussian_filter(w, 3)
+    ww = ndimage.gaussian_filter(w, 3).astype(np.float32)
 
     tmplow = vv / ww
     tmphi = img - tmplow
