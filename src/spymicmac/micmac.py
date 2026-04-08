@@ -1421,8 +1421,9 @@ def tapioca(img_pattern: str = 'OIS.*tif', res_low: int = 400, res_high: int = 1
         args.append(f"PostFix={subscript}")
 
     p = subprocess.Popen(args, stdin=echo.stdout)
+    p.wait()
 
-    return p.wait()
+    return p.returncode
 
 
 def schnaps(img_pattern: str = 'OIS.*tif',
@@ -1462,8 +1463,9 @@ def schnaps(img_pattern: str = 'OIS.*tif',
         args.append(f"ExpTxt={int(exp_txt)}")
 
     p = subprocess.Popen(args, stdin=echo.stdout)
+    p.wait()
 
-    return p.wait()
+    return p.returncode
 
 
 def martini(img_pattern: str = 'OIS.*tif', in_ori: Union[None, str] = None, ori_out: Union[None, str] = None,
@@ -1496,8 +1498,9 @@ def martini(img_pattern: str = 'OIS.*tif', in_ori: Union[None, str] = None, ori_
     args.append(f"Quick={int(quick)}")
 
     p = subprocess.Popen(args, stdin=echo.stdout)
+    p.wait()
 
-    return p.wait()
+    return p.returncode
 
 
 def tapas(cam_model: str, ori_out: Union[str, None] = None, img_pattern: str = 'OIS.*tif',
@@ -1552,8 +1555,9 @@ def tapas(cam_model: str, ori_out: Union[str, None] = None, img_pattern: str = '
         args.append(f"ExpTxt={int(exp_txt)}")
 
     p = subprocess.Popen(args, stdin=echo.stdout)
+    p.wait()
 
-    return p.wait()
+    return p.returncode
 
 
 def apericloud(ori: str, img_pattern: str = 'OIS.*tif',
@@ -1589,8 +1593,9 @@ def apericloud(ori: str, img_pattern: str = 'OIS.*tif',
         args.append(f"ExpTxt={int(exp_txt)}")
 
     p = subprocess.Popen(args, stdin=echo.stdout)
+    p.wait()
 
-    return p.wait()
+    return p.returncode
 
 
 def nuage2ply(dirmec, fn_out: Union[Path, str, None] = None) -> int:
@@ -1617,15 +1622,16 @@ def nuage2ply(dirmec, fn_out: Union[Path, str, None] = None) -> int:
         args.append(f"Out={fn_out}")
 
     p = subprocess.Popen(args, stdin=echo.stdout)
+    p.wait()
 
-    return p.wait()
+    return p.returncode
 
 
 def malt(imlist: Union[str, list], ori: str, zoomf: int = 1, zoomi: Union[None, int] = None,
          dirmec: str = 'MEC-Malt', seed_img: Union[str, Path, None] = None, seed_xml: Union[str, Path, None] = None,
          resol_terr: Union[float, int, None] = None, resol_ort: Union[float, int, None] = None,
          cost_trans: Union[float, int, None] = None, szw: Union[int, None] = None,
-         regul: Union[float, None] = None, do_ortho: bool = True, do_mec: bool = True) -> int:
+         regul: Union[float, None] = None, do_ortho: bool = True, do_mec: bool = True, clean: bool = False) -> int:
     """
     Run mm3d Malt Ortho.
 
@@ -1647,6 +1653,7 @@ def malt(imlist: Union[str, list], ori: str, zoomf: int = 1, zoomi: Union[None, 
         adjacent pixels, higher values (up to 1) mean smoother outputs
     :param do_ortho: whether to generate the orthoimages
     :param do_mec: whether to generate an output DEM
+    :param clean: remove temporary/intermediate files after finishing.
     """
     if os.name == 'nt':
         echo = subprocess.Popen('echo', stdout=subprocess.PIPE, shell=True)
@@ -1689,8 +1696,12 @@ def malt(imlist: Union[str, list], ori: str, zoomf: int = 1, zoomi: Union[None, 
         args.append(f'Regul={regul}')
 
     p = subprocess.Popen(args, stdin=echo.stdout)
+    p.wait()
 
-    return p.wait()
+    if clean and not p.returncode:
+        clean_malt_dir(dirmec)
+
+    return p.returncode
 
 
 def tawny(dirmec: str, radiomegal: bool = False) -> int:
@@ -1707,7 +1718,9 @@ def tawny(dirmec: str, radiomegal: bool = False) -> int:
 
     p = subprocess.Popen(['mm3d', 'Tawny', f"Ortho-{dirmec}", 'Out=Orthophotomosaic.tif',
                           f"RadiomEgal={int(radiomegal)}"], stdin=echo.stdout)
-    return p.wait()
+    p.wait()
+
+    return p.returncode
 
 
 def block_malt(imlist: list, ori: str, nimg: int = 3, malt_kwargs: dict = {}) -> None:
@@ -2500,3 +2513,46 @@ def _gitignore() -> None:
             for ig in ignore_dict[sect]:
                 print(ig, file=f)
             print('\n', file=f)
+
+
+def clean_malt_dir(dirmec: Union[str, Path]) -> None:
+    """
+    Remove all intermediate files from a Malt output directory (e.g., MEC-Malt). The only files that will be left
+    are:
+
+        - AutoMask_STD-Malt_Num{last_etape-1}.tif, the AutoMask for the final DEM
+        - Correl_STD-MALT_Num{last_etape-1}.tif, the Correlation image for the final DEM
+        - NuageImProf_STD-MALT_Etape{last_etape}.xml, the Nuage file for the final DEM
+        - Z_Num{level}_DeZoom{zoomf}_STD-MALT.tif, the final DEM
+
+    In the above, {last_etape} is the last (largest) level produced by Malt.
+
+    :param dirmec: The malt output directory to clean.
+    """
+    last_etape, zoomf = _get_last_malt(dirmec)
+
+    keep_patts = [
+        f"AutoMask_STD-MALT_Num_{last_etape-1}*",
+        f"Correl_STD-MALT_Num_{last_etape-1}*",
+        f"NuageImProf_STD-MALT_Etape_{last_etape}*",
+        f"Z_Num{last_etape}_DeZoom{zoomf}_STD-MALT*"
+    ]
+
+    keep_list = []
+    for patt in keep_patts:
+        keep_list.extend(sorted(glob(patt, root_dir=dirmec)))
+
+    drop_list = sorted([fn for fn in glob('*.*', root_dir=dirmec) if fn not in keep_list]) + \
+        sorted(glob('Makefile*', root_dir=dirmec))
+
+    for fn in drop_list:
+        #print(Path(dirmec, fn))
+        os.remove(Path(dirmec, fn))
+
+
+def _get_last_malt(dirmec):
+    dem_list = sorted(glob('Z_Num*STD-MALT.tif', root_dir=dirmec))
+    level = int(re.findall(r'\d+', dem_list[-1].split('_')[1])[0])
+    zoomf = int(re.findall(r'\d+', dem_list[-1].split('_')[2])[0])
+
+    return level, zoomf
