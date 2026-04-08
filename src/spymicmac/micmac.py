@@ -2284,17 +2284,17 @@ def _gdal_calc() -> list:
         return ['gdal_calc.py']
 
 
-def post_process(projstr: Union[str, int], out_name: str, dirmec: str,
+def post_process(projstr: Union[str, int], out_name: str, dirmec: str, out_dir: Union[str, Path] = 'post_processed',
                  do_ortho: bool = True, ind_ortho: bool = False, do_ply: bool = False) -> None:
     """
     Apply georeferencing and masking to the final DEM and Correlation images (optionally, the orthomosaic as well).
 
     Output files are written as follows:
-        - DEM: post_processed/{out_name}_Z.tif
-        - Hillshade: post_processed/{out_name}_HS.tif
-        - Correlation: post_processed/{out_name}_CORR.tif
-        - Orthomosaic: post_processed/{out_name}_Ortho.tif
-        - Pointcloud (.ply): post_processed/{out_name}.ply
+        - DEM: {out_dir}/{out_name}_Z.tif
+        - Hillshade: {out_dir}/{out_name}_HS.tif
+        - Correlation: {out_dir}/{out_name}_CORR.tif
+        - Orthomosaic: {out_dir}/{out_name}_Ortho.tif
+        - Pointcloud (.ply): {out_dir}/{out_name}.ply
 
     :param projstr: A string corresponding to the DEM's CRS that GDAL can use to georeference the rasters, or
         an int corresponding to the EPSG code for the DEM's CRS.
@@ -2306,7 +2306,7 @@ def post_process(projstr: Union[str, int], out_name: str, dirmec: str,
     :param do_ply: run mm3d Nuage2Ply to create point cloud in PLY format.
     """
 
-    os.makedirs('post_processed', exist_ok=True)
+    os.makedirs(out_dir, exist_ok=True)
 
     # first, the stuff in MEC
     dem_list = sorted(glob('Z_Num*STD-MALT.tif', root_dir=dirmec))
@@ -2342,14 +2342,14 @@ def post_process(projstr: Union[str, int], out_name: str, dirmec: str,
                       'tmp_mask.tif']).wait()
 
     subprocess.Popen(_gdal_calc() + ['--quiet', '-A', 'tmp_mask.tif', '-B', 'tmp_geo.tif',
-                      f"--outfile={Path('post_processed', f"{out_name}_Z.tif")}",
+                      f"--outfile={Path(out_dir, f"{out_name}_Z.tif")}",
                       '--calc="B*(A>0)"', '--NoDataValue=-9999']).wait()
 
-    subprocess.Popen(['gdaldem', 'hillshade', Path('post_processed', f'{out_name}_Z.tif'),
-                      Path('post_processed', f'{out_name}_HS.tif')]).wait()
+    subprocess.Popen(['gdaldem', 'hillshade', Path(out_dir, f'{out_name}_Z.tif'),
+                      Path(out_dir, f'{out_name}_HS.tif')]).wait()
 
     subprocess.Popen(_gdal_calc() + ['--quiet', '-A', 'tmp_corr.tif',
-                      f"--outfile={Path('post_processed', f"{out_name}_CORR.tif")}",
+                      f"--outfile={Path(out_dir, f"{out_name}_CORR.tif")}",
                       '--calc="((A.astype(float)-127)/128)*100"', '--NoDataValue=-9999']).wait()
 
     # clean up the temporary files
@@ -2365,7 +2365,7 @@ def post_process(projstr: Union[str, int], out_name: str, dirmec: str,
             mosaic_micmac_tiles('Orthophotomosaic', 'Ortho-' + dirmec)
 
         subprocess.Popen(['gdal_translate', '-a_nodata', '0', '-a_srs', projstr, fn_ortho,
-                          Path('post_processed', f'{out_name}_Ortho.tif')]).wait()
+                          Path(out_dir, f'{out_name}_Ortho.tif')]).wait()
 
     if ind_ortho:
         imlist = sorted(glob('OIS*.tif'))
@@ -2378,8 +2378,8 @@ def post_process(projstr: Union[str, int], out_name: str, dirmec: str,
             _mask_ortho(fn_img, out_name, dirmec, projstr)
 
     if do_ply:
-        print(f"saving pointcloud to {Path('post_processed', out_name + '.ply')} ...", end=' ')
-        nuage2ply(dirmec, fn_out=Path('post_processed', out_name + '.ply'))
+        print(f"saving pointcloud to {Path(out_dir, out_name + '.ply')} ...", end=' ')
+        nuage2ply(dirmec, fn_out=Path(out_dir, out_name + '.ply'))
         print('done.')
 
 
