@@ -183,7 +183,7 @@ def optical_bar_cam(fn_img: str, flavor: str, out_name: str,
             print('velocity = 0 0 0', file=f)
 
 def cam_from_footprint(fn_img: str, flavor: str, scan_res: float, fn_dem: Union[str, Path],
-                       north_up: bool=True, footprints: gpd.GeoDataFrame=None,
+                       north_up: bool=True, footprints: gpd.GeoDataFrame=None, datum: Union[str, None] = None,
                        mean_el: Union[float, int]=1000, use_3d_vel: bool = True):
     """
     Generate a camera (.tsai) file from an image footprint.
@@ -195,6 +195,8 @@ def cam_from_footprint(fn_img: str, flavor: str, scan_res: float, fn_dem: Union[
     :param north_up: whether the top of the image corresponds to North or not
     :param footprints: a GeoDataFrame containing image footprints and an ID field with image names. If not
         provided, will attempt to download from USGS.
+    :param datum: the geodetic datum to use. If not set, will try to guess from the DEM (or default to WGS84). See
+        ASP docs for list of options.
     :param mean_el: the mean surface elevation covered by the image. If None, uses DEM and footprint to
         calculate the value.
     :param use_3d_vel: use a 3D velocity vector, rather than a 1D speed. Requires ASP 3.6.0 or greater.
@@ -228,6 +230,9 @@ def cam_from_footprint(fn_img: str, flavor: str, scan_res: float, fn_dem: Union[
     cl_args = ['cam_gen', '--sample-file', fn_samp, '--camera-type', 'opticalbar',
                '--lon-lat-values', '  '.join([f'{x} {y}' for x, y in coords]), fn_img,
                '--reference-dem', fn_dem, '--refine-camera', '-o', fn_img.replace('.tif', '.tsai')]
+
+    if datum is not None:
+        cl_args.append(['--datum', datum])
 
     print(cl_args)
 
