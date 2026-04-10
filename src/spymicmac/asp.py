@@ -229,7 +229,8 @@ def cam_from_footprint(fn_img: str, flavor: str, scan_res: float, fn_dem: Union[
 
     cl_args = ['cam_gen', '--sample-file', fn_samp, '--camera-type', 'opticalbar',
                '--lon-lat-values', '  '.join([f'{x} {y}' for x, y in coords]), fn_img,
-               '--reference-dem', fn_dem, '--refine-camera', '-o', fn_img.replace('.tif', '.tsai')]
+               '--reference-dem', fn_dem, '--gcp-file', fn_img.replace('.tif', '-cam.gcp'),
+               '--refine-camera', '-o', fn_img.replace('.tif', '.tsai')]
 
     if datum is not None:
         cl_args.append(['--datum', datum])
