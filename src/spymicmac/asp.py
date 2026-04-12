@@ -13,7 +13,7 @@ import geopandas as gpd
 from osgeo import gdal
 from shapely.ops import split, orient
 from shapely.geometry import LineString, Point, Polygon
-from . import data, declass, micmac
+from . import data, declass, micmac, register
 from typing import Union
 
 
@@ -183,8 +183,8 @@ def optical_bar_cam(fn_img: str, flavor: str, out_name: str,
             print('velocity = 0 0 0', file=f)
 
 def cam_from_footprint(fn_img: str, flavor: str, scan_res: float, fn_dem: Union[str, Path],
-                       north_up: bool=True, footprints: gpd.GeoDataFrame=None, datum: Union[str, None] = None,
-                       mean_el: Union[float, int]=1000, use_3d_vel: bool = True):
+                       north_up: bool = True, footprints: gpd.GeoDataFrame = None, datum: Union[str, None] = None,
+                       mean_el: Union[float, int, None] = 1000, use_3d_vel: bool = True):
     """
     Generate a camera (.tsai) file from an image footprint.
 
@@ -337,7 +337,10 @@ def bundle_adjust(fn_imgs: Union[list[Union[str, Path]], str],
     cl_args.extend(fn_imgs)
 
     # add the cam files
-    fn_cams = [str(Path(cam_prefix, fn + '.tsai')) for fn in clean_names]
+    if cam_prefix == '':
+        fn_cams = [fn + '.tsai' for fn in clean_names]
+    else:
+        fn_cams = [f"{cam_prefix}-{fn}.tsai" for fn in clean_names]
     cl_args.extend(fn_cams)
 
     if gcp_patt is not None:
@@ -712,3 +715,137 @@ def gcps_from_dem(img_pair: tuple[str, str],
 
     for fn_tmp in tmp_files + log_files:
         os.remove(fn_tmp)
+
+
+def gcps_from_ortho(fn_img: Union[str, Path],
+                    fn_ref: Union[str, Path],
+                    fn_dem: Union[str, Path],
+                    fn_out: Union[str, Path],
+                    out_pre: str = 'gcp_ortho/run',
+                    fn_mapproj: Union[str, Path, None] = None,
+                    fn_footprints: Union[str, Path, None] = None,
+                    fn_landmask: Union[str, Path, None] = None,
+                    fn_glacmask: Union[str, Path, None] = None,
+                    use_asp: bool = False,
+                    kwargs: dict = {},
+                    args: list = [],
+                    spacing: int = 200,
+                    matching_kwargs: dict = {}) -> None:
+    """
+    Find GCPs for an image by matching between the image (or the mapprojected version of the image) and a
+    reference ortho/satellite image, using ASP's gcp_gen.
+
+    If use_asp = False (the default), uses template matching between the (normally mapprojected image) and the
+    reference image. Otherwise, uses ASP interestpoint matching.
+
+    :param fn_img: the image to find GCPs for
+    :param fn_ref: the reference ortho/satellite image
+    :param fn_dem: the reference DEM to use for the GCP elevation
+    :param fn_out: the output filename for the .gcp file.
+    :param out_pre: the output prefix to use for the outputs from gcp_gen
+    :param fn_mapproj: the (optional) filename for the mapprojected image to use.
+    :param fn_footprints: the (optional) footprint file to use to crop/mask the reference image before matching.
+    :param fn_landmask: the (optional) filename for an inclusion (i.e., land/stable terrain) mask for matching.
+    :param fn_glacmask: the (optional) filename for an exclusion (i.e., unstable terrain) mask for matching.
+    :param use_asp: whether to use ASP's matching, or use template matching from spymicmac.matching.
+    :param kwargs: optional keyword parameters for gcp_gen, for any arguments/flags that take a value.
+        Keys should not include the '--' prefix - for example, use 'gcp-sigma' to set the GCP uncertainty
+        to use, rather than '--gcp-sigma'.
+    :param args: optional flags to pass to gcp_gen, for any arguments/flags that do not take a value.
+        Flags should not include the '--' prefix.
+    :param spacing: the spacing (in pixels) to use for finding GCPs, if using spymicmac.matching (the default)
+    :param matching_kwargs: additional kwargs to pass to spymicmac.matching.find_matches.
+    """
+    clean_name = fn_img.split('OIS-Reech_')[-1].split('.tif')[0]
+
+    if use_asp:
+        do_mask = fn_mapproj is not None or fn_footprints is not None
+        if do_mask:
+            print('Cropping/masking reference orthoimage to image footprint.')
+            if fn_mapproj is not None:
+                mapprojected_footprint(fn_mapproj).to_file('tmp_mask.gpkg')
+            else:
+                footprints = gpd.read_file(fn_footprints)
+                footprints[footprints['ID'] == clean_name].to_file('tmp_mask.gpkg')
+
+            tmp_masked = data.crop_mask_dem(fn_ort,
+                                            'tmp_mask.gpkg',
+                                            buff=1000,
+                                            use_rect=False)
+            if tmp_masked.nodata is None:
+                tmp_masked.set_nodata(0)
+
+            tmp_masked.to_file('tmp_ortho.tif')
+            fn_ref = 'tmp_ortho.tif'
+        else:
+            print('Using uncropped, unmasked orthoimage.')
+
+    elif 'match-file' in kwargs:
+        print(f"Using match file: {kwargs['match-file']}")
+
+    else:
+        assert fn_mapproj is not None, "map-projected image must be provided if not using ASP matching."
+        gcps = register.register_ortho(fn_mapproj,
+                                       fn_ref,
+                                       spacing = spacing,
+                                       fn_landmask = fn_landmask,
+                                       fn_glacmask = fn_glacmask,
+                                       matching_kwargs = matching_kwargs)
+
+        ortho_match = gcps[['match_j', 'match_i']].copy().rename(columns={'match_j': 'x', 'match_i': 'y'})
+        ortho_match[['ix', 'iy']] = np.ceil(ortho_match[['x', 'y']]).astype(int)
+
+        ref_match = gcps[['full_j', 'full_i']].copy().rename(columns={'full_j': 'x', 'full_i': 'y'})
+        ref_match[['ix', 'iy']] = np.ceil(ref_match[['x', 'y']]).astype(int)
+
+        for cn in ['orientation', 'scale', 'interest', 'polarity', 'octave', 'scale_lv', 'num_descr']:
+            ortho_match[cn] = 0
+            ref_match[cn] = 0
+
+        ortho_match['scale'] = 1
+        ref_match['scale'] = 1
+
+        match_pts = pd.concat([ortho_match, ref_match], ignore_index=False).reset_index(drop=True)
+
+        with open("tmp_match.txt", 'w') as f:
+            print(f"{len(gcps)} {len(gcps)}", file=f)
+
+            for ind in range(len(match_pts)):
+                print(match_pts.loc[[ind]].to_string(header=False, index=False), file=f)
+
+        parse_args = ['parse_match_file.py', 'tmp_match.txt',
+                      f"{out_pre}-{fn_mapproj.replace('.tif', '')}__{fn_ref.replace('.tif', '')}.match", '-rev']
+        p = subprocess.Popen(parse_args)
+        p.wait()
+
+        #kwargs['match-file'] = f"{fn_mapproj.replace('.tif', '')}__ref_ortho_match.txt"
+
+    cl_args = ['gcp_gen',
+               '--camera-image', fn_img,
+               '--ortho-image', fn_ref,
+               '--dem', fn_dem,
+               '--output-gcp', fn_out,
+               '--output-prefix', out_pre]
+
+    if fn_mapproj is not None:
+        kwargs['mapproj-image'] = fn_mapproj
+
+    if 'gcp-sigma' not in kwargs:
+        ortho = gu.Raster(fn_ref)
+        kwargs['gcp-sigma'] = ortho.res[0]
+
+    for arg in args:
+        cl_args.append('--' + arg)
+
+    for kwarg in kwargs:
+        cl_args.extend(['--' + kwarg, str(kwargs[kwarg])])
+
+    print(cl_args)
+
+    p = subprocess.Popen(cl_args)
+    p.wait()
+
+    tmp_files = ['tmp_ortho.tif', 'tmp_mask.gpkg']
+    for fn_tmp in tmp_files:
+        if os.path.exists(fn_tmp):
+            os.remove(fn_tmp)
