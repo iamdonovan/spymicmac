@@ -147,14 +147,18 @@ def optical_bar_cam(fn_img: str, flavor: str, out_name: str,
 
         print(f'pitch = {scan_res}', file=f)
         print(f'f = {params["f"]}', file=f)
-        print(f'scan_time = {params["scan_time"]}', file=f)
 
-        if _isaft(fn_img):
-            print(f'forward_tilt = {-params["tilt"]}', file=f)
+        if use_3d_vel:
+            print(f'scan_time = 1', file=f)
+            print(f'forward_tilt = 0', file=f)
         else:
-            print(f'forward_tilt = {params["tilt"]}', file=f)
+            print(f'scan_time = {params["scan_time"]}', file=f)
+            if _isaft(fn_img):
+                print(f'forward_tilt = {-params["tilt"]}', file=f)
+            else:
+                print(f'forward_tilt = {params["tilt"]}', file=f)
 
-        if fprint is not None:
+        if fprint is not None and not use_3d_vel:
             icx, icy, icz = _init_center(fprint)
         else:
             icx, icy, icz = 0, 0, 0
@@ -165,22 +169,23 @@ def optical_bar_cam(fn_img: str, flavor: str, out_name: str,
             print('speed = 0', file=f)
         else:
             print(f'speed = {params["speed"]}', file=f)
+
         print('mean_earth_radius = 6371000', file=f)
         # need a better value than this
         print(f"mean_surface_elevation = {mean_el}", file=f)
-        print(f"motion_compensation_factor = {params['motion_comp']}", file=f)
 
         if use_3d_vel:
+            print(f"motion_compensation_factor = 0", file=f)
             print('scan_dir = right', file=f)
+            print('velocity = 0 0 0', file=f)
+
         else:
+            print(f"motion_compensation_factor = {params['motion_comp']}", file=f)
             if _isaft(fn_img):
                 print('scan_dir = left', file=f)
             else:
                 print('scan_dir = right', file=f)
 
-        # new format
-        if use_3d_vel:
-            print('velocity = 0 0 0', file=f)
 
 def cam_from_footprint(fn_img: str, flavor: str, scan_res: float, fn_dem: Union[str, Path],
                        north_up: bool = True, footprints: gpd.GeoDataFrame = None, datum: Union[str, None] = None,
