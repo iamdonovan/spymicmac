@@ -735,6 +735,7 @@ def gcps_from_ortho(fn_img: Union[str, Path],
                     kwargs: dict = {},
                     args: list = [],
                     spacing: int = 200,
+                    thresh: int = 100,
                     matching_kwargs: dict = {}) -> None:
     """
     Find GCPs for an image by matching between the image (or the mapprojected version of the image) and a
@@ -758,7 +759,8 @@ def gcps_from_ortho(fn_img: Union[str, Path],
         to use, rather than '--gcp-sigma'.
     :param args: optional flags to pass to gcp_gen, for any arguments/flags that do not take a value.
         Flags should not include the '--' prefix.
-    :param spacing: the spacing (in pixels) to use for finding GCPs, if using spymicmac.matching (the default)
+    :param spacing: the spacing (in pixels) to use for finding GCPs, if using spymicmac.matching
+    :param thresh: the residual threshold (in pixels) to use for RANSAC, if using spymicmac.matching
     :param matching_kwargs: additional kwargs to pass to spymicmac.matching.find_matches.
     """
     clean_name = fn_img.split('OIS-Reech_')[-1].split('.tif')[0]
@@ -795,6 +797,7 @@ def gcps_from_ortho(fn_img: Union[str, Path],
                                        spacing = spacing,
                                        fn_landmask = fn_landmask,
                                        fn_glacmask = fn_glacmask,
+                                       thresh = thresh,
                                        matching_kwargs = matching_kwargs)
 
         ortho_match = gcps[['match_j', 'match_i']].copy().rename(columns={'match_j': 'x', 'match_i': 'y'})
