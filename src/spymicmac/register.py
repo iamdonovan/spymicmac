@@ -984,3 +984,53 @@ def register_relative(dirmec: str, fn_dem: Union[str, Path], fn_ref: Union[str, 
         os.remove(txtfile)
     print('end.')
     # embed()
+
+
+def register_ortho(fn_ortho: Union[str, Path],
+                   fn_ref: Union[str, Path],
+                   spacing: int = 200,
+                   fn_landmask: Union[str, Path, None] = None,
+                   fn_glacmask: Union[str, Path, None] = None,
+                   matching_kwargs: dict = {}) -> pd.DataFrame:
+    """
+    Register one orthoimage to another,
+
+    :param fn_ortho:
+    :param fn_ref:
+    :param fn_landmask:
+    :param fn_glacmask:
+    :param matching_kwargs: additional kwargs to pass to spymicmac.matching.find_matches
+    """
+
+    ortho = gu.Raster(fn_ortho)
+    ref_img = gu.Raster(fn_ref)
+    tmp_ref = ref_img.reproject(ortho)
+
+    ref_hp = image.highpass_filter(tmp_ref.data)
+    ref_hp[~np.isfinite(ref_hp)] = 0
+
+    mask = tmp_ref.copy(new_array=np.ones(tmp_ref.shape, dtype=np.uint8))
+    mask.astype(np.uint8, inplace=True)
+    mask.data[~ortho.data.mask] = 255
+    mask.data[mask.data == 1] = 0
+
+    if fn_landmask is not None:
+        lmask = _safe_rasterize(fn_landmask, tmp_ref, True)
+        mask[~lmask] = 0
+    if fn_glacmask is not None:
+        gmask = _safe_rasterize(fn_glacmask, tmp_ref, False)
+        mask[gmask] = 0
+
+    gridpts = matching.peaks(ref_hp, int(spacing / 2), mask=mask)
+
+    gcps = pd.DataFrame(data=gridpts, columns=['search_i', 'search_j'])
+
+    gcps = matching.find_matches(ortho, tmp_ref, ref_hp.data, points=gcps, strategy='peaks', **matching_kwargs)
+
+    model, inliers = ransac((gcps[['search_j', 'search_i']].values, gcps[['match_j', 'match_i']].values),
+                            AffineTransform, min_samples=6, residual_threshold=100, max_trials=5000)
+
+    gcps['x'], gcps['y'] = tmp_ref.ij2xy(gcps.search_i, gcps.search_j)
+    gcps['full_i'], gcps['full_j'] = ref_img.xy2ij(gcps['x'], gcps['y'])
+
+    return gcps.loc[inliers]
