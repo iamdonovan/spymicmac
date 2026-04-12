@@ -991,14 +991,16 @@ def register_ortho(fn_ortho: Union[str, Path],
                    spacing: int = 200,
                    fn_landmask: Union[str, Path, None] = None,
                    fn_glacmask: Union[str, Path, None] = None,
+                   thresh: int = 100,
                    matching_kwargs: dict = {}) -> pd.DataFrame:
     """
-    Register one orthoimage to another,
+    Register one orthoimage to a reference ortho/satellite image.
 
-    :param fn_ortho:
-    :param fn_ref:
-    :param fn_landmask:
-    :param fn_glacmask:
+    :param fn_ortho: the filename of the orthoimage to register
+    :param fn_ref: the filename of the reference image
+    :param fn_landmask: the (optional) filename for an inclusion (i.e., land/stable terrain) mask for matching.
+    :param fn_glacmask: the (optional) filename for an exclusion (i.e., unstable terrain) mask for matching.
+    :param thresh: the residual threshold (in pixels) to use for RANSAC
     :param matching_kwargs: additional kwargs to pass to spymicmac.matching.find_matches
     """
 
@@ -1028,7 +1030,7 @@ def register_ortho(fn_ortho: Union[str, Path],
     gcps = matching.find_matches(ortho, tmp_ref, ref_hp.data, points=gcps, strategy='peaks', **matching_kwargs)
 
     model, inliers = ransac((gcps[['search_j', 'search_i']].values, gcps[['match_j', 'match_i']].values),
-                            AffineTransform, min_samples=6, residual_threshold=100, max_trials=5000)
+                            AffineTransform, min_samples=6, residual_threshold=thresh, max_trials=5000)
 
     gcps['x'], gcps['y'] = tmp_ref.ij2xy(gcps.search_i, gcps.search_j)
     gcps['full_i'], gcps['full_j'] = ref_img.xy2ij(gcps['x'], gcps['y'])
