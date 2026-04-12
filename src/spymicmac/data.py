@@ -418,13 +418,13 @@ def download_pgc_mosaic(flavor: str, imlist: Union[list, None] = None,
                 print(row.fileurl, file=f)
 
 
-def crop_mask_dem(dem: Union[str, Path, xdem.DEM],
+def crop_mask_dem(dem: Union[str, Path, gu.Raster, xdem.DEM],
                   footprints: Union[str, Path, gu.Vector],
                   buff: Union[float, int] = 5000,
                   use_rect: bool = True) -> xdem.DEM:
     """
-    Crop and mask a DEM to the buffered extent of footprints. By default, nask is created using the minimum rotated
-    rectangle of the buffer of the union of all footprints.
+    Crop and mask a DEM (or other raster) to the buffered extent of footprints. By default, nask is created using the
+     minimum rotated rectangle of the buffer of the union of all footprints.
 
     :param dem: the DEM to crop
     :param footprints: the footprints to use to crop and mask the DEM
@@ -450,6 +450,6 @@ def crop_mask_dem(dem: Union[str, Path, xdem.DEM],
     masked = dem.crop(masked_area)
 
     mask = masked_area.create_mask(masked)
-    masked[~mask] = np.nan
+    masked.set_mask(masked.get_mask() | ~mask)
 
     return masked
