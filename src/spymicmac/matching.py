@@ -777,11 +777,11 @@ def find_crosses(img: NDArray, cross: NDArray) -> pd.DataFrame:
     if grid_df.dist.isnull().sum() > 0:
         tsize = int(cross.shape[0] * 1.5)
         for ind, row in grid_df[grid_df.isnull().any(axis=1)].iterrows():
-            subimg, _, _ = make_template(img, row[['search_i', 'search_j']].astype(int), tsize)
+            subimg, row_inds, col_inds = make_template(img, row[['search_i', 'search_j']].astype(int), tsize)
             res, this_i, this_j = find_match(subimg.astype(np.uint8), cross.astype(np.uint8), how='min')
 
-            grid_df.loc[ind, 'match_i'] = this_i - tsize + row['search_i']
-            grid_df.loc[ind, 'match_j'] = this_j - tsize + row['search_j']
+            grid_df.loc[ind, 'match_i'] = this_i - row_inds[0] + row['search_i']
+            grid_df.loc[ind, 'match_j'] = this_j - col_inds[0] + row['search_j']
             grid_df.loc[ind, 'dist'] = np.sqrt((grid_df.loc[ind, 'match_i'] - grid_df.loc[ind, 'grid_i'])**2 +
                                                (grid_df.loc[ind, 'match_j'] - grid_df.loc[ind, 'grid_j'])**2)
 
@@ -1512,7 +1512,7 @@ def do_match(dest_img: NDArray, ref_img: NDArray, mask: NDArray, pt: tuple[int, 
 
     try:
         testchip, _, _ = make_template(ref_img, pt, srcwin)
-        dst_chip, _, _ = make_template(dest_img, pt, dstwin)
+        dst_chip, row_inds, col_inds = make_template(dest_img, pt, dstwin)
 
         testchip[np.isnan(testchip)] = 0
         dst_chip[np.isnan(dst_chip)] = 0
@@ -1542,7 +1542,7 @@ def do_match(dest_img: NDArray, ref_img: NDArray, mask: NDArray, pt: tuple[int, 
         z_corr = max(this_z_corrs)
 
         # if the correlation peak is very high, or very unique, add it as a match
-        out_i, out_j = this_i - dstwin + _i, this_j - dstwin + _j
+        out_i, out_j = this_i - row_inds[0] + _i, this_j - col_inds[0] + _j
 
     except Exception as e:
         return (np.nan, np.nan), np.nan, np.nan
