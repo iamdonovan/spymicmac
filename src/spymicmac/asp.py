@@ -821,8 +821,10 @@ def gcps_from_ortho(fn_img: Union[str, Path],
             for ind in range(len(match_pts)):
                 print(match_pts.loc[[ind]].to_string(header=False, index=False), file=f)
 
-        parse_args = ['parse_match_file.py', 'tmp_match.txt',
-                      f"{out_pre}-{fn_mapproj.replace('.tif', '')}__{fn_ref.replace('.tif', '')}.match", '-rev']
+        left_fn = os.path.splitext(os.path.basename(fn_mapproj))[0]
+        right_fn = os.path.splitext(os.path.basename(fn_ref))[0]
+
+        parse_args = ['parse_match_file.py', 'tmp_match.txt', f"{out_pre}-{left_fn}__{right_fn}.match", '-rev']
         p = subprocess.Popen(parse_args)
         p.wait()
 
