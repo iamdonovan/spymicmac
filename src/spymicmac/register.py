@@ -1027,7 +1027,7 @@ def register_ortho(fn_ortho: Union[str, Path],
 
     gcps = pd.DataFrame(data=gridpts, columns=['search_i', 'search_j'])
 
-    gcps = matching.find_matches(ortho, tmp_ref, ref_hp.data, points=gcps, strategy='peaks', **matching_kwargs)
+    gcps = matching.find_matches(ortho, tmp_ref, mask, points=gcps, strategy='peaks', **matching_kwargs)
 
     model, inliers = ransac((gcps[['search_j', 'search_i']].values, gcps[['match_j', 'match_i']].values),
                             AffineTransform, min_samples=6, residual_threshold=thresh, max_trials=5000)
