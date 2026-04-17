@@ -2314,14 +2314,24 @@ def post_process(projstr: Union[str, int], out_name: str, dirmec: str, out_dir: 
     level = max([int(re.findall(r'\d+', fn.split('_')[1])[0]) for fn in dem_list])
     zoomf = min([int(re.findall(r'\d+', fn.split('_')[2])[0]) for fn in dem_list])
 
-    shutil.copy(Path(dirmec, f'Z_Num{level}_DeZoom{zoomf}_STD-MALT.tfw'),
-                Path(dirmec, f'Correl_STD-MALT_Num_{level-1}.tfw'))
+    if Path(dirmec, f"Correl_STD-MALT_Num_{level}.tif").exists():
+        fn_corr = f"Correl_STD-MALT_Num_{level}"
+    else:
+        fn_corr = f"Correl_STD-MALT_Num_{level-1}"
+
+    if Path(dirmec, f"AutoMask_STD-MALT_Num_{level}.tif").exists():
+        fn_mask = f"AutoMask_STD-MALT_Num_{level}"
+    else:
+        fn_mask = f"AutoMask_STD-MALT_Num_{level-1}"
 
     shutil.copy(Path(dirmec, f'Z_Num{level}_DeZoom{zoomf}_STD-MALT.tfw'),
-                Path(dirmec, f'AutoMask_STD-MALT_Num_{level-1}.tfw'))
+                Path(dirmec, fn_corr + '.tfw'))
 
-    if _needs_mosaic(Path(dirmec, f"Correl_STD-MALT_Num_{level-1}.tif")):
-        mosaic_micmac_tiles(f"Correl_STD-MALT_Num_{level-1}", dirmec)
+    shutil.copy(Path(dirmec, f'Z_Num{level}_DeZoom{zoomf}_STD-MALT.tfw'),
+                Path(dirmec, fn_mask + '.tfw'))
+
+    if _needs_mosaic(Path(dirmec, fn_corr + '.tif')):
+        mosaic_micmac_tiles(fn_corr, dirmec)
 
     if _needs_mosaic(Path(dirmec, f"Z_Num{level}_DeZoom{zoomf}_STD-MALT.tif")):
         mosaic_micmac_tiles(f"Z_Num{level}_DeZoom{zoomf}_STD-MALT", dirmec)
@@ -2330,7 +2340,7 @@ def post_process(projstr: Union[str, int], out_name: str, dirmec: str, out_dir: 
         projstr = f"EPSG:{projstr}"
 
     subprocess.Popen(['gdal_translate', '-a_nodata', '0', '-a_srs', projstr,
-                      Path(dirmec, f'Correl_STD-MALT_Num_{level-1}.tif'),
+                      Path(dirmec, fn_corr + '.tif'),
                       'tmp_corr.tif']).wait()
 
     subprocess.Popen(['gdal_translate', '-a_srs', projstr,
@@ -2338,7 +2348,7 @@ def post_process(projstr: Union[str, int], out_name: str, dirmec: str, out_dir: 
                       'tmp_geo.tif']).wait()
 
     subprocess.Popen(['gdal_translate', '-a_nodata', '0', '-a_srs', projstr,
-                      Path(dirmec, f'AutoMask_STD-MALT_Num_{level-1}.tif'),
+                      Path(dirmec, fn_mask + '.tif'),
                       'tmp_mask.tif']).wait()
 
     subprocess.Popen(_gdal_calc() + ['--quiet', '-A', 'tmp_mask.tif', '-B', 'tmp_geo.tif',
@@ -2532,11 +2542,15 @@ def clean_malt_dir(dirmec: Union[str, Path]) -> None:
     last_etape, zoomf = _get_last_malt(dirmec)
 
     keep_patts = [
-        f"AutoMask_STD-MALT_Num_{last_etape-1}*",
-        f"Correl_STD-MALT_Num_{last_etape-1}*",
         f"NuageImProf_STD-MALT_Etape_{last_etape}*",
         f"Z_Num{last_etape}_DeZoom{zoomf}_STD-MALT*"
     ]
+
+    for fn in ['AutoMask_STD-MALT_Num', 'Correl_STD-MALT_Num']:
+        if Path(dirmec, fn + f"_{last_etape}.tif").exists():
+            keep_patts.append(f"_{last_etape}*")
+        else:
+            keep_patts.append(f"_{last_etape-1}*")
 
     keep_list = []
     for patt in keep_patts:
