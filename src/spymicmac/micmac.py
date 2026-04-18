@@ -2548,9 +2548,9 @@ def clean_malt_dir(dirmec: Union[str, Path]) -> None:
 
     for fn in ['AutoMask_STD-MALT_Num', 'Correl_STD-MALT_Num']:
         if Path(dirmec, fn + f"_{last_etape}.tif").exists():
-            keep_patts.append(f"_{last_etape}*")
+            keep_patts.append(fn + f"_{last_etape}*")
         else:
-            keep_patts.append(f"_{last_etape-1}*")
+            keep_patts.append(fn + f"_{last_etape-1}*")
 
     keep_list = []
     for patt in keep_patts:
