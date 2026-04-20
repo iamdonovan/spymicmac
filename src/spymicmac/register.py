@@ -394,10 +394,11 @@ def _search_size(imshape):
 
 def _get_last_malt(dirmec):
     dem_list = sorted(glob('Z_Num*STD-MALT.tif', root_dir=dirmec))
-    level = int(re.findall(r'\d+', dem_list[-1].split('_')[1])[0])
-    zoomf = int(re.findall(r'\d+', dem_list[-1].split('_')[2])[0])
 
-    return f'Z_Num{level}_DeZoom{zoomf}_STD-MALT.tif'
+    levels = [int(re.findall(r'\d+', fn.split('_')[1])[0]) for fn in dem_list]
+    zooms = [int(re.findall(r'\d+', fn.split('_')[2])[0]) for fn in dem_list]
+
+    return f'Z_Num{max(levels)}_DeZoom{min(zooms)}_STD-MALT.tif'
 
 
 def _load_auto_mask(dirmec):
