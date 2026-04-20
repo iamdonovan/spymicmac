@@ -2566,7 +2566,8 @@ def clean_malt_dir(dirmec: Union[str, Path]) -> None:
 
 def _get_last_malt(dirmec):
     dem_list = sorted(glob('Z_Num*STD-MALT.tif', root_dir=dirmec))
-    level = int(re.findall(r'\d+', dem_list[-1].split('_')[1])[0])
-    zoomf = int(re.findall(r'\d+', dem_list[-1].split('_')[2])[0])
 
-    return level, zoomf
+    levels = [int(re.findall(r'\d+', fn.split('_')[1])[0]) for fn in dem_list]
+    zooms = [int(re.findall(r'\d+', fn.split('_')[2])[0]) for fn in dem_list]
+
+    return max(levels), min(zooms)
