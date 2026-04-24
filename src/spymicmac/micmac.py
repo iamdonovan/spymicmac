@@ -1669,8 +1669,13 @@ def malt(imlist: Union[str, list], ori: str, zoomf: int = 1, zoomi: Union[None, 
             raise TypeError(f"imlist is not iterable: {imlist}")
 
     args = ['mm3d', 'Malt', 'Ortho', matchstr, ori, f'DirMEC={dirmec}',
-            'NbVI=2', f'ZoomF={zoomf}', 'DefCor=0', 'EZA=1',
-            f'DoOrtho={int(do_ortho)}', f'DoMEC={int(do_mec)}']
+            'NbVI=2', f'ZoomF={zoomf}', 'DefCor=0', 'EZA=1']
+
+    if not do_ortho:
+        args.append(f'DoOrtho={int(do_ortho)}')
+
+    if not do_mec:
+        args.append(f'DoMEC={int(do_mec)}')
 
     if zoomi is not None:
         args.append(f'ZoomI={zoomi}')
