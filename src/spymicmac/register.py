@@ -867,7 +867,7 @@ def register_relative(dirmec: str, fn_dem: Union[str, Path], fn_ref: Union[str, 
     if 'id' not in gcps.columns:
         gcps['id'] = [f'GCP{ind}' for ind in range(gcps.shape[0])]
 
-    gcps.to_file(Path(out_dir, f"AutoGCPs{subscript}.shp"))
+    gcps.to_file(Path(out_dir, f"AutoGCPs{subscript}.gpkg"))
 
     print('writing AutoGCPs.txt')
     micmac.write_auto_gcps(gcps, subscript, out_dir, utm_str)
@@ -934,10 +934,10 @@ def register_relative(dirmec: str, fn_dem: Union[str, Path], fn_ref: Union[str, 
         cps['res_xy'] = np.sqrt(cps.xres ** 2 + cps.yres ** 2)
         cps['res_dist'] = np.sqrt(cps.xres ** 2 + cps.yres ** 2 + cps.zres ** 2)
 
-        cps.to_file(Path(out_dir, f"AutoCPs{subscript}.shp"))
+        cps.to_file(Path(out_dir, f"AutoCPs{subscript}.gpkg"))
 
     # final write of gcps to disk.
-    gcps.to_file(Path(out_dir, f"AutoGCPs{subscript}.shp"))
+    gcps.to_file(Path(out_dir, f"AutoGCPs{subscript}.gpkg"))
 
     fig1, ax1 = plt.subplots(1, 1, figsize=(7, 5))
     ax1.imshow(reg_img[::5, ::5], cmap='gray', extent=(0, reg_img.shape[1], reg_img.shape[0], 0))

@@ -2129,7 +2129,7 @@ def save_gcps(in_gcps: gpd.GeoDataFrame, outdir: str, utmstr: str, sub: str,
 
     After running, the following new files will be created:
 
-        - outdir/fn_gcp.shp (+ associated files)
+        - outdir/fn_gcp.gpkg
         - outdir/fn_gcp.txt
         - outdir/fn_gcp.xml (output from mm3d GCPConvert)
         - outdir/fn_meas.xml (a file with image locations for each GCP)
@@ -2143,7 +2143,7 @@ def save_gcps(in_gcps: gpd.GeoDataFrame, outdir: str, utmstr: str, sub: str,
     :param fn_meas: the filename pattern for the measures file. The file that will be loaded will be
         fn_meas + sub + '-S2D.xml' (e.g., default: AutoMeasures -> AutoMeasures_block0-S2D.xml)
     """
-    in_gcps.to_file(Path(outdir, fn_gcp + sub + '.shp'))
+    in_gcps.to_file(Path(outdir, fn_gcp + sub + '.gpkg'))
     write_auto_gcps(in_gcps, sub, outdir, utmstr, outname=fn_gcp)
 
     if os.name == 'nt':
