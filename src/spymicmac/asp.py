@@ -2,6 +2,7 @@
 spymicmac.asp is a collection of tools for interfacing with Ames Stereo Pipeline
 """
 import os
+import io
 from pathlib import Path
 from glob import glob
 import subprocess
@@ -11,6 +12,7 @@ import geoutils as gu
 import pandas as pd
 import geopandas as gpd
 from osgeo import gdal
+from rasterio.crs import CRS
 from shapely.ops import split, orient
 from shapely.geometry import LineString, Point, Polygon
 from . import data, declass, micmac, register
@@ -440,6 +442,7 @@ def camera_footprint(fn_img: Union[str, Path],
     :param fn_dem: the DEM filename
     :param fn_out: the output filename
     :param quick: use a faster, less accurate projection.
+    :param crs: the CRS to project the footprint to.
     """
     cl_args = ['camera_footprint', fn_img, fn_cam]
 
@@ -490,11 +493,45 @@ def mapprojected_footprint(fn_img, out_crs=None, nodata=None) -> gpd.GeoDataFram
     else:
         return gpd.GeoDataFrame(data={'filename': fn_img, 'geometry': fp}, index=[0], crs=img.crs).to_crs(out_crs)
 
+def _gcp_row(_gcp, name, scale, meas):
+    first = _gcp.iloc[0]
+
+    if {'lon', 'lat'} <= set(_gcp.columns):
+        lon, lat = first.lon, first.lat
+    else:
+        lon, lat = first.geometry.x, first.geometry.y
+
+    out_gcp = ','.join([str(name).strip('GCP'), str(lat), str(lon), str(first.elevation),
+                        str(first['sigma_x']), str(first['sigma_y']), str(first['sigma_z'])])
+
+    for num in range(len(_gcp)):
+        _meas = _gcp.iloc[num]
+
+        if meas is not None:
+            img = _meas['image_name']
+            row, col = meas.loc[(meas.image == img) & (meas.name == name), ['i', 'j']].values[0]
+
+            out_gcp += ',' + ','.join([img,
+                                       f"{col / scale}",
+                                       f"{row / scale}",
+                                       f"{_meas['sx_px']}",
+                                       f"{_meas['sy_px']}"])
+        else:
+            out_gcp += ',' + ','.join([_meas['image_name'],
+                                       f"{_meas['pixel_x'] / scale}",
+                                       f"{_meas['pixel_y'] / scale}",
+                                       f"{_meas['sx_px']}",
+                                       f"{_meas['sy_px']}"])
+
+    return out_gcp
+
 
 def write_asp_gcp(fn_gcp: Union[str, Path], gcp_df: gpd.GeoDataFrame,
                   gcp_list: Union[None, list] = None, imlist: Union[None, list] = None,
                   scale: int = 1, singles: bool = True, meas: Union[None, pd.DataFrame] = None,
-                  headers: Union[None, list[str]] = None) -> None:
+                  headers: Union[None, list[str]] = None,
+                  gcp_sig: Union[int, float, list[int], list[float], None] = None,
+                  px_sig: Union[int, float, list[int], list[float], None] = None) -> None:
     """
     Write GCPs in ASP format.
 
@@ -506,62 +543,99 @@ def write_asp_gcp(fn_gcp: Union[str, Path], gcp_df: gpd.GeoDataFrame,
     :param singles: whether to write GCPs that are only found in one image
     :param meas: a DataFrame of image measurements, as created by mm3d SaisieAppuis and read by micmac.parse_im_meas()
     :param headers: the header rows from the original .gcp file
+    :param gcp_sig: the uncertainty of the GCP position, either as a list of values for (x, y, z), or a single value.
+        If not set, looks for (sigma_x, sigma_y, sigma_z) in the GCP dataframe. If those columns are not present,
+        defaults to 1.0
+    :param px_sig: the uncertainty of the GCP location in the image, either as a list of values for (j, i), or a
+        single value. If not set, looks for columns like (sx_px, sy_px) in the GCP dataframe. If those columns are
+        not present, defaults to 1.0.
     """
+
+    if gcp_sig is None:
+        for dd in 'xyz':
+            if not f"sigma_{dd}" in gcp_df.columns:
+                gcp_df[f"sigma_{dd}"] = 1
+
+    elif isinstance(gcp_sig, (int, float)):
+        for dd in 'xyz':
+            gcp_df[f"sigma_{dd}"] = gcp_sig
+
+    elif isinstance(gcp_sig, (list, tuple)):
+        assert len(gcp_sig) == 3, "must provide 3 values for GCP uncertainty (sx, sy , sz)"
+        for ind, dd in enumerate('xyz'):
+            gcp_df[f"sigma_{dd}"] = gcp_sig[ind]
+
+    if 'id' not in gcp_df.columns:
+        gcp_df['id'] = gcp_df.index
+
+    if 'height_above_datum' in gcp_df.columns:
+        gcp_df['elevation'] = gcp_df['height_above_datum']
+
+    pivoted = pd.wide_to_long(gcp_df,
+                              stubnames=['image_name', 'pixel_x', 'pixel_y', 'sx_px', 'sy_px'],
+                              i='id', j='num',
+                              sep='.', suffix=r'\d+')
+    pivoted.dropna(inplace=True)
+
+    if px_sig is None:
+        for dd in 'xy':
+            if not f"s{dd}_px" in pivoted.columns:
+                gcp_df[f"s{dd}_px"] = 1
+
+    elif isinstance(px_sig, (int, float)):
+        for dd in 'xy':
+            gcp_df[f"s{dd}_px"] = gcp_sig
+
+    elif isinstance(px_sig, (list, tuple)):
+        assert len(px_sig) == 2, "must provide 3 values for GCP uncertainty (sx, sy , sz)"
+        for ind, dd in enumerate('xy'):
+            gcp_df[f"s{dd}_px"] = px_sig[ind]
+
     with open(fn_gcp, 'w') as f:
-        if gcp_list is not None:
-            for gcp in gcp_list:
-                _gcp = gcp_df.loc[gcp]
-                lon, lat = _gcp.geometry.x, _gcp.geometry.y
+        if headers is not None:
+            for header in headers:
+                print(header, file=f)
 
-                out_gcp = ','.join([gcp.strip('GCP'), str(lat), str(lon), str(_gcp.elevation), '1.0', '1.0', '1.0'])
+        if gcp_list is None:
+            gcp_list = pivoted.index.get_level_values(0).tolist()
 
-                if not singles:
-                    if all([gcp in meas.loc[meas.image == img]['name'].values for img in imlist]):
-                        for img in sorted(imlist):
-                            row, col = meas.loc[(meas.image == img) & (meas.name == gcp), ['i', 'j']].values[0]
-                            out_gcp += ',' + ','.join([img, str(col / scale), str(row / scale), '1.0', '1.0'])
-                        print(out_gcp, file=f)
-                else:
-                    for img in sorted(imlist):
-                        try:
-                            row, col = meas.loc[(meas.image == img) & (meas.name == gcp), ['i', 'j']].values[0]
-                            out_gcp += ',' + ','.join([img, str(col / scale), str(row / scale), '1.0', '1.0'])
-                        except IndexError as e:
-                            continue
-                    print(out_gcp, file=f)
-        else:
-            if headers is not None:
-                for header in headers:
-                    print(header, file=f)
+        for gcp in gcp_list:
+            _gcp = pivoted.loc[gcp]
+            if not singles and len(_gcp) == 1:
+                continue
 
-            for gcp in gcp_df.drop(columns=['geometry']).itertuples():
-                print(' '.join([str(c) for c in list(gcp)]), file=f)
+            print(_gcp_row(_gcp, gcp, scale, meas), file=f)
 
 
-def _parse_gcp(fn_gcp):
+def _parse_gcp(fn_gcp, delim=None):
     cols = ['id', 'lat', 'lon', 'height_above_datum', 'sigma_x', 'sigma_y', 'sigma_z']
     img_headers = ['image_name', 'pixel_x', 'pixel_y', 'sx_px', 'sy_px']
 
 
     with open(fn_gcp, 'r') as f:
-        all_lines = f.readlines()
+        all_lines = [l.strip() for l in f.readlines()]
 
         crs_wkt = all_lines[0].strip().replace('# ', '')
 
-        delim = ' '
-        ncols = len(all_lines[2].strip().split(delim))
+        if delim is None:
+            delim = ' '
+            ncols = max([len(l.split(delim)) for l in all_lines[2:]])
 
-        if ncols < 2:
-            delim = ','
-            ncols = len(all_lines[2].strip().split(delim))
+            if ncols < 2:
+                delim = ','
+                ncols = max([len(l.split(delim)) for l in all_lines[2:]])
+        else:
+            ncols = max([len(l.split(delim)) for l in all_lines[2:]])
 
     nimg = 0
     while len(cols) < ncols:
         nimg += 1
         cols += ['.'.join([c, str(nimg)]) for c in img_headers]
 
+    padded = [l + delim * (ncols - len(l.split(delim))) + '\n' for l in all_lines[2:]]
+
     cols += ['blank']
-    df = pd.read_csv(fn_gcp, skiprows=2, delimiter=delim, names=cols).set_index('id')
+    df = pd.read_csv(io.StringIO(''.join(padded)), delimiter=delim, names=cols).set_index('id')
     del df['blank']
 
     return gpd.GeoDataFrame(df, geometry=gpd.points_from_xy(df.lon, df.lat, crs='epsg:4326'))
@@ -609,6 +683,7 @@ def gcps_from_dem(img_pair: tuple[str, str],
                   camera_prefix: str,
                   fn_gcp: str,
                   warp_prefix: str = 'warp/run',
+                  match_prefix: Union[str, None] = None,
                   ps_kwargs: dict = {},
                   ps_args: list = [],
                   gcp_kwargs: dict = {},
@@ -631,6 +706,7 @@ def gcps_from_dem(img_pair: tuple[str, str],
     :param camera_prefix: the prefix of the camera files for the two input images (e.g., ba/run)
     :param fn_gcp: the filename of the output GCP file. Should use the extension .gcp
     :param warp_prefix: the prefix to save the output of parallel_stereo to. Defaults to warp/run
+    :param warp_prefix: the prefix to use for the match files. Defaults to the same as camera_prefix.
     :param ps_kwargs: optional keyword parameters for parallel_stereo, for any arguments/flags that take a value.
         Keys should not include the '--' prefix - for example, use 'stereo-algorithm' to define which stereo algorithm
         to use, rather than '--stereo-algorithm'.
@@ -642,6 +718,9 @@ def gcps_from_dem(img_pair: tuple[str, str],
     :param gcp_args: optional flags to pass to dem2gcp, for any arguments/flags that do not take a value.
         Flags should not include the '--' prefix.
     """
+
+    if match_prefix is None:
+        match_prefix = camera_prefix
 
     left, right = img_pair
 
@@ -697,7 +776,7 @@ def gcps_from_dem(img_pair: tuple[str, str],
                    '--right-image', right,
                    '--left-camera', f"{camera_prefix}-{left.replace('.tif', '')}.tsai",
                    '--right-camera', f"{camera_prefix}-{right.replace('.tif', '')}.tsai",
-                   '--match-file', f"{camera_prefix}-{left.replace('.tif', '')}__{right.replace('.tif', '')}-clean.match",
+                   '--match-file', f"{match_prefix}-{left.replace('.tif', '')}__{right.replace('.tif', '')}-clean.match",
                    '--output-gcp', fn_gcp]
 
     if not gcp_kwargs:
@@ -859,3 +938,109 @@ def gcps_from_ortho(fn_img: Union[str, Path],
     for fn_tmp in tmp_files:
         if os.path.exists(fn_tmp):
             os.remove(fn_tmp)
+
+
+def merge_gcps(left: Union[str, Path, gpd.GeoDataFrame],
+               right: Union[str, Path, gpd.GeoDataFrame],
+               crs: Union[CRS, str, int, None],
+               tol: float = 1e-3,
+               nimg: bool = 2,
+               no_singles: bool = False) -> gpd.GeoDataFrame:
+    """
+    Merge two sets of GCPs together by using sjoin_nearest to determine duplicated GCPs.
+
+    :param left: the "left" set of GCPs to use in the join; can be a parsed GCP file or a filename.
+    :param right: the "right" set of GCPs to use in the join; can be a parsed GCP file or a filename.
+    :param crs: the (projected) CRS to use for joining the GCPs to the residual pointmap, using sjoin_nearest
+    :param tol: the tolerance used to determine duplicated GCPs
+    :param nimg: the number to use for the suffix of the repeated columns (e.g., image_name, pixel_x, pixel_y, etc.).
+        If only 2 sets of GCPs are joined, use 2. If a third is being joined to a previously merged pair, use 3, and
+        so on.
+    :param no_singles: return only GCPs seen by more than one image. Defaults to using all GCPs.
+    :return: the merged set of GCPs.
+    """
+    right_cols = ['image_name.1', 'pixel_x.1', 'pixel_y.1', 'sx_px.1', 'sy_px.1', 'geometry']
+    new_cols = [c.replace('.1', f".{nimg}") for c in right_cols]
+
+    if isinstance(left, (str, Path)):
+        left = _parse_gcp(left).to_crs(crs)
+    elif isinstance(left, gpd.GeoDataFrame):
+        left = left.to_crs(crs)
+    else:
+        raise TypeError(f"must be a filename/path or a GeoDataFrame: {left}")
+
+    if isinstance(right, (str, Path)):
+        right = _parse_gcp(right).to_crs(crs)
+    elif isinstance(right, gpd.GeoDataFrame):
+        right = right.to_crs(crs)
+    else:
+        raise TypeError(f"must be a filename/path or a GeoDataFrame: {right}")
+
+    if no_singles:
+        how = 'inner'
+    else:
+        how = 'left'
+
+    merged = left.sjoin_nearest(right[right_cols].rename(columns=dict(zip(right_cols, new_cols))),
+                                max_distance=tol, how=how)
+
+    if not no_singles:
+        if 'id_right' in merged.columns:
+            id_col = 'id_right'
+        else:
+            id_col = 'id'
+
+        missing = ~right.index.isin(merged[id_col])
+        merged = pd.concat([merged, right.loc[missing]], ignore_index=True)
+
+    return merged.drop(columns=[id_col])
+
+
+def parse_pointmap(fn_csv: Union[str, Path], gcps_only: bool = True) -> gpd.GeoDataFrame:
+    """
+    Parse a residual pointmap CSV, output by bundle_adjust.
+
+    :param fn_csv: the filename of the CSV to parse (e.g., ba/all-final_residuals_pointmap.csv')
+    :param gcps_only: return only the residuals from GCPs
+    :return: the parsed pointmap file as a GeoDataFrame with CRS EPSG:4326
+    """
+    pointmap = pd.read_csv(fn_csv, header=2, names=['lon', 'lat', 'elev', 'res', 'source'])
+    pointmap['source'] = pointmap['source'].str.split('#', expand=True)[1].str.strip()
+
+    if gcps_only:
+        pointmap = pointmap.loc[pointmap['source'] == 'GCP'].copy()
+
+    return gpd.GeoDataFrame(pointmap, geometry=gpd.points_from_xy(x=pointmap['lon'], y=pointmap['lat'], crs=4326))
+
+
+def filter_gcps_pointmap(fn_gcp: Union[str, Path],
+                         fn_pointmap: Union[str, Path],
+                         crs: Union[CRS, str, int, None],
+                         nfact: int = 2,
+                         thresh: Union[float, None] = None) -> gpd.GeoDataFrame:
+    """
+    Filter GCPs based on their residual, as read from the residuals pointmap CSV output by bundle_adjust.
+
+    Note that this only works if bundle_adjust was called with --fix-gcp-xyz!
+
+    :param fn_gcp: the filename of the GCPs
+    :param fn_pointmap: the filename of the pointmap CSV to parse (e.g., ba/all-final_residuals_pointmap.csv')
+    :param crs: the (projected) CRS to use for joining the GCPs to the residual pointmap, using sjoin_nearest
+    :param nfact: the multiple of the NMAD to use as a filter. Values more than this times the NMAD away from the
+        median residual will be discarded.
+    :param thresh: the threshold value to use as a filter. If specified, uses this value directly; otherwise,
+        threshold is calculated as a multiple of the NMAD value.
+    :return: the filtered GCP geodataframe
+    """
+    pointmap = parse_pointmap(fn_pointmap)
+    gcps = _parse_gcp(fn_gcp)
+
+    joined = gcps[['geometry']].to_crs(crs).sjoin_nearest(pointmap.to_crs(crs), distance_col='dist')
+    joined = joined[joined['dist'] < 1e-3].copy()
+
+    if thresh is not None:
+        valid = joined['res'] < thresh
+    else:
+        valid = np.abs(joined['res'] - joined['res'].median()) < nfact * register.nmad(joined['res'])
+
+    return gcps.loc[gcps.index.isin(joined.loc[valid].index)]
