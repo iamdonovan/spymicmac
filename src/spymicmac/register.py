@@ -918,9 +918,16 @@ def register_relative(dirmec: str, fn_dem: Union[str, Path], fn_ref: Union[str, 
             micmac.write_image_mesures(imlist, cps, out_dir, subscript, ort_dir=None, outname='AutoCPMeasures', ori=ori)
 
     # now, iterate campari to refine the orientation
-    gcps = micmac.iterate_campari(gcps, out_dir, match_pattern, subscript, dx=ref_img.res[0],
-                                  sig_pix=gcps['radius'].mean() / 2, rel_ori=ori, allfree=allfree,
-                                  max_iter=max_iter, homol=dir_homol, rap_txt=rap_txt)
+    if max_iter == 1:
+        gcps = micmac.campari(gcps, out_dir, match_pattern, subscript, dx=ref_img.res[0],
+                              sig_pix=gcps['radius'].mean() / 2, allfree=allfree,
+                              dir_homol=dir_homol, rap_txt=rap_txt)
+        gcps['camp_xy'] = np.sqrt(gcps.xres ** 2 + gcps.yres ** 2)
+
+    else:
+        gcps = micmac.iterate_campari(gcps, out_dir, match_pattern, subscript, dx=ref_img.res[0],
+                                      sig_pix=gcps['radius'].mean() / 2, rel_ori=ori, allfree=allfree,
+                                      max_iter=max_iter, homol=dir_homol, rap_txt=rap_txt)
 
     if use_cps:
         cp_resids = micmac.checkpoints(match_pattern, f"Ori-TerrainFinal{subscript}",
@@ -990,7 +997,9 @@ def register_relative(dirmec: str, fn_dem: Union[str, Path], fn_ref: Union[str, 
 
 def register_ortho(fn_ortho: Union[str, Path],
                    fn_ref: Union[str, Path],
+                   fn_gcps: Union[str, Path, None] = None,
                    spacing: int = 200,
+                   strategy: str = 'peaks',
                    fn_landmask: Union[str, Path, None] = None,
                    fn_glacmask: Union[str, Path, None] = None,
                    thresh: int = 100,
@@ -1000,6 +1009,12 @@ def register_ortho(fn_ortho: Union[str, Path],
 
     :param fn_ortho: the filename of the orthoimage to register
     :param fn_ref: the filename of the reference image
+    :param fn_gcps: (optional) shapefile or CSV of GCP coordinates to use. Column names should be [(name | id),
+        (z | elevation), x, y]. If CSV is used, x,y should have the same CRS as the reference image.
+    :param strategy: strategy for generating GCPs. Must be one of 'grid', 'random', 'chebyshev', 'orb', or 'peaks'.
+        Note that if 'random' is used, density is the approximate number of points, rather than the distance between
+        grid points. If 'peaks' is used, peaks will be spaced by at least (density/2) pixels.
+    :param spacing: pixel spacing to look for GCPs
     :param fn_landmask: the (optional) filename for an inclusion (i.e., land/stable terrain) mask for matching.
     :param fn_glacmask: the (optional) filename for an exclusion (i.e., unstable terrain) mask for matching.
     :param thresh: the residual threshold (in pixels) to use for RANSAC
@@ -1025,11 +1040,23 @@ def register_ortho(fn_ortho: Union[str, Path],
         gmask = _safe_rasterize(fn_glacmask, tmp_ref, False)
         mask[gmask] = 0
 
-    gridpts = matching.peaks(ref_hp, int(spacing / 2), mask=mask)
+    if fn_gcps is not None:
+        gcps = _read_gcps(fn_gcps, tmp_ref)
+    else:
+        if strategy == 'orb':
+            keypoints = matching.get_dense_keypoints(ref_hp, mask=None, npix=int(spacing/2), use_skimage=True,
+                                                     detector_kwargs={'n_keypoints': 5})
+            gcps = pd.DataFrame(data=keypoints, columns=['search_i', 'search_j'])
+        elif strategy == 'peaks':
+            gridpts = matching.peaks(ref_hp, int(spacing / 2), mask=mask)
+            gcps = pd.DataFrame(data=gridpts, columns=['search_i', 'search_j'])
+        elif strategy == 'chebyshev':
+            raise NotImplementedError("Chebyshev spacing not yet implemented.")
+        else:
+            gcps = None
 
-    gcps = pd.DataFrame(data=gridpts, columns=['search_i', 'search_j'])
-
-    gcps = matching.find_matches(ortho, tmp_ref, mask, points=gcps, strategy='peaks', **matching_kwargs)
+    gcps = matching.find_matches(ortho, tmp_ref, mask, points=gcps, strategy=strategy, srcwin=100,
+                                 spacing=spacing, **matching_kwargs)
 
     gcps['x'], gcps['y'] = tmp_ref.ij2xy(gcps.search_i, gcps.search_j)
     gcps['full_i'], gcps['full_j'] = ref_img.xy2ij(gcps['x'], gcps['y'])
