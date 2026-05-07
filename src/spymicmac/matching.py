@@ -1535,8 +1535,17 @@ def do_match(dest_img: NDArray, ref_img: NDArray, mask: NDArray, pt: tuple[int, 
         testchip, _, _ = make_template(ref_img, pt, srcwin)
         dst_chip, row_inds, col_inds = make_template(dest_img, pt, dstwin)
 
-        testchip[np.isnan(testchip)] = 0
-        dst_chip[np.isnan(dst_chip)] = 0
+        if isinstance(testchip, np.ma.masked_array):
+            testchip.data[testchip.mask] = 0
+            testchip = testchip.data
+        else:
+            testchip[np.isnan(testchip)] = 0
+
+        if isinstance(dst_chip, np.ma.masked_array):
+            dst_chip.data[dst_chip.mask] = 0
+            dst_chip = dst_chip.data
+        else:
+            dst_chip[np.isnan(dst_chip)] = 0
 
         if use_highpass:
             test = image.highpass_filter(testchip)
@@ -1548,8 +1557,8 @@ def do_match(dest_img: NDArray, ref_img: NDArray, mask: NDArray, pt: tuple[int, 
         testmask = binary_dilation(testchip == 0, footprint=disk(8))
         destmask = binary_dilation(dst_chip == 0, footprint=disk(8))
 
-        test[testmask] = np.random.rand(test.shape[0], test.shape[1])[testmask]
-        dest[destmask] = np.random.rand(dest.shape[0], dest.shape[1])[destmask]
+        test[testmask] = np.random.uniform(low=test.min(), high=test.max(), size=test.shape)[testmask]
+        dest[destmask] = np.random.uniform(low=dest.min(), high=dest.max(), size=dest.shape)[destmask]
 
         corr_res, this_i, this_j, radius = find_gcp_match(dest.astype(np.float32), test.astype(np.float32), peak_frac=peak_frac)
         peak_corr = cv2.minMaxLoc(corr_res)[1]
