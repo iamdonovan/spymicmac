@@ -10,9 +10,8 @@ import cv2
 import matplotlib.pyplot as plt
 import pandas as pd
 from itertools import combinations
-from skimage import morphology, io, filters
+from skimage import morphology, io, filters, measure
 from skimage.morphology import binary_dilation, disk
-from skimage.measure import ransac
 from skimage.feature import peak_local_max, ORB
 from skimage.transform import ProjectiveTransform, AffineTransform, EuclideanTransform, SimilarityTransform
 from scipy.interpolate import RectBivariateSpline as RBS
@@ -1350,7 +1349,7 @@ def _subpixel(res, how='min'):
     return sp_delx, sp_dely
 
 
-def find_gcp_match(img, template, method=cv2.TM_CCORR_NORMED):
+def find_gcp_match(img, template, method=cv2.TM_CCORR_NORMED, peak_frac = 0.68):
     res = cv2.matchTemplate(img, template, method)
     i_off = (img.shape[0] - res.shape[0]) / 2
     j_off = (img.shape[1] - res.shape[1]) / 2
@@ -1362,7 +1361,22 @@ def find_gcp_match(img, template, method=cv2.TM_CCORR_NORMED):
         sp_delx = 0
         sp_dely = 0
 
-    return res, maxi + i_off + sp_dely, maxj + j_off + sp_delx
+    radius = peak_radius(res, peak_frac=peak_frac)
+
+    return res, maxi + i_off + sp_dely, maxj + j_off + sp_delx, radius
+
+
+def peak_radius(res, peak_frac=0.68):
+    is_peak = (res - np.median(res)) > peak_frac * res.max()
+    labels = measure.label(is_peak)
+    props =  measure.regionprops(labels)
+
+    _, maxval, _, maxloc = cv2.minMaxLoc(res)
+
+    lab = labels[maxloc[1], maxloc[0]]
+    prop = props[lab - 1]
+
+    return np.sqrt(prop.equivalent_diameter_area / np.pi)
 
 
 def _random_points(mask, npts):
@@ -1408,7 +1422,8 @@ def peaks(img: NDArray, spacing: int, mask: Union[NDArray, None]) -> NDArray:
 
 def find_matches(tfm_img: NDArray, refgeo: gu.Raster, mask: NDArray, points: Union[gpd.GeoDataFrame, None] = None,
                  initM: Union[ProjectiveTransform, None] = None, strategy: str = 'grid',
-                 spacing: int = 200, srcwin: int = 60, dstwin: int = 600, use_highpass: bool = True) -> pd.DataFrame:
+                 spacing: int = 200, srcwin: int = 60, dstwin: int = 600, use_highpass: bool = True,
+                 peak_frac: float = 0.68) -> pd.DataFrame:
     """
     Find matches between two images using normalized cross-correlation template matching. If point locations are not
     given, generates a two-dimensional grid of evenly spaced points.
@@ -1426,6 +1441,7 @@ def find_matches(tfm_img: NDArray, refgeo: gu.Raster, mask: NDArray, points: Uni
     :param srcwin: the half-size of the template window.
     :param dstwin: the half-size of the search window.
     :param use_highpass: match templates using a highpass filter
+    :param peak_frac: the fraction of the peak correlation value to use to determine the width of the peak
     :return: **gcps** -- a DataFrame with GCP locations, match strength, and other information.
     """
     assert strategy in ['grid', 'random', 'chebyshev', 'peaks'],\
@@ -1434,6 +1450,7 @@ def find_matches(tfm_img: NDArray, refgeo: gu.Raster, mask: NDArray, points: Uni
     match_pts = []
     z_corrs = []
     peak_corrs = []
+    radii = []
 
     if points is None:
         if strategy == 'grid':
@@ -1449,11 +1466,12 @@ def find_matches(tfm_img: NDArray, refgeo: gu.Raster, mask: NDArray, points: Uni
 
     for _i, _j in zip(ii, jj):
         search_pts.append((_j, _i))
-        match, z_corr, peak_corr = do_match(tfm_img, refgeo.data, mask, (int(_i), int(_j)),
-                                            srcwin, dstwin, use_highpass)
+        match, z_corr, peak_corr, radius = do_match(tfm_img, refgeo.data, mask, (int(_i), int(_j)),
+                                                    srcwin, dstwin, use_highpass, peak_frac=peak_frac)
         match_pts.append(match)
         z_corrs.append(z_corr)
         peak_corrs.append(peak_corr)
+        radii.append(radius)
 
     search_pts = np.array(search_pts)
     _dst = np.array(match_pts)
@@ -1465,6 +1483,7 @@ def find_matches(tfm_img: NDArray, refgeo: gu.Raster, mask: NDArray, points: Uni
 
     gcps['pk_corr'] = peak_corrs
     gcps['z_corr'] = z_corrs
+    gcps['radius'] = radii
     gcps['match_j'] = _dst[:, 0]  # points matched in transformed image
     gcps['match_i'] = _dst[:, 1]
 
@@ -1486,7 +1505,8 @@ def find_matches(tfm_img: NDArray, refgeo: gu.Raster, mask: NDArray, points: Uni
 
 
 def do_match(dest_img: NDArray, ref_img: NDArray, mask: NDArray, pt: tuple[int, int],
-             srcwin: int, dstwin: int, use_highpass: bool) -> tuple[tuple, float, float]:
+             srcwin: int, dstwin: int, use_highpass: bool, peak_frac: float = 0.68
+             ) -> tuple[tuple, float, float, float]:
     """
     Find a match between two images using normalized cross-correlation template matching.
 
@@ -1497,6 +1517,7 @@ def do_match(dest_img: NDArray, ref_img: NDArray, mask: NDArray, pt: tuple[int, 
     :param srcwin: the half-size of the template window.
     :param dstwin: the half-size of the search window.
     :param use_highpass: match templates using a highpass filter
+    :param peak_frac: the fraction of the peak correlation value to use to determine the width of the peak
     :return:
         - **match_pt** (*tuple*) -- the matching point (j, i) found in dest_img
         - **z_corr** (*float*) -- number of standard deviations (z-score) above other potential matches
@@ -1506,9 +1527,9 @@ def do_match(dest_img: NDArray, ref_img: NDArray, mask: NDArray, pt: tuple[int, 
     submask, _, _ = make_template(mask, pt, srcwin)
 
     if submask.size == 0:
-        return (np.nan, np.nan), np.nan, np.nan
+        return (np.nan, np.nan), np.nan, np.nan, np.nan
     elif np.count_nonzero(submask) / submask.size < 0.05:
-        return (np.nan, np.nan), np.nan, np.nan
+        return (np.nan, np.nan), np.nan, np.nan, np.nan
 
     try:
         testchip, _, _ = make_template(ref_img, pt, srcwin)
@@ -1530,7 +1551,7 @@ def do_match(dest_img: NDArray, ref_img: NDArray, mask: NDArray, pt: tuple[int, 
         test[testmask] = np.random.rand(test.shape[0], test.shape[1])[testmask]
         dest[destmask] = np.random.rand(dest.shape[0], dest.shape[1])[destmask]
 
-        corr_res, this_i, this_j = find_gcp_match(dest.astype(np.float32), test.astype(np.float32))
+        corr_res, this_i, this_j, radius = find_gcp_match(dest.astype(np.float32), test.astype(np.float32), peak_frac=peak_frac)
         peak_corr = cv2.minMaxLoc(corr_res)[1]
 
         pks = peak_local_max(corr_res, min_distance=5, num_peaks=2)
@@ -1545,9 +1566,9 @@ def do_match(dest_img: NDArray, ref_img: NDArray, mask: NDArray, pt: tuple[int, 
         out_i, out_j = this_i - row_inds[0] + _i, this_j - col_inds[0] + _j
 
     except Exception as e:
-        return (np.nan, np.nan), np.nan, np.nan
+        return (np.nan, np.nan), np.nan, np.nan, np.nan
 
-    return (out_j, out_i), z_corr, peak_corr
+    return (out_j, out_i), z_corr, peak_corr, radius
 
 
 def get_matches(img1: NDArray, img2: NDArray, mask1: Union[NDArray, None] = None, mask2: Union[NDArray, None] = None,

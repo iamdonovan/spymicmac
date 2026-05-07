@@ -919,7 +919,8 @@ def register_relative(dirmec: str, fn_dem: Union[str, Path], fn_ref: Union[str, 
 
     # now, iterate campari to refine the orientation
     gcps = micmac.iterate_campari(gcps, out_dir, match_pattern, subscript, dx=ref_img.res[0],
-                                  rel_ori=ori, allfree=allfree, max_iter=max_iter, homol=dir_homol, rap_txt=rap_txt)
+                                  sig_pix=gcps['radius'].mean() / 2, rel_ori=ori, allfree=allfree,
+                                  max_iter=max_iter, homol=dir_homol, rap_txt=rap_txt)
 
     if use_cps:
         cp_resids = micmac.checkpoints(match_pattern, f"Ori-TerrainFinal{subscript}",
@@ -1030,10 +1031,13 @@ def register_ortho(fn_ortho: Union[str, Path],
 
     gcps = matching.find_matches(ortho, tmp_ref, mask, points=gcps, strategy='peaks', **matching_kwargs)
 
-    model, inliers = ransac((gcps[['search_j', 'search_i']].values, gcps[['match_j', 'match_i']].values),
-                            AffineTransform, min_samples=6, residual_threshold=thresh, max_trials=5000)
-
     gcps['x'], gcps['y'] = tmp_ref.ij2xy(gcps.search_i, gcps.search_j)
     gcps['full_i'], gcps['full_j'] = ref_img.xy2ij(gcps['x'], gcps['y'])
+
+    if thresh > 0:
+        model, inliers = ransac((gcps[['search_j', 'search_i']].values, gcps[['match_j', 'match_i']].values),
+                                AffineTransform, min_samples=6, residual_threshold=thresh, max_trials=5000)
+    else:
+        inliers = [True] * len(gcps)
 
     return gcps.loc[inliers]
