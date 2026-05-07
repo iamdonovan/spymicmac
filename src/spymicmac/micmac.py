@@ -1837,9 +1837,9 @@ def campari(in_gcps: pd.DataFrame, outdir: str, img_pattern: str, sub: str, dx: 
     args = ['mm3d', 'Campari', img_pattern, inori + sub, outori + sub]
 
     if dx is not None:
-        args.append(f"GCP=[{Path(outdir, fn_gcp)},{np.abs(dx) / 4},{Path(outdir, fn_meas)},{sig_pix}]")
+        args.append(f"GCP=[{Path(outdir, fn_gcp)},{np.abs(dx) / 4:.2f},{Path(outdir, fn_meas)},{sig_pix:.2f}]")
     else:
-        args.append(f"GCP=[{Path(outdir, fn_gcp)},{sig_abs},{Path(outdir, fn_meas)},{sig_pix}]")
+        args.append(f"GCP=[{Path(outdir, fn_gcp)},{sig_abs:.2f},{Path(outdir, fn_meas)},{sig_pix:.2f}]")
 
     args.append(f"SH={dir_homol}")
     args.append(f"AllFree={int(allfree)}")
