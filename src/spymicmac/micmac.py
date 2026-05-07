@@ -1070,16 +1070,16 @@ def get_bascule_residuals(fn_basc: Union[str, Path], gcp_df: pd.DataFrame) -> pd
     dist = np.array([float(res.find('Dist').text) for res in gcp_res])
 
     for data_ in zip(gcp_names, x_res):
-        gcp_df.loc[gcp_df.id == data_[0], 'xres'] = data_[1]
+        gcp_df.loc[gcp_df.id.astype(str) == data_[0], 'xres'] = data_[1]
 
     for data_ in zip(gcp_names, y_res):
-        gcp_df.loc[gcp_df.id == data_[0], 'yres'] = data_[1]
+        gcp_df.loc[gcp_df.id.astype(str) == data_[0], 'yres'] = data_[1]
 
     for data_ in zip(gcp_names, z_res):
-        gcp_df.loc[gcp_df.id == data_[0], 'zres'] = data_[1]
+        gcp_df.loc[gcp_df.id.astype(str) == data_[0], 'zres'] = data_[1]
 
     for data_ in zip(gcp_names, dist):
-        gcp_df.loc[gcp_df.id == data_[0], 'residual'] = data_[1]
+        gcp_df.loc[gcp_df.id.astype(str) == data_[0], 'residual'] = data_[1]
     # gcp_df['residual'] = np.sqrt(gcp_df['xres'].values**2 + gcp_df['yres'].values**2)
 
     return gcp_df
@@ -1123,19 +1123,19 @@ def get_campari_residuals(fn_resids: Union[str, Path], gcp_df: pd.DataFrame) -> 
             camp_dist.append(np.nan)
 
     for data_ in zip(camp_gcp_names, err_max):
-        gcp_df.loc[gcp_df.id == data_[0], 'camp_res'] = data_[1]
+        gcp_df.loc[gcp_df.id.astype(str) == data_[0], 'camp_res'] = data_[1]
 
     for data_ in zip(camp_gcp_names, camp_x):
-        gcp_df.loc[gcp_df.id == data_[0], 'camp_xres'] = data_[1]
+        gcp_df.loc[gcp_df.id.astype(str) == data_[0], 'camp_xres'] = data_[1]
 
     for data_ in zip(camp_gcp_names, camp_y):
-        gcp_df.loc[gcp_df.id == data_[0], 'camp_yres'] = data_[1]
+        gcp_df.loc[gcp_df.id.astype(str) == data_[0], 'camp_yres'] = data_[1]
 
     for data_ in zip(camp_gcp_names, camp_z):
-        gcp_df.loc[gcp_df.id == data_[0], 'camp_zres'] = data_[1]
+        gcp_df.loc[gcp_df.id.astype(str) == data_[0], 'camp_zres'] = data_[1]
 
     for data_ in zip(camp_gcp_names, camp_dist):
-        gcp_df.loc[gcp_df.id == data_[0], 'camp_dist'] = data_[1]
+        gcp_df.loc[gcp_df.id.astype(str) == data_[0], 'camp_dist'] = data_[1]
 
     return gcp_df
 
@@ -2158,7 +2158,7 @@ def save_gcps(in_gcps: gpd.GeoDataFrame, outdir: str, utmstr: str, sub: str,
     auto_root = ET.parse(Path(outdir, fn_meas + sub + '-S2D.xml')).getroot()
     for im in auto_root.findall('MesureAppuiFlottant1Im'):
         for pt in im.findall('OneMesureAF1I'):
-            if pt.find('NamePt').text not in in_gcps.id.values:
+            if pt.find('NamePt').text not in in_gcps.id.astype(str).values:
                 im.remove(pt)
 
     # save AutoMeasures
