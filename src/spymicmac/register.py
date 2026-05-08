@@ -710,6 +710,7 @@ def register_relative(dirmec: str, fn_dem: Union[str, Path], fn_ref: Union[str, 
     micmac.drone_footprint(f"({'|'.join(imlist)})", ori)
     rel_footprints = gpd.read_file(f"{ori}_footprints.gpkg").set_index('filename')
     new_footprints = _reproject_footprints(rel_footprints, reg_img, ref_img_crop, model)
+    new_footprints.to_file('UpdatedFootprints.gpkg')
 
     # transformation from relative coords to absolute coords
     rel2abs = _tfm_from_corners(reg_img, ref_img_crop, model)
