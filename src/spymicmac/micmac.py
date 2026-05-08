@@ -2042,26 +2042,40 @@ def iterate_campari(gcps: pd.DataFrame, out_dir: str, match_pattern: str, subscr
 
     gcps['camp_xy'] = np.sqrt(gcps.camp_xres ** 2 + gcps.camp_yres ** 2)
 
-    while any([np.any(np.abs(gcps.camp_res - gcps.camp_res.median()) > 2 * register.nmad(gcps.camp_res)),
-               np.any(np.abs(gcps.camp_dist - gcps.camp_dist.median()) > 2 * register.nmad(gcps.camp_dist)),
-               gcps.camp_res.max() > 2]) and niter < max_iter:
-        valid_inds = np.logical_and.reduce((np.abs(gcps.camp_dist - gcps.camp_dist.median()) < 2 * register.nmad(gcps.camp_dist),
-                                            gcps.camp_res < gcps.camp_res.max()))
-        if np.count_nonzero(valid_inds) < 10:
-            break
+    fact_list = [20, 12, 6, 4, 3, 2]
+    if niter > len(fact_list):
+        fact_list = [20] * (niter - len(fact_list)) + fact_list
 
-        gcps = gcps.loc[valid_inds]
-        save_gcps(gcps, out_dir, register._get_utm_str(gcps.crs.to_epsg), subscript, fn_gcp=fn_gcp, fn_meas=fn_meas)
+    # iterate using a decreasing nmad factor to try to better weed out outliers
+    for fact in fact_list[-max_iter:]:
 
-        gcps = bascule(gcps, out_dir, match_pattern, subscript, rel_ori, fn_gcp=fn_gcp,
-                       fn_meas=fn_meas, outori=inori)
-        gcps['res_dist'] = np.sqrt(gcps.xres ** 2 + gcps.yres ** 2)
+        while any([np.any(np.abs(gcps.camp_res - gcps.camp_res.median()) > fact * register.nmad(gcps.camp_res)),
+                   np.any(np.abs(gcps.camp_dist - gcps.camp_dist.median()) > fact * register.nmad(gcps.camp_dist)),
+                   gcps.camp_res.max() > 2]) and niter < max_iter:
 
-        gcps = campari(gcps, out_dir, match_pattern, subscript, dx=dx, sig_abs=sig_abs, sig_pix=sig_pix,
-                       inori=inori, outori=outori, fn_gcp=fn_gcp, fn_meas=fn_meas, allfree=allfree, rap_txt=rap_txt)
+            valid_inds = np.logical_and.reduce((
+                np.abs(gcps.camp_dist - gcps.camp_dist.median()) < fact * register.nmad(gcps.camp_dist),
+                np.abs(gcps.camp_xres) < fact * register.nmad(gcps.camp_xres),
+                np.abs(gcps.camp_yres) < fact * register.nmad(gcps.camp_yres),
+                np.abs(gcps.camp_zres) < 2 * register.nmad(gcps.camp_zres), # place a stricter limit on the z residual
+                gcps.camp_res < gcps.camp_res.max()
+            ))
 
-        gcps['camp_xy'] = np.sqrt(gcps.camp_xres ** 2 + gcps.camp_yres ** 2)
-        niter += 1
+            if np.count_nonzero(valid_inds) < 10:
+                break
+
+            gcps = gcps.loc[valid_inds]
+            save_gcps(gcps, out_dir, register._get_utm_str(gcps.crs.to_epsg), subscript, fn_gcp=fn_gcp, fn_meas=fn_meas)
+
+            gcps = bascule(gcps, out_dir, match_pattern, subscript, rel_ori, fn_gcp=fn_gcp,
+                           fn_meas=fn_meas, outori=inori)
+            gcps['res_dist'] = np.sqrt(gcps.xres ** 2 + gcps.yres ** 2)
+
+            gcps = campari(gcps, out_dir, match_pattern, subscript, dx=dx, sig_abs=sig_abs, sig_pix=sig_pix,
+                           inori=inori, outori=outori, fn_gcp=fn_gcp, fn_meas=fn_meas, allfree=allfree, rap_txt=rap_txt)
+
+            gcps['camp_xy'] = np.sqrt(gcps.camp_xres ** 2 + gcps.camp_yres ** 2)
+            niter += 1
 
     return gcps
 
