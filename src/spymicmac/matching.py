@@ -172,7 +172,7 @@ def _filter_fid_matches(coords_all, measures_cam):
     for c in filtered_combs:
         these_meas = coords_all.loc[c].set_index('gcp').join(measures_cam)
 
-        model, inliers = ransac((these_meas[['im_col', 'im_row']].values, these_meas[['j', 'i']].values),
+        model, inliers = measure.ransac((these_meas[['im_col', 'im_row']].values, these_meas[['j', 'i']].values),
                                 AffineTransform, min_samples=3, residual_threshold=10, max_trials=20)
         try:
             resids.append(model.residuals(these_meas[['im_col', 'im_row']].values,
@@ -855,7 +855,7 @@ def match_reseau_grid(img: NDArray, coords: NDArray, cross: NDArray) -> pd.DataF
         grid_df.loc[ind, 'match_j'] = matchpt.x
         grid_df.loc[ind, 'dist'] = gridpt.distance(matchpt)
 
-    model, inliers = ransac((grid_df[['grid_j', 'grid_i']].values, grid_df[['match_j', 'match_i']].values),
+    model, inliers = measure.ransac((grid_df[['grid_j', 'grid_i']].values, grid_df[['match_j', 'match_i']].values),
                             AffineTransform, min_samples=10, residual_threshold=grid_df.dist.median(), max_trials=5000)
     grid_df.loc[~inliers, 'dist'] = np.nan
     grid_df.loc[~inliers, 'match_j'] = np.nan
@@ -1005,7 +1005,7 @@ def find_reseau_grid(fn_img: Union[str, Path],
     print(f"Finding grid points in {fn_img}...")
     grid_df = find_crosses(img, cross)
 
-    model, inliers = ransac((grid_df[['grid_j', 'grid_i']].values, grid_df[['match_j', 'match_i']].values),
+    model, inliers = measure.ransac((grid_df[['grid_j', 'grid_i']].values, grid_df[['match_j', 'match_i']].values),
                             AffineTransform, min_samples=10, residual_threshold=10, max_trials=5000)
     grid_df['resid'] = model.residuals(grid_df.dropna()[['grid_j', 'grid_i']].values,
                                        grid_df.dropna()[['match_j', 'match_i']].values)
@@ -1763,7 +1763,7 @@ def match_halves(left: NDArray, right: NDArray, overlap: int, block_size: int = 
     inliers = []
 
     for ii in range(20):
-        mod, inl = ransac((np.array(src_pts), np.array(dst_pts)), EuclideanTransform,
+        mod, inl = measure.ransac((np.array(src_pts), np.array(dst_pts)), EuclideanTransform,
                           min_samples=10, residual_threshold=0.2, max_trials=2500)
         models.append(mod)
         inliers.append(inl)
