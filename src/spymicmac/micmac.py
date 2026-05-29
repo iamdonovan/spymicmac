@@ -2121,8 +2121,8 @@ def mask_invalid_els(dir_mec: str, fn_dem: str, fn_mask: Union[str, Path], ori: 
     dem.data[mask] = ref_dem.data[mask]
     automask.data[mask] = 1
 
-    automask.save(fn_auto)
-    dem.save(zlist[ind])
+    automask.to_file(fn_auto)
+    dem.to_file(zlist[ind])
 
     if os.name == 'nt':
         echo = subprocess.Popen('echo', stdout=subprocess.PIPE, shell=True)

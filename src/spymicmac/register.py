@@ -735,7 +735,7 @@ def register_relative(dirmec: str, fn_dem: Union[str, Path], fn_ref: Union[str, 
     else:
         rough_geo = rough_tfm
 
-    rough_geo.save(f"Register{subscript}_rough_geo.tif", co_opts={'BIGTIFF': 'YES'})
+    rough_geo.to_file(f"Register{subscript}_rough_geo.tif", co_opts={'BIGTIFF': 'YES'})
 
     np.savetxt(f"Register{subscript}_rough_tfm.csv", model.params, delimiter=',')
 

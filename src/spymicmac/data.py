@@ -250,7 +250,7 @@ def download_cop30_vrt(imlist: Union[list, None] = None,
         tmp = gu.Raster(fn_out)
 
         fn_out = 'Copernicus_DSM.tif'
-        tmp.reproject(crs = crs).save(fn_out)
+        tmp.reproject(crs = crs).to_file(fn_out)
 
     if to_ellipsoid:
         to_wgs84_ellipsoid(fn_out)
@@ -291,7 +291,7 @@ def to_wgs84_ellipsoid(fn_dem: Union[Path, str]) -> None:
     geoid = gu.Raster(str(Path(proj_data, 'egm08_25.gtx'))).reproject(dem)
 
     ell = dem + geoid
-    ell.save(os.path.splitext(fn_dem)[0] + '_ell.tif')
+    ell.to_file(os.path.splitext(fn_dem)[0] + '_ell.tif')
 
 
 def _pgc_url(flavor: str) -> str:
@@ -410,7 +410,7 @@ def download_pgc_mosaic(flavor: str, imlist: Union[list, None] = None,
 
         if crs is not None:
             tmp = gu.Raster(outfile)
-            tmp.reproject(crs = crs).save(outfile.replace('vrt', 'tif'))
+            tmp.reproject(crs = crs).to_file(outfile.replace('vrt', 'tif'))
 
     else:
         with open(f'{flavor}_tiles.txt', 'w') as f:
