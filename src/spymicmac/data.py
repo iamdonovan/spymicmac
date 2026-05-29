@@ -342,7 +342,7 @@ def _unpack_pgc(tarball: Union[str, Path], folder: Union[str, Path]):
     with tarfile.open(Path(folder, tarball), 'r') as tfile:
         dem = tfile.getmember(tarball.replace('.tar.gz', '_dem.tif'))
         dem.name = Path(folder, dem.name)  # will extract to arctic_dem
-        tfile.extract(dem)
+        tfile.extract(str(dem))
 
 
 def download_pgc_mosaic(flavor: str, imlist: Union[list, None] = None,
