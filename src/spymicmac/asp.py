@@ -15,6 +15,7 @@ from osgeo import gdal
 from rasterio.crs import CRS
 from shapely.ops import split, orient
 from shapely.geometry import LineString, Point, Polygon
+from sklearn.neighbors import BallTree
 from . import data, declass, micmac, register
 from typing import Union
 
@@ -684,6 +685,7 @@ def gcps_from_dem(img_pair: tuple[str, str],
                   fn_gcp: str,
                   warp_prefix: str = 'warp/run',
                   match_prefix: Union[str, None] = None,
+                  use_clean: bool = True,
                   ps_kwargs: dict = {},
                   ps_args: list = [],
                   gcp_kwargs: dict = {},
@@ -706,7 +708,8 @@ def gcps_from_dem(img_pair: tuple[str, str],
     :param camera_prefix: the prefix of the camera files for the two input images (e.g., ba/run)
     :param fn_gcp: the filename of the output GCP file. Should use the extension .gcp
     :param warp_prefix: the prefix to save the output of parallel_stereo to. Defaults to warp/run
-    :param warp_prefix: the prefix to use for the match files. Defaults to the same as camera_prefix.
+    :param match_prefix: the prefix to use for the match files. Defaults to the same as camera_prefix.
+    :param use_clean: use the 'clean' match file, rather than the full match file
     :param ps_kwargs: optional keyword parameters for parallel_stereo, for any arguments/flags that take a value.
         Keys should not include the '--' prefix - for example, use 'stereo-algorithm' to define which stereo algorithm
         to use, rather than '--stereo-algorithm'.
@@ -775,9 +778,15 @@ def gcps_from_dem(img_pair: tuple[str, str],
                    '--left-image', left,
                    '--right-image', right,
                    '--left-camera', f"{camera_prefix}-{left.replace('.tif', '')}.tsai",
-                   '--right-camera', f"{camera_prefix}-{right.replace('.tif', '')}.tsai",
-                   '--match-file', f"{match_prefix}-{left.replace('.tif', '')}__{right.replace('.tif', '')}-clean.match",
-                   '--output-gcp', fn_gcp]
+                   '--right-camera', f"{camera_prefix}-{right.replace('.tif', '')}.tsai"]
+
+    if use_clean:
+        gcp_cl_args.extend(['--match-file', f"{match_prefix}-{left.replace('.tif', '')}__{right.replace('.tif', '')}-clean.match",])
+    else:
+        gcp_cl_args.extend(
+            ['--match-file', f"{match_prefix}-{left.replace('.tif', '')}__{right.replace('.tif', '')}.match", ])
+
+    gcp_cl_args.extend(['--output-gcp', fn_gcp])
 
     if not gcp_kwargs:
         gcp_kwargs = {'max-num-gcp': 20000}
@@ -1017,7 +1026,10 @@ def filter_gcps_pointmap(fn_gcp: Union[str, Path],
                          fn_pointmap: Union[str, Path],
                          crs: Union[CRS, str, int, None],
                          nfact: int = 2,
-                         thresh: Union[float, None] = None) -> gpd.GeoDataFrame:
+                         thresh: Union[float, None] = None,
+                         use_neighbors: bool = False,
+                         num_neighbors: int = 10,
+                         max_dist: float = 1e4) -> gpd.GeoDataFrame:
     """
     Filter GCPs based on their residual, as read from the residuals pointmap CSV output by bundle_adjust.
 
@@ -1030,6 +1042,10 @@ def filter_gcps_pointmap(fn_gcp: Union[str, Path],
         median residual will be discarded.
     :param thresh: the threshold value to use as a filter. If specified, uses this value directly; otherwise,
         threshold is calculated as a multiple of the NMAD value.
+    :param use_neighbors: compare the residual of each point to its nearest neighbors, rather than the statistics of
+        the entire datset
+    :param num_neighbors: the number of nearest neighbors to use
+    :param max_dist: the maximum distance (in the units of the projected crs) to use for neighbor-based filtering
     :return: the filtered GCP geodataframe
     """
     pointmap = parse_pointmap(fn_pointmap)
@@ -1038,9 +1054,26 @@ def filter_gcps_pointmap(fn_gcp: Union[str, Path],
     joined = gcps[['geometry']].to_crs(crs).sjoin_nearest(pointmap.to_crs(crs), distance_col='dist')
     joined = joined[joined['dist'] < 1e-3].copy()
 
+    if use_neighbors:
+        xy = np.hstack([joined.geometry.x.values.reshape(-1, 1), joined.geometry.y.values.reshape(-1, 1)])
+        tree = BallTree(xy, leaf_size=15)
+
+        for ind in joined.index:
+            this_xy = np.array([joined.loc[ind].geometry.x, joined.loc[ind].geometry.y]).reshape(1, -1)
+            distances, indices = tree.query(this_xy, k=num_neighbors + 1) # get the num_neighbors closest + self
+
+            indices = indices[np.logical_and(distances > 0, distances < max_dist)]
+            joined.loc[ind, 'res_diff'] = (joined.loc[ind, 'res'] - joined.loc[joined.index[indices], 'res']).median()
+
     if thresh is not None:
-        valid = joined['res'] < thresh
+        if not use_neighbors:
+            valid = joined['res'] < thresh
+        else:
+            valid = joined['res_diff'].abs() < thresh
     else:
-        valid = np.abs(joined['res'] - joined['res'].median()) < nfact * register.nmad(joined['res'])
+        if not use_neighbors:
+            valid = np.abs(joined['res'] - joined['res'].median()) < nfact * register.nmad(joined['res'])
+        else:
+            valid = joined['res_diff'].abs() < nfact * register.nmad(joined['res_diff'])
 
     return gcps.loc[gcps.index.isin(joined.loc[valid].index)]
