@@ -671,7 +671,10 @@ def register_relative(dirmec: str, fn_dem: Union[str, Path], fn_ref: Union[str, 
         tfm_fill = 0
 
     if footprints is None:
-        if os.path.isfile('Footprints.gpkg'):
+        if Path('UpdatedFootprints.gpkg').exists():
+            print('Using existing UpdatedFootprints.gpkg file in current directory.')
+            footprints = gpd.read_file('UpdatedFootprints.gpkg')
+        elif Path('Footprints.gpkg').exists():
             print('Using existing Footprints.gpkg file in current directory.')
             footprints = gpd.read_file('Footprints.gpkg')
         else:
@@ -828,9 +831,9 @@ def register_relative(dirmec: str, fn_dem: Union[str, Path], fn_ref: Union[str, 
     print(f"{gcps.shape[0]} matches with valid elevations")
 
     # run ransac to find the matches between the transformed image and the master image make a coherent transformation
-    # residual_threshold is 20 pixels to allow for some local distortions, but get rid of the big blunders
+    # residual_threshold is 100 pixels to allow for some local distortions, but get rid of the big blunders
     gcps['offset'] = np.sqrt(gcps['dj'] ** 2 + gcps['di'] ** 2)
-    thresh = np.ceil(min(20, gcps['offset'].median() + 4 * nmad(gcps['offset'])))
+    thresh = np.ceil(min(100, gcps['offset'].median() + 4 * nmad(gcps['offset'])))
 
     models = []
     inliers = []
