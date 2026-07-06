@@ -342,7 +342,7 @@ def _get_mask(footprints: gpd.GeoDataFrame, img: gu.Raster, imlist: list,
     xmin, ymin, xmax, ymax = fprint.bounds
     buff_dist = 0.05 * min(abs(xmax - xmin), abs(ymax - ymin))
 
-    img.crop(fprint.buffer(buff_dist).bounds, mode='match_pixel', inplace=True)
+    img = img.crop(fprint.buffer(buff_dist).bounds, mode='match_pixel')
     fmask.crop(fprint.buffer(buff_dist).bounds, mode='match_pixel', inplace=True)
 
     mask = fmask.copy(new_array=np.ones(img.shape, dtype=np.uint8))
