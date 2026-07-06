@@ -363,17 +363,23 @@ def _get_mask(footprints: gpd.GeoDataFrame, img: gu.Raster, imlist: list,
 
 
 def _safe_rasterize(shape, img, inclusive=True):
-    try:
-        _mask = _load_mask_from_file(shape, img)
-    except ValueError as e:
-        warnings.warn("No valid geometry objects found to rasterize. Be sure to double-check your input files.", UserWarning)
-        _mask = img.copy(new_array=np.ones_like(img.data))
-        if inclusive:
-            _mask = _mask == 1
-        else:
-            _mask = _mask == 0
+    if not pd.api.types.is_list_like(shape):
+        shape = [shape]
 
-    return _mask
+    _mask = []
+
+    for shp in shape:
+        try:
+            _mask.append(_load_mask_from_file(shp, img).astype(np.uint8))
+        except ValueError as e:
+            warnings.warn("No valid geometry objects found to rasterize. Be sure to double-check your input files.", UserWarning)
+            rst_mask = img.copy(new_array=np.ones_like(img.data))
+            if inclusive:
+                _mask.append((rst_mask == 1).astype(np.uint8))
+            else:
+                _mask.append((rst_mask == 0).astype(np.uint8))
+
+    return gu.raster.merge_rasters(_mask, merge_algorithm=np.sum) > 0
 
 
 def _load_mask_from_file(fn_mask, img):
@@ -564,8 +570,10 @@ def _prepare_hillshades(dem, tfm_img, **hillshade_kwargs):
 
 
 def register_relative(dirmec: str, fn_dem: Union[str, Path], fn_ref: Union[str, Path, None] = None,
-                      fn_ortho: Union[str, Path, None] = None, glacmask: Union[str, Path, None] = None,
-                      landmask: Union[str, Path, None] = None, footprints: Union[str, Path, None] = None,
+                      fn_ortho: Union[str, Path, None] = None,
+                      glacmask: Union[str, Path, list[str], list[Path], None] = None,
+                      landmask: Union[str, Path, list[str], list[Path], None] = None,
+                      footprints: Union[str, Path, None] = None,
                       globstr: str = 'OIS*.tif', im_subset: Union[str, None] = None, block_num: Union[str, None] = None,
                       subscript: Union[str, None] = None, ori: str ='Relative', ortho_res: Union[float, int] = 8.,
                       imgsource: str = 'DECLASSII', strategy: str = 'grid', density: int = 200,
@@ -582,8 +590,8 @@ def register_relative(dirmec: str, fn_dem: Union[str, Path], fn_ref: Union[str, 
     :param fn_dem: path to reference DEM
     :param fn_ref: path to reference orthorectified image (optional)
     :param fn_ortho: path to relative orthoimage (optional)
-    :param glacmask: path to file of glacier outlines (i.e., an exclusion mask)
-    :param landmask: path to file of land outlines (i.e., an inclusion mask)
+    :param glacmask: path(s) to file(s) of glacier outlines (i.e., an exclusion mask)
+    :param landmask: path(s) to file(s) of land outlines (i.e., an inclusion mask)
     :param footprints: path to shapefile of image outlines. If not set, will look for Footprints.gpkg in the current
         directory. If this file does not exist, will attempt to download from USGS using imgsource.
     :param globstr: the search string to use to find images in the current directory
@@ -1004,8 +1012,8 @@ def register_ortho(fn_ortho: Union[str, Path],
                    fn_gcps: Union[str, Path, None] = None,
                    spacing: int = 200,
                    strategy: str = 'peaks',
-                   fn_landmask: Union[str, Path, None] = None,
-                   fn_glacmask: Union[str, Path, None] = None,
+                   fn_landmask: Union[str, Path, list[str], list[Path], None] = None,
+                   fn_glacmask: Union[str, Path, list[str], list[Path], None] = None,
                    thresh: int = 100,
                    matching_kwargs: dict = {}) -> pd.DataFrame:
     """
@@ -1019,8 +1027,8 @@ def register_ortho(fn_ortho: Union[str, Path],
         Note that if 'random' is used, density is the approximate number of points, rather than the distance between
         grid points. If 'peaks' is used, peaks will be spaced by at least (density/2) pixels.
     :param spacing: pixel spacing to look for GCPs
-    :param fn_landmask: the (optional) filename for an inclusion (i.e., land/stable terrain) mask for matching.
-    :param fn_glacmask: the (optional) filename for an exclusion (i.e., unstable terrain) mask for matching.
+    :param fn_landmask: the (optional) filename(s) for an inclusion (i.e., land/stable terrain) mask for matching.
+    :param fn_glacmask: the (optional) filename(s) for an exclusion (i.e., unstable terrain) mask for matching.
     :param thresh: the residual threshold (in pixels) to use for RANSAC
     :param matching_kwargs: additional kwargs to pass to spymicmac.matching.find_matches
     """

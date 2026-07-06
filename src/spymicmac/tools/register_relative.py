@@ -16,10 +16,10 @@ def _argparser():
                          help='path to reference orthorectified image (optional)')
     _parser.add_argument('-ort', '--fn_ortho', action='store', type=str, default=None,
                          help='path to relative orthoimage (optional)')
-    _parser.add_argument('-glacmask', action='store', type=str, default=None,
-                         help='path to shapefile of glacier outlines (i.e., an exclusion mask)')
-    _parser.add_argument('-landmask', action='store', type=str, default=None,
-                         help='path to shapefile of land outlines (i.e., an inclusion mask)')
+    _parser.add_argument('-glacmask', action='store', type=str, nargs='+', default=None,
+                         help='path(s) to file(s) of glacier outlines (i.e., an exclusion mask)')
+    _parser.add_argument('-landmask', action='store', type=str, nargs='+', default=None,
+                         help='path(s) to file(s) of land outlines (i.e., an inclusion mask)')
     _parser.add_argument('-footprints', action='store', type=str, default=None,
                          help='path to shapefile of image outlines. If not set, will look for Footprints.gpkg '
                               'in the current directory. If this file does not exist, will attempt to download '
