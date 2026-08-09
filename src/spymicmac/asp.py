@@ -781,10 +781,19 @@ def gcps_from_dem(img_pair: tuple[str, str],
                    '--right-camera', f"{camera_prefix}-{right.replace('.tif', '')}.tsai"]
 
     if use_clean:
-        gcp_cl_args.extend(['--match-file', f"{match_prefix}-{left.replace('.tif', '')}__{right.replace('.tif', '')}-clean.match",])
+        match_ext = 'clean.match'
     else:
-        gcp_cl_args.extend(
-            ['--match-file', f"{match_prefix}-{left.replace('.tif', '')}__{right.replace('.tif', '')}.match", ])
+        match_ext = '.match'
+
+    matchfile = f"{match_prefix}-{left.replace('.tif', '')}__{right.replace('.tif', '')}-{match_ext}"
+    if Path(matchfile).exists():
+        gcp_cl_args.extend(['--match-file', matchfile,])
+    else:
+        matchfile = f"{match_prefix}-{right.replace('.tif', '')}__{left.replace('.tif', '')}-{match_ext}"
+        if Path(matchfile).exists():
+            gcp_cl_args.extend(['--match-file', matchfile,])
+        else:
+            raise FileNotFoundError(f"Unable to find match file in {match_prefix} for {left}, {right}")
 
     gcp_cl_args.extend(['--output-gcp', fn_gcp])
 
