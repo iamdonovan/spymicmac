@@ -838,6 +838,9 @@ def register_relative(dirmec: str, fn_dem: Union[str, Path], fn_ref: Union[str, 
     gcps.dropna(inplace=True)
     print(f"{gcps.shape[0]} matches with valid elevations")
 
+    center = _get_footprint_overlap(footprints.to_crs(ref_img.crs)).centroid
+    gcps['rad_dist'] = gcps.distance(center)
+
     # run ransac to find the matches between the transformed image and the master image make a coherent transformation
     # residual_threshold is 100 pixels to allow for some local distortions, but get rid of the big blunders
     gcps['offset'] = np.sqrt(gcps['dj'] ** 2 + gcps['di'] ** 2)
@@ -864,9 +867,11 @@ def register_relative(dirmec: str, fn_dem: Union[str, Path], fn_ref: Union[str, 
     gcps['aff_resid'] = Mref.residuals(gcps[['search_j', 'search_i']].values,
                                        gcps[['match_j', 'match_i']].values)
 
-    # valid = np.abs(gcps.aff_resid - gcps.aff_resid.median()) < nmad(gcps.aff_resid)
-    # gcps = gcps.loc[valid]
-    gcps = gcps.loc[inliers_ref]
+    gcps['scaled_aff'] = gcps['aff_resid'] / (gcps['rad_dist'] / gcps['rad_dist'].max())
+
+    valid = gcps.scaled_aff < gcps.scaled_aff.median() + 4 * nmad(gcps.scaled_aff)
+    gcps = gcps.loc[valid]
+    # gcps = gcps.loc[inliers_ref]
 
     # out = _sliding_window_filter([reg_img.shape[1], reg_img.shape[0]], gcps,
     #                              min(500, reg_img.shape[1] / 4, reg_img.shape[0] / 4),
@@ -905,7 +910,11 @@ def register_relative(dirmec: str, fn_dem: Union[str, Path], fn_ref: Union[str, 
     gcps = micmac.bascule(gcps, out_dir, match_pattern, subscript, ori)
     gcps['res_dist'] = np.sqrt(gcps.xres ** 2 + gcps.yres ** 2)
 
-    gcps = gcps.loc[np.abs(gcps.res_dist - gcps.res_dist.median()) < 2 * nmad(gcps.res_dist)]
+    gcps.dropna(subset=['res_dist'], inplace=True)
+
+    res_thresh = max(100, np.nanpercentile(gcps.res_dist, 95))
+
+    gcps = gcps.loc[gcps['res_dist'] < res_thresh]
     # gcps = gcps[np.logical_and(np.abs(gcps.xres - gcps.xres.median()) < 2 * nmad(gcps.xres),
     #                            np.abs(gcps.yres - gcps.yres.median()) < 2 * nmad(gcps.yres))]
 
