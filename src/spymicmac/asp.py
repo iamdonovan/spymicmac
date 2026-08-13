@@ -598,7 +598,7 @@ def write_asp_gcp(fn_gcp: Union[str, Path], gcp_df: gpd.GeoDataFrame,
                 print(header, file=f)
 
         if gcp_list is None:
-            gcp_list = pivoted.index.get_level_values(0).tolist()
+            gcp_list = sorted(set(pivoted.index.get_level_values(0).tolist()))
 
         for gcp in gcp_list:
             _gcp = pivoted.loc[gcp]
@@ -644,7 +644,8 @@ def _parse_gcp(fn_gcp, delim=None):
 
 def mask_asp_dem_gcps(fn_gcp: Union[str, Path],
                       fn_inc: Union[None, str, Path, list[str], list[Path]] = None,
-                      fn_exc: Union[None, str, Path, list[str], list[Path]] = None) -> None:
+                      fn_exc: Union[None, str, Path, list[str], list[Path]] = None,
+                      overwrite: bool = True) -> None:
     """
     Filter/mask GCPs from a .gcp file, using inclusion/exclusion masks. Inclusion masks indicate areas where points
     inside should be included as stable terrain; exclusion masks indicate areas where points inside should be excluded.
@@ -654,6 +655,7 @@ def mask_asp_dem_gcps(fn_gcp: Union[str, Path],
     :param fn_gcp: the .gcp file to filter
     :param fn_inc: the inclusion mask(s) to use, pointing to a vector file format
     :param fn_exc: the exclusion mask(s) to use, pointing to a vector file format
+    :param overwrite: whether to overwrite existing file. If False, appends '_filt' to existing filename.
     """
     assert not all(el is None for el in [fn_inc, fn_exc]), "at least one mask has to be set!"
 
@@ -662,20 +664,25 @@ def mask_asp_dem_gcps(fn_gcp: Union[str, Path],
         headers = [l.strip() for l in f.readlines() if l.strip()[0] == '#']
 
     if fn_inc is not None:
-        inc_mask = gpd.read_file(fn_inc)
+        inc_mask = gpd.read_file(fn_inc).to_crs(gcps.crs)
         within_inc = inc_mask.sindex.query(gcps.geometry, predicate='intersects')[0]
     else:
-        within_inc = gcps.index[~gcps.index.isin(gcps.index)]
+        within_inc = gcps.index
 
     if fn_exc is not None:
-        exc_mask = gpd.read_file(fn_exc)
+        exc_mask = gpd.read_file(fn_exc).to_crs(gcps.crs)
         within_exc = exc_mask.sindex.query(gcps.geometry, predicate='intersects')[0]
     else:
-        within_exc = gcps.index
+        within_exc = gcps.index[~gcps.index.isin(gcps.index)]
 
-    valid = gcps.index[(gcps.index.isin(within_inc)) & (~gcps.index.isin(within_exc))]
+    valid = (gcps.index.isin(within_inc)) & (~gcps.index.isin(within_exc))
 
-    write_asp_gcp(fn_gcp, gcps.loc[valid], headers=headers)
+    if overwrite:
+        fn_out = fn_gcp
+    else:
+        fn_out = fn_gcp.replace('.gcp', '_filt.gcp')
+
+    write_asp_gcp(fn_out, gcps.loc[valid], headers=headers)
 
 
 def gcps_from_dem(img_pair: tuple[str, str],
@@ -683,6 +690,8 @@ def gcps_from_dem(img_pair: tuple[str, str],
                   fn_ref: Union[str, Path],
                   camera_prefix: str,
                   fn_gcp: str,
+                  fn_landmask: Union[str, Path, None] = None,
+                  fn_glacmask: Union[str, Path, None] = None,
                   warp_prefix: str = 'warp/run',
                   match_prefix: Union[str, None] = None,
                   use_clean: bool = True,
@@ -707,6 +716,8 @@ def gcps_from_dem(img_pair: tuple[str, str],
     :param fn_ref: the filename of the reference DEM.
     :param camera_prefix: the prefix of the camera files for the two input images (e.g., ba/run)
     :param fn_gcp: the filename of the output GCP file. Should use the extension .gcp
+    :param fn_landmask: the (optional) filename for an inclusion (i.e., land/stable terrain) mask for matching.
+    :param fn_glacmask: the (optional) filename for an exclusion (i.e., unstable terrain) mask for matching.
     :param warp_prefix: the prefix to save the output of parallel_stereo to. Defaults to warp/run
     :param match_prefix: the prefix to use for the match files. Defaults to the same as camera_prefix.
     :param use_clean: use the 'clean' match file, rather than the full match file
@@ -781,15 +792,15 @@ def gcps_from_dem(img_pair: tuple[str, str],
                    '--right-camera', f"{camera_prefix}-{right.replace('.tif', '')}.tsai"]
 
     if use_clean:
-        match_ext = 'clean.match'
+        match_ext = '-clean.match'
     else:
         match_ext = '.match'
 
-    matchfile = f"{match_prefix}-{left.replace('.tif', '')}__{right.replace('.tif', '')}-{match_ext}"
+    matchfile = f"{match_prefix}-{left.replace('.tif', '')}__{right.replace('.tif', '')}{match_ext}"
     if Path(matchfile).exists():
         gcp_cl_args.extend(['--match-file', matchfile,])
     else:
-        matchfile = f"{match_prefix}-{right.replace('.tif', '')}__{left.replace('.tif', '')}-{match_ext}"
+        matchfile = f"{match_prefix}-{right.replace('.tif', '')}__{left.replace('.tif', '')}{match_ext}"
         if Path(matchfile).exists():
             gcp_cl_args.extend(['--match-file', matchfile,])
         else:
@@ -817,6 +828,9 @@ def gcps_from_dem(img_pair: tuple[str, str],
 
     for fn_tmp in tmp_files + log_files:
         os.remove(fn_tmp)
+
+    if fn_glacmask is not None or fn_landmask is not None:
+        mask_asp_dem_gcps(fn_gcp, fn_inc=fn_landmask, fn_exc=fn_glacmask)
 
 
 def gcps_from_ortho(fn_img: Union[str, Path],
@@ -1011,7 +1025,7 @@ def merge_gcps(left: Union[str, Path, gpd.GeoDataFrame],
         missing = ~right.index.isin(merged[id_col])
         merged = pd.concat([merged, right.loc[missing]], ignore_index=True)
 
-    return merged.drop(columns=[id_col])
+    return merged.drop(columns=[id_col]).reset_index(drop=True)
 
 
 def parse_pointmap(fn_csv: Union[str, Path], gcps_only: bool = True) -> gpd.GeoDataFrame:
