@@ -379,7 +379,10 @@ def _safe_rasterize(shape, img, inclusive=True):
             else:
                 _mask.append((rst_mask == 0).astype(np.uint8))
 
-    return gu.raster.merge_rasters(_mask, merge_algorithm=np.sum) > 0
+    if len(_mask) > 1:
+        return gu.raster.merge_rasters(_mask, merge_algorithm=np.sum) > 0
+    else:
+        return _mask[0] > 0
 
 
 def _load_mask_from_file(fn_mask, img):
