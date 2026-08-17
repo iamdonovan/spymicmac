@@ -783,6 +783,9 @@ def gcps_from_dem(img_pair: tuple[str, str],
     p = subprocess.Popen(ps_cl_args)
     p.wait()
 
+    if p.returncode != 0:
+        raise RuntimeError("parallel_stereo exited with non-zero return code.")
+
     # now, call dem2gcp on the output
     gcp_cl_args = ['dem2gcp', '--warped-dem', 'tmp_warp_dem_hs.tif', '--ref-dem', 'tmp_dem.tif',
                    '--warped-to-ref-disparity', f"{warp_prefix}-F.tif",
@@ -886,7 +889,7 @@ def gcps_from_ortho(fn_img: Union[str, Path],
                 footprints = gpd.read_file(fn_footprints)
                 footprints[footprints['ID'] == clean_name].to_file('tmp_mask.gpkg')
 
-            tmp_masked = data.crop_mask_dem(fn_ort,
+            tmp_masked = data.crop_mask_dem(fn_img,
                                             'tmp_mask.gpkg',
                                             buff=1000,
                                             use_rect=False)
@@ -953,7 +956,7 @@ def gcps_from_ortho(fn_img: Union[str, Path],
 
     if 'gcp-sigma' not in kwargs:
         ortho = gu.Raster(fn_ref)
-        kwargs['gcp-sigma'] = ortho.res[0]
+        kwargs['gcp-sigma'] = ortho.res[0] / 4
 
     for arg in args:
         cl_args.append('--' + arg)
@@ -1100,3 +1103,47 @@ def filter_gcps_pointmap(fn_gcp: Union[str, Path],
             valid = joined['res_diff'].abs() < nfact * register.nmad(joined['res_diff'])
 
     return gcps.loc[gcps.index.isin(joined.loc[valid].index)]
+
+
+def weight_mask(fn_dem: Union[str, Path],
+                fn_landmask: Union[str, Path, None] = None,
+                fn_glacmask: Union[str, Path, None] = None,
+                inc_weight: float = 0.5,
+                exc_weight: float  = 0.1,
+                fn_out: Union[str, Path] = 'weights.tif'):
+    """
+    Create a weight mask for bundle_adjust and (optional) land mask / glacier mask, using an input DEM or Raster.
+
+    DEM pixels covered by landmask are assigned a value of {inc_weight}, unless they are also covered by glacmask.
+    DEM pixels covered by glacmask are assigned a value of {exc_weight}. Pixels not covered by landmask, or that are
+    nodata in the DEM, are assigned a value of 0.
+
+    Per ASP's documentation, the solver works harder to decrease reprojection area where the weight is higher. So,
+    the "landmask" (stable) terrain weight should be higher than the "glacmask" (unstable) terrain weight, as the
+    assumption is that these elevations are more likely to be correct in the DEM. Values should ideally be (0, 1].
+
+    :param fn_dem: the filename of the DEM to use.
+    :param fn_landmask: the (optional) filename for an inclusion (i.e., land/stable terrain) mask.
+    :param fn_glacmask: the (optional) filename for an exclusion (i.e., unstable terrain) mask.
+    :param inc_weight: the weight to assign to "stable" (landmask) pixels.
+    :param exc_weight: the weight to assign to "unstable" (glacmask) pixels.
+    :param fn_out: the filename for the output weight mask.
+    """
+
+    dem = gu.Raster(fn_dem)
+    weight_arr = np.zeros(dem.shape)
+
+    if fn_landmask is not None:
+        landmask = gu.Vector(fn_landmask).create_mask(dem)
+        weight_arr[landmask.data] = inc_weight
+
+    if fn_glacmask is not None:
+        glacmask = gu.Vector(fn_glacmask).create_mask(dem)
+        weight_arr[glacmask.data] = exc_weight
+
+    weight_arr[dem.data.mask] = 0
+
+    weight_geo = dem.copy(new_array=weight_arr)
+    weight_geo.set_nodata(0)
+
+    weight_geo.to_file(fn_out)
