@@ -190,16 +190,26 @@ def optical_bar_cam(fn_img: str, flavor: str, out_name: str,
                 print('scan_dir = right', file=f)
 
 
-def cam_from_footprint(fn_img: str, flavor: str, scan_res: float, fn_dem: Union[str, Path],
-                       north_up: bool = True, footprints: gpd.GeoDataFrame = None, datum: Union[str, None] = None,
-                       mean_el: Union[float, int, None] = 1000, use_3d_vel: bool = True):
+def cam_from_footprint(fn_img: str,
+                       flavor: str,
+                       scan_res: float,
+                       fn_dem: Union[str, Path],
+                       fn_cam: Union[str, Path, None] = None,
+                       north_up: bool = True,
+                       footprints: gpd.GeoDataFrame = None,
+                       datum: Union[str, None] = None,
+                       mean_el: Union[float, int, None] = 1000,
+                       use_3d_vel: bool = True,
+                       fn_gcp: Union[str, Path, None] = None,
+                       nsamp: Union[int, None] = None):
     """
-    Generate a camera (.tsai) file from an image footprint.
+    Generate a camera (.tsai) file from an image footprint, or from a set of GCPs.
 
     :param fn_img: the filename of the image to generate a camera for.
     :param flavor: what type of camera the image came from - currently either KH4 or KH9
     :param scan_res: the scanning resolution of the image
     :param fn_dem: the filename of the reference DEM
+    :param fn_cam: the output camera filename. Defaults to fn_img + .tsai
     :param north_up: whether the top of the image corresponds to North or not
     :param footprints: a GeoDataFrame containing image footprints and an ID field with image names. If not
         provided, will attempt to download from USGS.
@@ -208,9 +218,15 @@ def cam_from_footprint(fn_img: str, flavor: str, scan_res: float, fn_dem: Union[
     :param mean_el: the mean surface elevation covered by the image. If None, uses DEM and footprint to
         calculate the value.
     :param use_3d_vel: use a 3D velocity vector, rather than a 1D speed. Requires ASP 3.6.0 or greater.
+    :param fn_gcp: the GCP filename to use (should end in .gcp).
+    :param nsamp: the number of GCPs to randomly sample; nsamp = -1 will use all GCPs; 0 < nsamp < 1 will use that
+        proportion of the total GCPs.
     :return:
     """
     clean_name = fn_img.split('OIS-Reech_')[-1].split('.tif')[0]
+
+    if fn_cam is None:
+        fn_cam = fn_img.replace('.tif', '.tsai')
 
     # now, get the image footprint, and use ul_corner to get the ul, ur, lr, ll coordinates
     if footprints is None:
@@ -233,12 +249,31 @@ def cam_from_footprint(fn_img: str, flavor: str, scan_res: float, fn_dem: Union[
                         scan_res=scan_res, mean_el=mean_el, use_3d_vel=use_3d_vel)
         fn_samp = 'samp_for.tsai'
 
-    coords = _stanrogers(fprint, north_up)
+    if fn_gcp is None:
+        coords = _stanrogers(fprint, north_up)
+    else:
+        gcps = _parse_gcp(fn_gcp)
+
+        if nsamp is None:
+            nsamp = int(0.1 * len(gcps))
+        elif nsamp < 0:
+            nsamp = len(gcps)
+        elif 0 < nsamp <= 1:
+            nsamp = int(min(10, nsamp * len(gcps)))
+
+        sample = gcps.sample(n=nsamp, replace=False)
+
+        coords = [(row.lon, row.lat) for _, row in sample.iterrows()]
+        px_coords = [(row['pixel_x.1'], row['pixel_y.1']) for _, row in sample.iterrows()]
+
 
     cl_args = ['cam_gen', '--sample-file', fn_samp, '--camera-type', 'opticalbar',
-               '--lon-lat-values', '  '.join([f'{x} {y}' for x, y in coords]), fn_img,
-               '--reference-dem', fn_dem, '--gcp-file', fn_img.replace('.tif', '-cam.gcp'),
-               '--refine-camera', '-o', fn_img.replace('.tif', '.tsai')]
+               fn_img, '--reference-dem', fn_dem, '--gcp-file', fn_img.replace('.tif', '-cam.gcp'),
+               '--refine-camera', '-o', fn_cam,
+               '--lon-lat-values', '  '.join([f'{x} {y}' for x, y in coords])]
+
+    if fn_gcp is not None:
+        cl_args.extend(['--pixel-values', '  '.join([f'{x} {y}' for x, y in px_coords])])
 
     if datum is not None:
         cl_args.append(['--datum', datum])
@@ -301,6 +336,7 @@ def _stanrogers(fprint: Polygon, north_up: bool) -> tuple[tuple[float, float], .
 def bundle_adjust(fn_imgs: Union[list[Union[str, Path]], str],
                   out_prefix: str,
                   cam_prefix: Union[str, Path] = '',
+                  cam_suffix: str = '.tsai',
                   map_suffix: Union[str, None] = None,
                   session_type: Union[str, None] = None,
                   gcp_patt: Union[str, None] = None,
@@ -314,6 +350,7 @@ def bundle_adjust(fn_imgs: Union[list[Union[str, Path]], str],
     :param fn_imgs: the filename of the images to run bundle_adjust on.
     :param out_prefix: the output prefix to use for the files produced by bundle_adjust.
     :param cam_prefix: the prefix/path to use for the camera (e.g., .tsai) files.
+    :param cam_suffix: the suffix used for the camera files (e.g., '.tsai')
     :param map_suffix: the suffix used for the map-projected images, if map-projected images are being used. One of
         session_type or map_suffix must be specified.
     :param session_type: the stereo session type to use for processing. One of session_type or map_suffix must be
@@ -346,9 +383,9 @@ def bundle_adjust(fn_imgs: Union[list[Union[str, Path]], str],
 
     # add the cam files
     if cam_prefix == '':
-        fn_cams = [fn + '.tsai' for fn in clean_names]
+        fn_cams = [fn + cam_suffix for fn in clean_names]
     else:
-        fn_cams = [f"{cam_prefix}-{fn}.tsai" for fn in clean_names]
+        fn_cams = [f"{cam_prefix}-{fn}{cam_suffix}" for fn in clean_names]
     cl_args.extend(fn_cams)
 
     if gcp_patt is not None:
@@ -1048,11 +1085,41 @@ def parse_pointmap(fn_csv: Union[str, Path], gcps_only: bool = True) -> gpd.GeoD
     return gpd.GeoDataFrame(pointmap, geometry=gpd.points_from_xy(x=pointmap['lon'], y=pointmap['lat'], crs=4326))
 
 
+def join_gcp_residuals(fn_gcp: Union[str, Path],
+                       fn_pointmap: Union[str, Path],
+                       crs: Union[CRS, str, int, None] = None) -> gpd.GeoDataFrame:
+    """
+    Join GCPs to their residual pointmap values, as read from the residuals pointmap CSV output by bundle_adjust,
+    using a spatial join.
+
+    Note that this only works if bundle_adjust was called with --fix-gcp-xyz!
+
+    :param fn_gcp: the filename of the GCPs
+    :param fn_pointmap: the filename of the pointmap CSV to parse (e.g., ba/all-final_residuals_pointmap.csv')
+    :param crs: the (projected) CRS to use for joining the GCPs to the residual pointmap, using sjoin_nearest.
+        if not specified and GCP CRS is geographic, uses GeoDataFrame.estimate_utm_crs() to project points.
+    :returns: the joined GCP and residual GeoDataFrame.
+    """
+    pointmap = parse_pointmap(fn_pointmap)
+    gcps = _parse_gcp(fn_gcp)
+
+    orig_crs = gcps.crs
+
+    if crs is None and gcps.crs.is_geographic:
+        crs = gcps.estimate_utm_crs()
+
+    joined = gcps.to_crs(crs).sjoin_nearest(pointmap[['res', 'geometry']].to_crs(crs), distance_col='dist')
+    joined = joined[joined['dist'] < 1e-3].copy()
+
+    return joined.to_crs(orig_crs)
+
+
 def filter_gcps_pointmap(fn_gcp: Union[str, Path],
                          fn_pointmap: Union[str, Path],
-                         crs: Union[CRS, str, int, None],
+                         crs: Union[CRS, str, int, None] = None,
                          nfact: int = 2,
                          thresh: Union[float, None] = None,
+                         quantile: Union[float, None] = None,
                          use_neighbors: bool = False,
                          num_neighbors: int = 10,
                          max_dist: float = 1e4) -> gpd.GeoDataFrame:
@@ -1063,22 +1130,22 @@ def filter_gcps_pointmap(fn_gcp: Union[str, Path],
 
     :param fn_gcp: the filename of the GCPs
     :param fn_pointmap: the filename of the pointmap CSV to parse (e.g., ba/all-final_residuals_pointmap.csv')
-    :param crs: the (projected) CRS to use for joining the GCPs to the residual pointmap, using sjoin_nearest
+    :param crs: the (projected) CRS to use for joining the GCPs to the residual pointmap, using sjoin_nearest.
+        if not specified and GCP CRS is geographic, uses GeoDataFrame.estimate_utm_crs() to project points.
     :param nfact: the multiple of the NMAD to use as a filter. Values more than this times the NMAD away from the
         median residual will be discarded.
     :param thresh: the threshold value to use as a filter. If specified, uses this value directly; otherwise,
         threshold is calculated as a multiple of the NMAD value.
+    :param quantile: the quantile value to use as a filter. If specified, uses this value directly; otherwise,
+        threshold is calculated as a multiple of the NMAD value. Does not use neighbors.
     :param use_neighbors: compare the residual of each point to its nearest neighbors, rather than the statistics of
         the entire datset
     :param num_neighbors: the number of nearest neighbors to use
     :param max_dist: the maximum distance (in the units of the projected crs) to use for neighbor-based filtering
     :return: the filtered GCP geodataframe
     """
-    pointmap = parse_pointmap(fn_pointmap)
     gcps = _parse_gcp(fn_gcp)
-
-    joined = gcps[['geometry']].to_crs(crs).sjoin_nearest(pointmap.to_crs(crs), distance_col='dist')
-    joined = joined[joined['dist'] < 1e-3].copy()
+    joined = join_gcp_residuals(fn_gcp, fn_pointmap, crs)
 
     if use_neighbors:
         xy = np.hstack([joined.geometry.x.values.reshape(-1, 1), joined.geometry.y.values.reshape(-1, 1)])
@@ -1096,6 +1163,8 @@ def filter_gcps_pointmap(fn_gcp: Union[str, Path],
             valid = joined['res'] < thresh
         else:
             valid = joined['res_diff'].abs() < thresh
+    elif quantile is not None:
+        valid = joined['res'] < joined['res'].quantile(quantile)
     else:
         if not use_neighbors:
             valid = np.abs(joined['res'] - joined['res'].median()) < nfact * register.nmad(joined['res'])
