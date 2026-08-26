@@ -72,15 +72,44 @@ def _parse_cam(fn_cam: str) -> dict:
     return cam
 
 
-def _init_center(fprint: Polygon) -> tuple[float, float, float]:
-    cx, cy = fprint.centroid.x, fprint.centroid.y
-    alt = 180000  # very rough estimated altitude of 180 km
+def _fprint_azimuth(fprint):
+    rectangle = fprint.minimum_rotated_rectangle
+    vertices = [Point(pt) for pt in rectangle.exterior.coords]
+
+    ind = np.argmax([p1.distance(p2) for p1, p2 in zip(vertices[:-1], vertices[1:])])
+    pt1, pt2 = vertices[ind:ind+2]
+
+    angle = np.arctan2(pt2.y - pt1.y, pt2.x - pt1.x)
+
+    return np.rad2deg(angle) if angle > 0 else np.rad2deg(angle) + 180
+
+
+def _perp_to_flightline(fprint, aft):
+    azimuth = _fprint_azimuth(fprint)
+    centroid = fprint.centroid
+
+    if aft:
+        angle = azimuth + 90
+    else:
+        angle = azimuth - 90
+
+    proj_pt = Point(fprint.centroid.x + 1e6 * np.cos(np.deg2rad(angle)),
+                 fprint.centroid.y + 1e6 * np.sin(np.deg2rad(angle)))
+
+    return LineString([centroid, proj_pt])
+
+
+def _init_center(fprint: Polygon, crs, flavor, isaft, alt: int | float = 180000) -> tuple[float, float, float]:
+    perpline = _perp_to_flightline(fprint, isaft)
+
+    ground_dist = alt * np.tan(np.deg2rad(declass.sample_params[flavor]['tilt']))
+    cam_pt = perpline.interpolate(ground_dist)
 
     geocent = pyproj.Proj(proj='geocent', ellps='WGS84', datum='WGS84')
-    geodet = pyproj.Proj(proj='latlong', ellps='WGS84', datum='WGS84')
+    #geodet = pyproj.Proj(proj='latlong', ellps='WGS84', datum='WGS84')
 
-    transformer = pyproj.Transformer.from_proj(geodet, geocent)
-    x, y, z = transformer.transform(cx, cy, alt)
+    transformer = pyproj.Transformer.from_proj(pyproj.Proj(crs), geocent)
+    x, y, z = transformer.transform(cam_pt.x, cam_pt.y, alt)
 
     return x, y, z
 
@@ -103,7 +132,7 @@ def add_motion_comp(cam: str, params: dict) -> dict:
 
 
 def optical_bar_cam(fn_img: str, flavor: str, out_name: str,
-                    fprint: Union[Polygon, None] = None,
+                    fprint_gdf: Union[gpd.GeoDataFrame, None] = None,
                     scan_res: float = 7e-6,
                     mean_el: Union[float, int] = 1000,
                     use_3d_vel: bool = True) -> None:
@@ -114,7 +143,7 @@ def optical_bar_cam(fn_img: str, flavor: str, out_name: str,
         the aft or forward camera.
     :param flavor: what type of camera the image came from - currently either KH4 or KH9
     :param out_name: the filename to write the camera file to.
-    :param fprint: an optional image, footprint used to estimate the initial camera position
+    :param fprint_gdf: an optional image footprint, stored in a GeoDataFrame, used to estimate the initial camera position.
     :param scan_res: the image scanning resolution, in m per pixel (e.g., 7 microns -> 7.0e-6)
     :param mean_el: the mean elevation covered by the image
     :param use_3d_vel: use a 3D velocity vector, rather than a 1D speed. Requires ASP 3.6.0 or greater.
@@ -136,7 +165,7 @@ def optical_bar_cam(fn_img: str, flavor: str, out_name: str,
 
         frame_width_cm = scan_res * width * 100 # frame width in cm
         scan_time, scan_angle = declass.match_scan_angle(frame_width_cm)
-        print(f"Estimate frame width is {frame_width_cm} cm, corresponding to a {scan_angle}° scan.")
+        print(f"Estimated frame width is {frame_width_cm} cm, corresponding to a {scan_angle}° scan.")
         print(f"Using initial scan time guess of {scan_time:.4f} s.")
 
         params['scan_time'] = scan_time
@@ -161,8 +190,10 @@ def optical_bar_cam(fn_img: str, flavor: str, out_name: str,
             else:
                 print(f'forward_tilt = {params["tilt"]}', file=f)
 
-        if fprint is not None and not use_3d_vel:
-            icx, icy, icz = _init_center(fprint)
+        if fprint_gdf is not None and not use_3d_vel:
+            _fprint = fprint_gdf['geometry'].values[0]
+            fprint_crs = fprint_gdf.estimate_utm_crs()
+            icx, icy, icz = _init_center(_fprint, fprint_crs, flavor, _isaft(fn_img))
         else:
             icx, icy, icz = 0, 0, 0
         print(f'iC = {icx} {icy} {icz}', file=f)
@@ -231,9 +262,9 @@ def cam_from_footprint(fn_img: str,
     # now, get the image footprint, and use ul_corner to get the ul, ur, lr, ll coordinates
     if footprints is None:
         footprints = data.get_usgs_footprints([clean_name], dataset=declass.usgs_datasets[flavor])
-        fprint = footprints.loc[0, 'geometry']
+        fprint = footprints.loc[0]
     else:
-        fprint = footprints.loc[footprints['ID'] == clean_name, 'geometry'].values[0]
+        fprint = footprints.loc[footprints['ID'] == clean_name]
 
     if mean_el is None:
         dem = gu.Raster(fn_dem)
@@ -250,7 +281,7 @@ def cam_from_footprint(fn_img: str,
         fn_samp = 'samp_for.tsai'
 
     if fn_gcp is None:
-        coords = _stanrogers(fprint, north_up)
+        coords = _stanrogers(fprint['geometry'].values[0], north_up)
     else:
         gcps = _parse_gcp(fn_gcp)
 
@@ -305,7 +336,7 @@ def _stanrogers(fprint: Polygon, north_up: bool) -> tuple[tuple[float, float], .
     x, y = outer.exterior.coords.xy
     coords = np.array(list(zip(x, y)))
 
-    # get the right, top, left, bottomrig sides of the envelope
+    # get the right, top, left, bottom sides of the envelope
     right = LineString(coords[0:2])
     top = LineString(coords[1:3])
     left = LineString(coords[2:4])
@@ -951,6 +982,16 @@ def gcps_from_ortho(fn_img: Union[str, Path],
                                        thresh = thresh,
                                        matching_kwargs = matching_kwargs)
 
+        gcps = gpd.GeoDataFrame(gcps, geometry=gpd.points_from_xy(gcps.x, gcps.y, crs=gu.Raster(fn_ref).crs))
+        gcps['distance'] = np.sqrt(gcps.dj ** 2 + gcps.di ** 2)
+        gcps = neighbor_filter(gcps, 'distance')
+
+        gcps['diff_eta'] = (gcps['distance_diff'] - gcps['distance_diff'].median()) / gu.stats.nmad(gcps['distance_diff'])
+        gcps.to_file(fn_img.replace('.tif', '.gpkg'))
+
+        valid = gcps['diff_eta'].abs() < 5
+        gcps = gcps.loc[valid].copy()
+
         ortho_match = gcps[['match_j', 'match_i']].copy().rename(columns={'match_j': 'x', 'match_i': 'y'})
         ortho_match[['ix', 'iy']] = np.ceil(ortho_match[['x', 'y']]).astype(int)
 
@@ -993,7 +1034,7 @@ def gcps_from_ortho(fn_img: Union[str, Path],
 
     if 'gcp-sigma' not in kwargs:
         ortho = gu.Raster(fn_ref)
-        kwargs['gcp-sigma'] = ortho.res[0] / 4
+        kwargs['gcp-sigma'] = ortho.res[0]
 
     for arg in args:
         cl_args.append('--' + arg)
@@ -1114,6 +1155,39 @@ def join_gcp_residuals(fn_gcp: Union[str, Path],
     return joined.to_crs(orig_crs)
 
 
+def neighbor_filter(gdf: gpd.GeoDataFrame,
+                    column: Union[str, list[str]],
+                    num_neighbors: int = 10,
+                    max_dist: float | int = 1e4 ) -> gpd.GeoDataFrame:
+    """
+    Filter GCPs or interest points based on their relationship to neighboring points, using scikit-learn's BallTree.
+    For each value of {column}, will add {column}_diff, which is the difference to the median of the neighboring points.
+
+    :param gdf: the GeoDataFrame of points
+    :param column: the column(s) from the GeoDataFrame to calculate local differences for. Examples might be residuals
+        or offset values.
+    :param num_neighbors: the number of nearest neighbors to use to calculate the local median value.
+    :param max_dist: the maximum distance (in the units of the projected crs) to use for neighbor-based filtering
+    :returns: the original GeoDataFrame, with the additional _diff column(s) added.
+    """
+
+    xy = np.hstack([gdf.geometry.x.values.reshape(-1, 1), gdf.geometry.y.values.reshape(-1, 1)])
+    tree = BallTree(xy, leaf_size=15)
+
+    for ind in gdf.index:
+        this_xy = np.array([gdf.loc[ind].geometry.x, gdf.loc[ind].geometry.y]).reshape(1, -1)
+        distances, indices = tree.query(this_xy, k=num_neighbors + 1)  # get the num_neighbors closest + self
+
+        indices = indices[np.logical_and(distances > 0, distances < max_dist)]
+        if isinstance(column, str):
+            gdf.loc[ind, f"{column}_diff"] = (gdf.loc[ind, column] - gdf.loc[gdf.index[indices], column]).median()
+        else:
+            for c in column:
+                gdf.loc[ind, f"{c}_diff"] = (gdf.loc[ind, c] - gdf.loc[gdf.index[indices], c]).median()
+
+    return gdf
+
+
 def filter_gcps_pointmap(fn_gcp: Union[str, Path],
                          fn_pointmap: Union[str, Path],
                          crs: Union[CRS, str, int, None] = None,
@@ -1148,15 +1222,7 @@ def filter_gcps_pointmap(fn_gcp: Union[str, Path],
     joined = join_gcp_residuals(fn_gcp, fn_pointmap, crs)
 
     if use_neighbors:
-        xy = np.hstack([joined.geometry.x.values.reshape(-1, 1), joined.geometry.y.values.reshape(-1, 1)])
-        tree = BallTree(xy, leaf_size=15)
-
-        for ind in joined.index:
-            this_xy = np.array([joined.loc[ind].geometry.x, joined.loc[ind].geometry.y]).reshape(1, -1)
-            distances, indices = tree.query(this_xy, k=num_neighbors + 1) # get the num_neighbors closest + self
-
-            indices = indices[np.logical_and(distances > 0, distances < max_dist)]
-            joined.loc[ind, 'res_diff'] = (joined.loc[ind, 'res'] - joined.loc[joined.index[indices], 'res']).median()
+        joined = neighbor_filter(joined, 'res', num_neighbors=num_neighbors, max_dist=max_dist)
 
     if thresh is not None:
         if not use_neighbors:
@@ -1203,12 +1269,12 @@ def weight_mask(fn_dem: Union[str, Path],
     weight_arr = np.zeros(dem.shape)
 
     if fn_landmask is not None:
-        landmask = gu.Vector(fn_landmask).create_mask(dem)
-        weight_arr[landmask.data] = inc_weight
+        lmask = register._safe_rasterize(fn_landmask, dem, True)
+        weight_arr[lmask.data] = inc_weight
 
     if fn_glacmask is not None:
-        glacmask = gu.Vector(fn_glacmask).create_mask(dem)
-        weight_arr[glacmask.data] = exc_weight
+        gmask = register._safe_rasterize(fn_glacmask, dem, False)
+        weight_arr[gmask.data] = exc_weight
 
     weight_arr[dem.data.mask] = 0
 
@@ -1216,3 +1282,74 @@ def weight_mask(fn_dem: Union[str, Path],
     weight_geo.set_nodata(0)
 
     weight_geo.to_file(fn_out)
+
+
+def _cam_earth_dist(fn_cam: Union[str, Path], flavor: str) -> float:
+
+    with open(fn_cam, 'r') as f:
+        lines = [l.strip() for l in f.readlines()]
+        center_line = [l.split() for l in lines if 'iC' in l]
+        cam_center = Point(*[float(f) for f in center_line[0][-3:]])
+
+    tilt_angle = declass.sample_params[flavor]['tilt']
+
+    geocent = pyproj.Proj(proj='geocent', ellps='WGS84', datum='WGS84')
+    geodet = pyproj.Proj(proj='latlong', ellps='WGS84', datum='WGS84')
+    transformer = pyproj.Transformer.from_proj(geocent, geodet)
+
+    lon, lat, height = transformer.transform(cam_center.x, cam_center.y, cam_center.z)
+
+    return height / np.cos(tilt_angle)
+
+
+def cam_to_rpc(fn_img: Union[str, Path],
+               fn_cam: Union[str, Path],
+               flavor: str,
+               degree: int = 3,
+               outdir='rpc',
+               prefix: Union[str, None] = None,
+               kwargs: dict = {},
+               args: list = []) -> None:
+    """
+    Convert an ASP camera model (e.g., opticalbar) to a pinhole camera model with RPC distortion using
+    convert_pinhole_model.
+
+    :param fn_img: the filename of the image.
+    :param fn_cam: the filename of the camera to convert.
+    :param flavor: what type of camera the image came from - currently either KH4 or KH9
+    :param degree: the degree of the RPC polynomials.
+    :param outdir: the directory to output the converted camera files to.
+    :param prefix: the prefix to use for the converted camera files.
+    :param kwargs: optional keyword parameters for convert_pinhole_model, for any arguments/flags that take a value.
+        Keys should not include the '--' prefix - for example, use 'sample-spacing' to set the sample spacing to use,
+        rather than '--sample-spacing'.
+    :param args: optional flags to pass to convert_pinhole_model, for any arguments/flags that do not take a value.
+        Flags should not include the '--' prefix.
+    """
+
+    if prefix is not None:
+        fn_out = Path(outdir, f"{prefix}-{fn_img.replace('.tif', '.tsai')}")
+    else:
+        fn_out = Path(outdir, fn_img.replace('.tif', '.tsai'))
+
+    cl_args = [
+        'convert_pinhole_model', fn_img, fn_cam,
+        '-o', fn_out,
+        '--output-type', 'RPC',
+        '--rpc-degree', str(degree),
+        '--camera-to-ground-dist', str(_cam_earth_dist(fn_cam, flavor))
+    ]
+
+    if 'sample-spacing' not in kwargs:
+        kwargs['sample-spacing'] = 50
+
+    for arg in args:
+        cl_args.append('--' + arg)
+
+    for kwarg in kwargs:
+        cl_args.extend(['--' + kwarg, str(kwargs[kwarg])])
+
+    p = subprocess.Popen(cl_args)
+    p.wait()
+
+
