@@ -1291,6 +1291,8 @@ def _cam_earth_dist(fn_cam: Union[str, Path], flavor: str) -> float:
         center_line = [l.split() for l in lines if 'iC' in l]
         cam_center = Point(*[float(f) for f in center_line[0][-3:]])
 
+    print(f"Read camera center in ECEF coordinates: {cam_center.x}, {cam_center.y}, {cam_center.z}.")
+
     tilt_angle = declass.sample_params[flavor]['tilt']
 
     geocent = pyproj.Proj(proj='geocent', ellps='WGS84', datum='WGS84')
@@ -1298,6 +1300,9 @@ def _cam_earth_dist(fn_cam: Union[str, Path], flavor: str) -> float:
     transformer = pyproj.Transformer.from_proj(geocent, geodet)
 
     lon, lat, height = transformer.transform(cam_center.x, cam_center.y, cam_center.z)
+
+    print(f"Camera center in lon/lat/height coordinates: {lon}, {lat}, {height}.")
+    print(f"Estimated camera to Earth distance is: {height / np.cos(tilt_angle):.2f} m.")
 
     return height / np.cos(tilt_angle)
 
