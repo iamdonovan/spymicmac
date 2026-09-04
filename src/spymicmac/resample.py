@@ -32,8 +32,24 @@ def downsample(img: NDArray, fact: Union[int, float] = 4) -> NDArray:
     :param fact: the number by which to divide the image width and height
     :return: **rescaled** -- the rescaled image
     """
-    _img = PIL.Image.fromarray(img)
-    return np.array(_img.resize((np.array(_img.size) / fact).astype(int), PIL.Image.Resampling.LANCZOS))
+
+    reorder = False
+
+    if img.ndim > 2:
+        if np.argmin(img.shape) == 0:
+            reorder = True
+            img = img.transpose((1, 2, 0))
+        _img = PIL.Image.fromarray(img, mode='RGB')
+
+    else:
+        _img = PIL.Image.fromarray(img)
+
+    out_img = np.array(_img.resize((np.array(_img.size) / fact).astype(int), PIL.Image.Resampling.LANCZOS))
+
+    if reorder:
+        out_img = out_img.transpose((2, 0, 1))
+
+    return out_img
 
 
 def resample_hex(fn_img: Union[str, Path], scale: int, ori: str = 'InterneScan',
