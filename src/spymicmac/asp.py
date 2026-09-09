@@ -370,7 +370,7 @@ def bundle_adjust(fn_imgs: Union[list[Union[str, Path]], str],
                   cam_suffix: str = '.tsai',
                   map_suffix: Union[str, None] = None,
                   session_type: Union[str, None] = None,
-                  gcp_patt: Union[str, None] = None,
+                  gcp_patt: Union[str, list[str], None] = None,
                   num_iter: int = 20,
                   num_pass: int = 2,
                   ba_kwargs: dict = {},
@@ -420,7 +420,12 @@ def bundle_adjust(fn_imgs: Union[list[Union[str, Path]], str],
     cl_args.extend(fn_cams)
 
     if gcp_patt is not None:
-        fn_gcp = glob(gcp_patt)
+        if pd.api.types.is_list_like(gcp_patt):
+            fn_gcp = []
+            for patt in gcp_patt:
+                fn_gcp += glob(patt)
+        else:
+            fn_gcp = glob(gcp_patt)
         cl_args.extend(fn_gcp)
 
     if map_suffix is not None:
@@ -441,7 +446,10 @@ def bundle_adjust(fn_imgs: Union[list[Union[str, Path]], str],
         cl_args.append('--' + arg)
 
     for kwarg in ba_kwargs:
-        cl_args.extend(['--' + kwarg, str(ba_kwargs[kwarg])])
+        if kwarg == 'elevation-limit' or kwarg == 'lon-lat-limit':
+            cl_args.extend(['--' + kwarg] + [str(kw) for kw in ba_kwargs[kwarg]])
+        else:
+            cl_args.extend(['--' + kwarg, str(ba_kwargs[kwarg])])
 
     print(cl_args)
 
@@ -630,7 +638,7 @@ def write_asp_gcp(fn_gcp: Union[str, Path], gcp_df: gpd.GeoDataFrame,
             gcp_df[f"sigma_{dd}"] = gcp_sig
 
     elif isinstance(gcp_sig, (list, tuple)):
-        assert len(gcp_sig) == 3, "must provide 3 values for GCP uncertainty (sx, sy , sz)"
+        assert len(gcp_sig) == 3, "must provide 3 values for GCP uncertainty (sx, sy, sz)"
         for ind, dd in enumerate('xyz'):
             gcp_df[f"sigma_{dd}"] = gcp_sig[ind]
 
