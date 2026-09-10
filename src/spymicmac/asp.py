@@ -15,7 +15,6 @@ from osgeo import gdal
 from rasterio.crs import CRS
 from shapely.ops import split, orient
 from shapely.geometry import LineString, Point, Polygon
-from sklearn.neighbors import BallTree
 from . import data, declass, micmac, register
 from typing import Union
 
@@ -992,7 +991,7 @@ def gcps_from_ortho(fn_img: Union[str, Path],
 
         gcps = gpd.GeoDataFrame(gcps, geometry=gpd.points_from_xy(gcps.x, gcps.y, crs=gu.Raster(fn_ref).crs))
         gcps['distance'] = np.sqrt(gcps.dj ** 2 + gcps.di ** 2)
-        gcps = neighbor_filter(gcps, 'distance')
+        gcps = register.neighbor_filter(gcps, 'distance')
 
         gcps['diff_eta'] = (gcps['distance_diff'] - gcps['distance_diff'].median()) / gu.stats.nmad(gcps['distance_diff'])
         gcps.to_file(fn_img.replace('.tif', '.gpkg'))
@@ -1163,39 +1162,6 @@ def join_gcp_residuals(fn_gcp: Union[str, Path],
     return joined.to_crs(orig_crs)
 
 
-def neighbor_filter(gdf: gpd.GeoDataFrame,
-                    column: Union[str, list[str]],
-                    num_neighbors: int = 10,
-                    max_dist: float | int = 1e4 ) -> gpd.GeoDataFrame:
-    """
-    Filter GCPs or interest points based on their relationship to neighboring points, using scikit-learn's BallTree.
-    For each value of {column}, will add {column}_diff, which is the difference to the median of the neighboring points.
-
-    :param gdf: the GeoDataFrame of points
-    :param column: the column(s) from the GeoDataFrame to calculate local differences for. Examples might be residuals
-        or offset values.
-    :param num_neighbors: the number of nearest neighbors to use to calculate the local median value.
-    :param max_dist: the maximum distance (in the units of the projected crs) to use for neighbor-based filtering
-    :returns: the original GeoDataFrame, with the additional _diff column(s) added.
-    """
-
-    xy = np.hstack([gdf.geometry.x.values.reshape(-1, 1), gdf.geometry.y.values.reshape(-1, 1)])
-    tree = BallTree(xy, leaf_size=15)
-
-    for ind in gdf.index:
-        this_xy = np.array([gdf.loc[ind].geometry.x, gdf.loc[ind].geometry.y]).reshape(1, -1)
-        distances, indices = tree.query(this_xy, k=num_neighbors + 1)  # get the num_neighbors closest + self
-
-        indices = indices[np.logical_and(distances > 0, distances < max_dist)]
-        if isinstance(column, str):
-            gdf.loc[ind, f"{column}_diff"] = (gdf.loc[ind, column] - gdf.loc[gdf.index[indices], column]).median()
-        else:
-            for c in column:
-                gdf.loc[ind, f"{c}_diff"] = (gdf.loc[ind, c] - gdf.loc[gdf.index[indices], c]).median()
-
-    return gdf
-
-
 def filter_gcps_pointmap(fn_gcp: Union[str, Path],
                          fn_pointmap: Union[str, Path],
                          crs: Union[CRS, str, int, None] = None,
@@ -1230,7 +1196,7 @@ def filter_gcps_pointmap(fn_gcp: Union[str, Path],
     joined = join_gcp_residuals(fn_gcp, fn_pointmap, crs)
 
     if use_neighbors:
-        joined = neighbor_filter(joined, 'res', num_neighbors=num_neighbors, max_dist=max_dist)
+        joined = register.neighbor_filter(joined, 'res', num_neighbors=num_neighbors, max_dist=max_dist)
 
     if thresh is not None:
         if not use_neighbors:

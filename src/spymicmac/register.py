@@ -21,6 +21,7 @@ from shapely.geometry import Point, Polygon, LineString
 from skimage.filters import gaussian
 from skimage.measure import ransac
 from skimage.transform import AffineTransform, warp
+from sklearn.neighbors import BallTree
 from . import data, image, matching, micmac, orientation
 from pyogrio.errors import DataSourceError
 from numpy.typing import NDArray
@@ -102,6 +103,56 @@ def _sliding_window_filter(img_shape: NDArray, pts_df: pd.DataFrame, winsize: in
                         _out_pts.append(this_pt)
 
     return np.array(_out_inds)
+
+def neighbor_filter(gdf: gpd.GeoDataFrame,
+                    column: Union[str, list[str]],
+                    num_neighbors: int = 10,
+                    max_dist: float | int = 1e4 ) -> gpd.GeoDataFrame:
+    """
+    Filter GCPs or interest points based on their relationship to neighboring points, using scikit-learn's BallTree.
+    For each value of {column}, will add {column}_diff, which is the difference to the median of the neighboring points.
+
+    :param gdf: the GeoDataFrame of points
+    :param column: the column(s) from the GeoDataFrame to calculate local differences for. Examples might be residuals
+        or offset values.
+    :param num_neighbors: the number of nearest neighbors to use to calculate the local median value.
+    :param max_dist: the maximum distance (in the units of the projected crs) to use for neighbor-based filtering
+    :returns: the original GeoDataFrame, with the additional _diff column(s) added.
+    """
+
+    xy = np.hstack([gdf.geometry.x.values.reshape(-1, 1), gdf.geometry.y.values.reshape(-1, 1)])
+    tree = BallTree(xy, leaf_size=15)
+
+    for ind in gdf.index:
+        this_xy = np.array([gdf.loc[ind].geometry.x, gdf.loc[ind].geometry.y]).reshape(1, -1)
+        distances, indices = tree.query(this_xy, k=num_neighbors + 1)  # get the num_neighbors closest + self
+
+        indices = indices[np.logical_and(distances > 0, distances < max_dist)]
+        if isinstance(column, str):
+            gdf.loc[ind, f"{column}_diff"] = (gdf.loc[ind, column] - gdf.loc[gdf.index[indices], column]).median()
+        else:
+            for c in column:
+                gdf.loc[ind, f"{c}_diff"] = (gdf.loc[ind, c] - gdf.loc[gdf.index[indices], c]).median()
+
+    return gdf
+
+
+def _iter_ransac(src, dst, thresh, niter=20):
+
+    models = []
+    inliers = []
+
+    for ii in range(niter):
+        mod, inl = ransac((src, dst),
+                          AffineTransform, min_samples=6, residual_threshold=thresh, max_trials=5000)
+        models.append(mod)
+        inliers.append(inl)
+
+    num_inliers = [np.count_nonzero(inl) for inl in inliers]
+    best_ind = np.argmax(num_inliers)
+
+    return models[best_ind], inliers[best_ind], np.array(inliers).sum(axis=0)
+
 
 
 def _get_imlist(im_subset: Union[list, str, None], globstr: str = 'OIS*.tif') -> tuple[list, str]:
@@ -583,7 +634,7 @@ def register_relative(dirmec: str, fn_dem: Union[str, Path], fn_ref: Union[str, 
                       out_dir: Union[str, Path, None] = None, allfree: bool = True, dir_homol: str = 'Homol',
                       useortho: bool = False, max_iter: int = 5, use_cps: bool = False, cp_frac: float = 0.2,
                       use_orb: bool = False, fn_gcps: Union[str, Path, None] = None,
-                      use_blur: bool = False, use_highpass: bool = True,
+                      blur_sigma: Union[None, int, float] = None, use_highpass: bool = True,
                       use_hillshade: bool = False, hillshade_kwargs: dict = {},
                       rap_txt: Union[str, Path, None] = None) -> None:
     """
@@ -619,7 +670,7 @@ def register_relative(dirmec: str, fn_dem: Union[str, Path], fn_ref: Union[str, 
         (default: use regular grid for matching)
     :param fn_gcps: (optional) shapefile or CSV of GCP coordinates to use. Column names should be [(name | id),
         (z | elevation), x, y]. If CSV is used, x,y should have the same CRS as the reference image.
-    :param use_blur: use a gaussian blur on the relative image before matching
+    :param blur_sigma: use a gaussian blur with this sigma value on the relative image before matching. Default is no blur.
     :param use_highpass: match templates using a highpass filter
     :param use_hillshade: match templates using DEM hillshade rather than elevation
     :param hillshade_kwargs: kwargs to pass to xdem.DEM.hillshade()
@@ -736,13 +787,17 @@ def register_relative(dirmec: str, fn_dem: Union[str, Path], fn_ref: Union[str, 
     rough_tfm = warp(reg_img.data, model, output_shape=ref_img.shape, preserve_range=True, cval=tfm_fill)
     rough_tfm = rough_tfm.astype(reg_img.data.dtype)
 
-    if use_blur:
-        print("Smoothing relative image with a Gaussian blur.")
-        rough_tfm = gaussian(rough_tfm, 2)
-
     if use_hillshade:
         print("Using DEM hillshades for matching.")
         ref_img, rough_tfm = _prepare_hillshades(ref_img, rough_tfm, **hillshade_kwargs)
+
+        if blur_sigma is not None:
+            print(f"Smoothing relative image with a Gaussian blur of {blur_sigma}.")
+            rough_tfm.data = gaussian(rough_tfm.data, blur_sigma)
+
+    elif blur_sigma is not None:
+        print(f"Smoothing relative image with a Gaussian blur of {blur_sigma}.")
+        rough_tfm = gaussian(rough_tfm, blur_sigma)
 
     if not use_hillshade:
         rough_geo = ref_img.copy(new_array=rough_tfm)
@@ -831,13 +886,17 @@ def register_relative(dirmec: str, fn_dem: Union[str, Path], fn_ref: Union[str, 
     else:
         dem = ref_img
 
+    dem_nodata = dem.nodata
+
     if 'elevation' not in gcps.columns:
         gcps['elevation'] = dem.interp_points((gcps.geometry.x, gcps.geometry.y), as_array=True)
+        del dem # remove DEM after using to save memory
+
     gcps['el_rel'] = rel_dem.interp_points((gcps.rel_x, gcps.rel_y), as_array=True)
 
     # drop any gcps where we don't have a DEM value or a valid match
-    if dem.nodata is not None:
-        gcps.loc[np.abs(gcps.elevation - dem.nodata) < 1, 'elevation'] = np.nan
+    if dem_nodata is not None:
+        gcps.loc[np.abs(gcps.elevation - dem_nodata) < 1, 'elevation'] = np.nan
     gcps.dropna(inplace=True)
     print(f"{gcps.shape[0]} matches with valid elevations")
 
@@ -849,39 +908,36 @@ def register_relative(dirmec: str, fn_dem: Union[str, Path], fn_ref: Union[str, 
     gcps['offset'] = np.sqrt(gcps['dj'] ** 2 + gcps['di'] ** 2)
     thresh = np.ceil(min(100, gcps['offset'].median() + 4 * nmad(gcps['offset'])))
 
-    models = []
-    inliers = []
+    _, inliers, inlier_count = _iter_ransac(gcps[['search_j', 'search_i']].values,
+                                      gcps[['orig_j', 'orig_i']].values,
+                                      thresh)
 
-    for ii in range(20):
-        mod, inl = ransac((gcps[['search_j', 'search_i']].values, gcps[['match_j', 'match_i']].values),
-                          AffineTransform, min_samples=6, residual_threshold=thresh, max_trials=5000)
-        models.append(mod)
-        inliers.append(inl)
+    valid = np.logical_or(inliers, inlier_count > np.median(inlier_count[inlier_count > 0]))
+    #valid = np.logical_and(valid, gcps['z_corr'] > 5)
 
-    num_inliers = [np.count_nonzero(inl) for inl in inliers]
-    best_ind = np.argmax(num_inliers)
+    #gcps['valid'] = valid
+    gcps = gcps.loc[valid]
 
-    Mref = models[best_ind]
-    inliers_ref = inliers[best_ind]
-
-    if num_inliers[best_ind] < 10:
-        raise ValueError("Unable to estimate valid transformation using matches found.")
+    Mref, inliers, _ = _iter_ransac(gcps[['search_j', 'search_i']].values,
+                                    gcps[['orig_j', 'orig_i']].values,
+                                    nmad(gcps['offset']), niter=10)
 
     gcps['aff_resid'] = Mref.residuals(gcps[['search_j', 'search_i']].values,
-                                       gcps[['match_j', 'match_i']].values)
-
+                                       gcps[['orig_j', 'orig_i']].values)
     gcps['scaled_aff'] = gcps['aff_resid'] / (gcps['rad_dist'] / gcps['rad_dist'].max())
 
-    valid = gcps.scaled_aff < gcps.scaled_aff.median() + 4 * nmad(gcps.scaled_aff)
-    gcps = gcps.loc[valid]
-    # gcps = gcps.loc[inliers_ref]
+    if np.count_nonzero(inliers) < 10:
+        raise ValueError("Unable to estimate valid transformation using matches found.")
+
+    #gcps['inlier'] = inliers
+    gcps = gcps.loc[inliers]
 
     # out = _sliding_window_filter([reg_img.shape[1], reg_img.shape[0]], gcps,
     #                              min(500, reg_img.shape[1] / 4, reg_img.shape[0] / 4),
     #                              mindist=500, how='pk_corr', is_ascending=True)
     # gcps = gcps.loc[out]
 
-    print(f"{gcps.shape[0]} valid matches found after estimating transformation")
+    print(f"{gcps.shape[0]} valid matches found after refining transformation")
 
     gcps.index = range(gcps.shape[0])  # make sure index corresponds to row we're writing out
     if 'id' not in gcps.columns:
