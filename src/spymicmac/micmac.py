@@ -1758,6 +1758,57 @@ def block_malt(imlist: list, ori: str, nimg: int = 3, malt_kwargs: dict = {}) ->
         malt(imgs, ori, dirmec=f"{dirmec}_block{block}", **malt_kwargs)
 
 
+def oriconvert(fn_ori: Union[str, Path],
+               out_ori: str) -> int:
+    """
+    Convert image orientation information embedded in a .txt file to the MicMac format.
+
+    Note: this is a convenience tool for simple conversions; for more complete functionality use the OriConvert CLI.
+
+    :param fn_ori: the name of the file with orientation information.
+    :param out_ori: the output orientation to create (e.g., Terrain for Ori-Terrain)
+    :return: exit code from running mm3d OriConvert
+    """
+
+    if os.name == 'nt':
+        echo = subprocess.Popen('echo', stdout=subprocess.PIPE, shell=True)
+    else:
+        echo = subprocess.Popen('echo', stdout=subprocess.PIPE)
+
+    p = subprocess.Popen(['mm3d', 'OriConvert', 'OriTxtInFile', fn_ori, out_ori], stdin=echo.stdout)
+    p.wait()
+
+    return p.returncode
+
+
+def centerbascule(img_pattern: str,
+                  in_ori: str,
+                  center_info: str,
+                  out_ori: str = 'TerrainInit') -> int:
+    """
+    Transform from one coordinate system (e.g., a relative coordinate system output from Tapas) to another
+    using camera centers.
+
+    :param img_pattern: the image pattern to pass to CenterBascule (e.g., "OIS.*tif").
+    :param in_ori: the input orientation to convert from (e.g., Relative for Ori-Relative).
+    :param center_info: the folder with the information about camera centers in the new coordinate system (e.g.,
+        the ori_out output from mm3d OriConvert).
+    :param out_ori: the output orientation directory to create (e.g., TerrainInit for Ori-TerrainInit).
+    :return: exit code from running mm3d CenterBascule
+    """
+
+    if os.name == 'nt':
+        echo = subprocess.Popen('echo', stdout=subprocess.PIPE, shell=True)
+    else:
+        echo = subprocess.Popen('echo', stdout=subprocess.PIPE)
+
+    p = subprocess.Popen(['mm3d', 'CenterBascule', img_pattern, in_ori, center_info, out_ori],
+                         stdin=echo.stdout)
+    p.wait()
+
+    return p.returncode
+
+
 def bascule(in_gcps: pd.DataFrame, outdir: str, img_pattern: str, sub: str, ori: str,
             outori: str = 'TerrainRelAuto', fn_gcp: str = 'AutoGCPs', fn_meas: str ='AutoMeasures') -> pd.DataFrame:
     """
