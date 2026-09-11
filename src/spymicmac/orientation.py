@@ -22,6 +22,7 @@ from skimage.transform import AffineTransform
 from skimage.measure import ransac
 from . import register, micmac
 from typing import Union
+from rasterio.crs import CRS
 from numpy.typing import NDArray
 from mpl_toolkits.mplot3d.axes3d import Axes3D
 import matplotlib
@@ -497,6 +498,57 @@ def fix_orientation(cameras: pd.DataFrame, ori_df: pd.DataFrame, ori: str, nsig:
             print(f"new location for {name}: {new_x}, {new_y}, {new_z}")
             print(f"writing new Orientation file for {name}")
             update_center(name, ori, [new_x, new_y, new_z])
+
+
+def centers_from_footprints(fn_footprints: Union[gpd.GeoDataFrame, str, Path],
+                            elevation: Union[int, float],
+                            imlist: Union[list[str], None] = None,
+                            crs: Union[CRS, str, int, None] = None,
+                            fn_out: str = 'Centers.txt',
+                            name_col: str = 'ID',
+                            im_pre: str = 'OIS-Reech_',
+                            im_ext: str = '.tif') -> None:
+    """
+    Convert image footprints to a Centers.txt file that can be read by mm3d OriConvert.
+
+    :param fn_footprints: The filename of the Footprints geopackage to read, or a GeoDataFrame of Footprints. The
+    :param elevation: the (approximate) elevation of the camera(s).
+    :param imlist: an optional list of image names to use. If None, uses list found with glob(f"{im_pre}*{im_ext}").
+    :param crs: the (projected) CRS to use for the output camera centers. If None, uses the CRS embedded in the
+        Footprints, but this must be a projected (i.e., non-geographic) CRS.
+    :param fn_out: the output filename to save the camera centers to.
+    :param name_col: the column in the Footprints file that contains the camera names. Note that these may be different
+        from the image filenames (i.e., without any prefix or extension).
+    :param im_pre: the prefix to be appended to the camera name in {name_col}.
+    :param im_ext: the suffix to be appended to the camera name in {name_col}.
+    """
+
+    if isinstance(fn_footprints, (str, Path)):
+        footprints = gpd.read_file(fn_footprints)
+    else:
+        footprints = fn_footprints
+
+    if crs is not None:
+        footprints = footprints.to_crs(crs)
+
+    assert footprints.crs.is_projected, "Footprint CRS must be projected, not geographic."
+
+    footprints['filename'] = im_pre + footprints[name_col].astype(str) + im_ext
+
+    if imlist is None:
+        imlist = sorted(glob(im_pre + '*' + im_ext))
+
+    footprints = footprints.loc[footprints['filename'].isin(imlist)]
+    footprints['x'] = footprints.centroid.x
+    footprints['y'] = footprints.centroid.y
+    footprints['z'] = elevation
+
+    centers = footprints[['filename', 'x', 'y', 'z']]
+
+    with open(fn_out, 'w') as f:
+        print('#F= N X Y Z', file=f)
+        for row in centers.itertuples():
+            print(f"{row.filename} {row.x} {row.y} {row.z}", file=f)
 
 
 def transform_centers(rel: gu.Raster, ref: gu.Raster, imlist: list, footprints: gpd.GeoDataFrame,
