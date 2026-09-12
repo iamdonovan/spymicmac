@@ -635,14 +635,28 @@ def register_relative(dirmec: str, fn_dem: Union[str, Path], fn_ref: Union[str, 
                       glacmask: Union[str, Path, list[str], list[Path], None] = None,
                       landmask: Union[str, Path, list[str], list[Path], None] = None,
                       footprints: Union[str, Path, None] = None,
-                      globstr: str = 'OIS*.tif', im_subset: Union[str, None] = None, block_num: Union[str, None] = None,
-                      subscript: Union[str, None] = None, ori: str ='Relative', ortho_res: Union[float, int] = 8.,
-                      imgsource: str = 'DECLASSII', strategy: str = 'grid', density: int = 200,
-                      out_dir: Union[str, Path, None] = None, allfree: bool = True, dir_homol: str = 'Homol',
-                      useortho: bool = False, max_iter: int = 5, use_cps: bool = False, cp_frac: float = 0.2,
-                      use_orb: bool = False, fn_gcps: Union[str, Path, None] = None,
-                      blur_sigma: Union[None, int, float] = None, use_highpass: bool = True,
-                      use_hillshade: bool = False, hillshade_kwargs: dict = {},
+                      globstr: str = 'OIS*.tif',
+                      im_subset: Union[str, None] = None,
+                      block_num: Union[str, None] = None,
+                      subscript: Union[str, None] = None,
+                      ori: str ='Relative',
+                      same_crs: bool = False,
+                      imgsource: str = 'DECLASSII',
+                      strategy: str = 'grid',
+                      density: int = 200,
+                      out_dir: Union[str, Path, None] = None,
+                      allfree: bool = True,
+                      dir_homol: str = 'Homol',
+                      useortho: bool = False,
+                      max_iter: int = 5,
+                      use_cps: bool = False,
+                      cp_frac: float = 0.2,
+                      use_orb: bool = False,
+                      fn_gcps: Union[str, Path, None] = None,
+                      blur_sigma: Union[None, int, float] = None,
+                      use_highpass: bool = True,
+                      use_hillshade: bool = False,
+                      hillshade_kwargs: dict = {},
                       rap_txt: Union[str, Path, None] = None) -> None:
     """
     Register a relative DEM or orthoimage to a reference DEM and/or orthorectified image.
@@ -660,6 +674,7 @@ def register_relative(dirmec: str, fn_dem: Union[str, Path], fn_ref: Union[str, 
     :param block_num: block number to use if processing multiple image blocks
     :param subscript: optional subscript to use for output filenames
     :param ori: name of orientation directory (after Ori-)
+    :param same_crs: the input orientation is in the same CRS as the reference image(s).
     :param imgsource: USGS dataset name for images
     :param strategy: strategy for generating GCPs. Must be one of 'grid', 'random', 'chebyshev', or 'peaks'. Note that
         if 'random' is used, density is the approximate number of points, rather than the distance between grid points.
@@ -733,11 +748,9 @@ def register_relative(dirmec: str, fn_dem: Union[str, Path], fn_ref: Union[str, 
         reg_img[~rel_mask] = np.nan
     print(f"Loaded relative image {fn_reg}.")
 
-    # set the fill value for the rough_tfm image (0 or np.nan)
-    if np.issubdtype(reg_img.data.dtype, np.floating):
-        tfm_fill = np.nan
-    else:
-        tfm_fill = 0
+    if same_crs:
+        print(f"Setting relative image CRS to match reference image.")
+        reg_img.crs = ref_img.crs
 
     if footprints is None:
         if Path('UpdatedFootprints.gpkg').exists():
@@ -756,47 +769,62 @@ def register_relative(dirmec: str, fn_dem: Union[str, Path], fn_ref: Union[str, 
     else:
         footprints = gpd.read_file(footprints)
 
-    mask_full, _, ref_img_crop = _get_mask(footprints, ref_img, imlist, landmask, glacmask)
+    # set the fill value for the rough_tfm image (0 or np.nan)
+    if np.issubdtype(reg_img.data.dtype, np.floating):
+        tfm_fill = np.nan
+    else:
+        tfm_fill = 0
 
-    Minit, _, centers = orientation.transform_centers(reg_img, ref_img_crop, imlist, footprints, f"Ori-{ori}")
-    rough_tfm = warp(reg_img.data, Minit, output_shape=ref_img_crop.shape, preserve_range=True, cval=tfm_fill)
-    rough_tfm = rough_tfm.astype(reg_img.data.dtype)
+    if same_crs:
+        mask_full, _, ref_img = _get_mask(footprints, ref_img, imlist, landmask, glacmask, other=reg_img)
+        rough_tfm = reg_img.reproject(ref_img) # re-size/re-shape the reg_img
+        Minit = model = None
+    else:
+        mask_full, _, ref_img_crop = _get_mask(footprints, ref_img, imlist, landmask, glacmask)
 
-    rough_spacing = max(1000, np.round(max(ref_img.shape) / 20 / 1000) * 1000)
+        Minit, _, centers = orientation.transform_centers(reg_img, ref_img_crop, imlist, footprints, f"Ori-{ori}")
+        rough_tfm = warp(reg_img.data, Minit, output_shape=ref_img_crop.shape, preserve_range=True, cval=tfm_fill)
+        rough_tfm = rough_tfm.astype(reg_img.data.dtype)
 
-    rough_gcps = matching.find_matches(rough_tfm, ref_img_crop, mask_full.data.data, initM=Minit,
-                                       spacing=int(rough_spacing), dstwin=int(rough_spacing))
+        rough_spacing = max(1000, np.round(max(ref_img.shape) / 20 / 1000) * 1000)
 
-    try:
-        model, inliers = ransac((rough_gcps[['search_j', 'search_i']].values,
-                                 rough_gcps[['orig_j', 'orig_i']].values), AffineTransform,
-                                min_samples=6, residual_threshold=20, max_trials=5000)
-        if model is None or np.count_nonzero(inliers) < 6:
-            raise ValueError()
+        rough_gcps = matching.find_matches(rough_tfm, ref_img_crop, mask_full.data.data, initM=Minit,
+                                           spacing=int(rough_spacing), dstwin=int(rough_spacing))
 
-    except ValueError as e:
-        print('Unable to refine transformation with rough GCPs. Using transform estimated from footprints.')
-        model = Minit
+        try:
+            model, inliers = ransac((rough_gcps[['search_j', 'search_i']].values,
+                                     rough_gcps[['orig_j', 'orig_i']].values), AffineTransform,
+                                    min_samples=6, residual_threshold=20, max_trials=5000)
+            if model is None or np.count_nonzero(inliers) < 6:
+                raise ValueError()
 
-    # re-do the mask and the footprints with the re-projected relative footprints
-    micmac.drone_footprint(f"({'|'.join(imlist)})", ori)
-    rel_footprints = gpd.read_file(f"{ori}_footprints.gpkg").set_index('filename')
-    new_footprints = _reproject_footprints(rel_footprints, reg_img, ref_img_crop, model)
-    new_footprints.to_file('UpdatedFootprints.gpkg')
+        except ValueError as e:
+            print('Unable to refine transformation with rough GCPs. Using transform estimated from footprints.')
+            model = Minit
 
-    # transformation from relative coords to absolute coords
-    rel2abs = _tfm_from_corners(reg_img, ref_img_crop, model)
+        # re-do the mask and the footprints with the re-projected relative footprints
+        micmac.drone_footprint(f"({'|'.join(imlist)})", ori)
+        rel_footprints = gpd.read_file(f"{ori}_footprints.gpkg").set_index('filename')
+        new_footprints = _reproject_footprints(rel_footprints, reg_img, ref_img_crop, model)
+        new_footprints.to_file('UpdatedFootprints.gpkg')
 
-    # re-do the mask with the new footprints
-    mask_full, _, ref_img = _get_mask(new_footprints, ref_img, imlist, landmask, glacmask)
+        # transformation from relative coords to absolute coords
+        rel2abs = _tfm_from_corners(reg_img, ref_img_crop, model)
 
-    model = _corners_from_tfm(reg_img, ref_img, rel2abs)
-    rough_tfm = warp(reg_img.data, model, output_shape=ref_img.shape, preserve_range=True, cval=tfm_fill)
-    rough_tfm = rough_tfm.astype(reg_img.data.dtype)
+        # re-do the mask with the new footprints
+        mask_full, _, ref_img = _get_mask(new_footprints, ref_img, imlist, landmask, glacmask)
+
+        model = _corners_from_tfm(reg_img, ref_img, rel2abs)
+        rough_tfm = warp(reg_img.data, model, output_shape=ref_img.shape, preserve_range=True, cval=tfm_fill)
+        rough_tfm = rough_tfm.astype(reg_img.data.dtype)
 
     if use_hillshade:
         print("Using DEM hillshades for matching.")
-        ref_img, rough_tfm = _prepare_hillshades(ref_img, rough_tfm, **hillshade_kwargs)
+        if not same_crs:
+            ref_img, rough_tfm = _prepare_hillshades(ref_img, rough_tfm, **hillshade_kwargs)
+        else:
+            ref_img = xdem.DEM(ref_img).hillshade(**hillshade_kwargs)
+            rough_tfm = xdem.DEM(rough_tfm).hillshade(**hillshade_kwargs)
 
         if blur_sigma is not None:
             print(f"Smoothing relative image with a Gaussian blur of {blur_sigma}.")
@@ -813,7 +841,8 @@ def register_relative(dirmec: str, fn_dem: Union[str, Path], fn_ref: Union[str, 
 
     rough_geo.to_file(f"Register{subscript}_rough_geo.tif", co_opts={'BIGTIFF': 'YES'})
 
-    np.savetxt(f"Register{subscript}_rough_tfm.csv", model.params, delimiter=',')
+    if not same_crs:
+        np.savetxt(f"Register{subscript}_rough_tfm.csv", model.params, delimiter=',')
 
     fig, axs = plt.subplots(1, 2, figsize=(7, 5))
     axs[0].imshow(rough_tfm[::10, ::10], extent=[0, rough_tfm.shape[1], rough_tfm.shape[0], 0], cmap='gray',
@@ -840,9 +869,12 @@ def register_relative(dirmec: str, fn_dem: Union[str, Path], fn_ref: Union[str, 
             gcps = pd.DataFrame(data=keypoints, columns=['search_i', 'search_j'])
 
         elif strategy == 'chebyshev':
-            rel_mask = warp(mask_full.data.data, model.inverse,
-                            output_shape=reg_img.shape,
-                            preserve_range=True, cval=0).astype(np.uint8)
+            if not same_crs:
+                rel_mask = warp(mask_full.data.data, model.inverse,
+                                output_shape=reg_img.shape,
+                                preserve_range=True, cval=0).astype(np.uint8)
+            else:
+                rel_mask = (~reg_img.data.mask).astype(np.uint8)
 
             rel_tfm = list(reg_img.transform)[:6]
             rel_tfm[0] *= 10
@@ -873,16 +905,24 @@ def register_relative(dirmec: str, fn_dem: Union[str, Path], fn_ref: Union[str, 
         else:
             gcps = None
 
+    if same_crs:
+        dstwin = max(200, int(50 * np.ceil(0.1 * max(rough_tfm.shape) / 50)))
+    else:
+        dstwin = _search_size(rough_tfm.shape)
+
     gcps = matching.find_matches(rough_tfm, ref_img, mask_full.data.data, points=gcps, initM=model, strategy=strategy,
-                                 spacing=density, srcwin=100, dstwin=_search_size(rough_tfm.shape),
-                                 use_highpass=use_highpass)
+                                 spacing=density, srcwin=100, dstwin=dstwin, use_highpass=use_highpass)
 
     x, y = ref_img.ij2xy(gcps['search_i'], gcps['search_j'])
     gcps = gpd.GeoDataFrame(gcps, geometry=gpd.points_from_xy(x, y, crs=ref_img.crs))
 
     gcps = gcps.loc[mask_full.data.data[gcps.search_i.astype(int), gcps.search_j.astype(int)] == 255]
 
-    gcps['rel_x'], gcps['rel_y'] = reg_img.ij2xy(gcps.orig_i, gcps.orig_j)
+    if not same_crs:
+        gcps['rel_x'], gcps['rel_y'] = reg_img.ij2xy(gcps.orig_i, gcps.orig_j)
+    else:
+        gcps['rel_x'], gcps['rel_y'] = rough_tfm.ij2xy(gcps.match_i, gcps.match_j)
+        gcps['orig_i'], gcps['orig_j'] = reg_img.xy2ij(gcps.rel_x, gcps.rel_y)
 
     gcps.dropna(inplace=True)
     print(f"{gcps.shape[0]} potential matches found")
@@ -900,6 +940,7 @@ def register_relative(dirmec: str, fn_dem: Union[str, Path], fn_ref: Union[str, 
         del dem # remove DEM after using to save memory
 
     gcps['el_rel'] = rel_dem.interp_points((gcps.rel_x, gcps.rel_y), as_array=True)
+    del rel_dem # remove DEM after using to save memory
 
     # drop any gcps where we don't have a DEM value or a valid match
     if dem_nodata is not None:
