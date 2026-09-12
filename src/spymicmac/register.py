@@ -373,7 +373,8 @@ def _get_footprint_mask(shpfile: Union[gpd.GeoDataFrame, str], rast: gu.Raster,
 
 def _get_mask(footprints: gpd.GeoDataFrame, img: gu.Raster, imlist: list,
               landmask: Union[str, Path, None] = None,
-              glacmask: Union[str, Path, None] = None) -> tuple[gu.Mask, gu.Raster, gu.Raster]:
+              glacmask: Union[str, Path, None] = None,
+              other: Union[None, gu.Raster] = None) -> tuple[gu.Mask, gu.Raster, gu.Raster]:
     """
     Create a mask for an image from different sources.
 
@@ -382,6 +383,8 @@ def _get_mask(footprints: gpd.GeoDataFrame, img: gu.Raster, imlist: list,
     :param imlist: a list of image names
     :param landmask: path to file of land outlines (i.e., an inclusion mask)
     :param glacmask: path to file of glacier outlines (i.e., an exclusion mask)
+    :param other: a second raster to use for determining the cropped extent. Output image and mask will use a buffered
+        union of the bounding boxes of the footprint mask and the other raster.
 
     :returns:
         - **mask** -- the mask
@@ -389,6 +392,10 @@ def _get_mask(footprints: gpd.GeoDataFrame, img: gu.Raster, imlist: list,
         - **img** -- the input Raster, cropped to a buffer around the image footprints
     """
     fmask, fprint = _get_footprint_mask(footprints, img, imlist, fprint_out=True)
+
+    if other is not None:
+        other_footprint = other.footprint.to_crs(img.crs)
+        fprint = other_footprint.geometry.loc[0].union(fprint)
 
     xmin, ymin, xmax, ymax = fprint.bounds
     buff_dist = 0.05 * min(abs(xmax - xmin), abs(ymax - ymin))
