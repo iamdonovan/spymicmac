@@ -502,7 +502,7 @@ def fix_orientation(cameras: pd.DataFrame, ori_df: pd.DataFrame, ori: str, nsig:
 
 
 def centers_from_footprints(fn_footprints: Union[gpd.GeoDataFrame, str, Path],
-                            elevation: Union[int, float],
+                            elevation: Union[int, float, dict],
                             imlist: Union[list[str], None] = None,
                             crs: Union[CRS, str, int, None] = None,
                             fn_out: str = 'Centers.txt',
@@ -544,7 +544,12 @@ def centers_from_footprints(fn_footprints: Union[gpd.GeoDataFrame, str, Path],
     footprints = footprints.loc[footprints['filename'].isin(imlist)]
     footprints['x'] = footprints.centroid.x
     footprints['y'] = footprints.centroid.y
-    footprints['z'] = elevation
+
+    if isinstance(elevation, dict):
+        for key, elev in elevation.items():
+            footprints.loc[footprints['filename'].str.contains(key), 'z'] = elev
+    else:
+        footprints['z'] = elevation
 
     centers = footprints[['filename', 'x', 'y', 'z']]
 
@@ -568,7 +573,8 @@ def transform_orientation(fn_footprints: Union[gpd.GeoDataFrame, str, Path],
                           im_pre: str = 'OIS-Reech_',
                           im_ext: str = '.tif',
                           fn_cam: Union[str, Path, None] = None,
-                          img_pattern: str = 'OIS.*tif') -> None:
+                          img_pattern: str = 'OIS.*tif',
+                          add_cams: bool = True) -> None:
     """
     Convert between two orientations, using camera centers estimated from footprints. Output is two directories:
 
@@ -590,6 +596,8 @@ def transform_orientation(fn_footprints: Union[gpd.GeoDataFrame, str, Path],
     :param fn_cam: the name of the camera specification file associated with the image(s). If not specified, takes
        the first file with the pattern AutoCal*.xml found in ori_in.
     :param img_pattern: the match pattern for the images being input to CenterBascule (e.g., "OIS.*tif")
+    :param add_cams: whether to add fake cameras to aid in estimating the transformation by preventing the camera
+        distribution from being too linear.
     :return:
     """
 
@@ -604,30 +612,31 @@ def transform_orientation(fn_footprints: Union[gpd.GeoDataFrame, str, Path],
 
     ori_rel = load_all_orientation(f"Ori-{ori_in}", imlist=imlist)
 
-    ind1, ind2 = _find_add([Point(row.x, row.y) for row in centers.itertuples()])
+    if add_cams:
+        ind1, ind2 = _find_add([Point(row.x, row.y) for row in centers.itertuples()])
 
-    tmp_rel = _get_points([Point(ori_rel.x.values[ind1], ori_rel.y.values[ind1]),
-                           Point(ori_rel.x.values[ind2], ori_rel.y.values[ind2])])[2:]
+        tmp_rel = _get_points([Point(ori_rel.x.values[ind1], ori_rel.y.values[ind1]),
+                               Point(ori_rel.x.values[ind2], ori_rel.y.values[ind2])])[2:]
 
-    tmp_abs = _get_points([Point(centers.x.values[ind1], centers.y.values[ind1]),
-                           Point(centers.x.values[ind2], centers.y.values[ind2])])[2:]
+        tmp_abs = _get_points([Point(centers.x.values[ind1], centers.y.values[ind1]),
+                               Point(centers.x.values[ind2], centers.y.values[ind2])])[2:]
 
-    for ind, pt in enumerate(tmp_abs):
-        centers = pd.concat((centers,
-                             pd.DataFrame(index=[0],
-                                          data={'filename': f"OIS-Reech_TmpCam{ind}.tif",
-                                                'x': pt[0], 'y': pt[1], 'z': elevation})), ignore_index=True)
+        for ind, pt in enumerate(tmp_abs):
+            centers = pd.concat((centers,
+                                 pd.DataFrame(index=[0],
+                                              data={'filename': f"OIS-Reech_TmpCam{ind}.tif",
+                                                    'x': pt[0], 'y': pt[1], 'z': elevation})), ignore_index=True)
 
-        # copy orientation for one of the cameras (first one)?
-        pointer = len(ori_rel)
-        mean_z = ori_rel['z'].mean()
+            # copy orientation for one of the cameras (first one)?
+            pointer = len(ori_rel)
+            mean_z = ori_rel['z'].mean()
 
-        ori_rel = pd.concat([ori_rel, ori_rel.loc[[0]]], ignore_index=True)
+            ori_rel = pd.concat([ori_rel, ori_rel.loc[[0]]], ignore_index=True)
 
-        ori_rel.loc[pointer, 'name'] = f"OIS-Reech_TmpCam{ind}.tif"
-        ori_rel.loc[pointer, 'x'] = tmp_rel[ind, 0]
-        ori_rel.loc[pointer, 'y'] = tmp_rel[ind, 1]
-        ori_rel.loc[pointer, 'z'] = mean_z
+            ori_rel.loc[pointer, 'name'] = f"OIS-Reech_TmpCam{ind}.tif"
+            ori_rel.loc[pointer, 'x'] = tmp_rel[ind, 0]
+            ori_rel.loc[pointer, 'y'] = tmp_rel[ind, 1]
+            ori_rel.loc[pointer, 'z'] = mean_z
 
     is_temp = ori_rel['name'].str.contains('TmpCam')
 
