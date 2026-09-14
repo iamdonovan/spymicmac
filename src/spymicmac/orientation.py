@@ -2,6 +2,7 @@
 spymicmac.orientation is a collection of tools for working with image orientation using micmac.
 """
 import os
+import warnings
 from pathlib import Path
 import subprocess
 from collections import defaultdict
@@ -507,7 +508,8 @@ def centers_from_footprints(fn_footprints: Union[gpd.GeoDataFrame, str, Path],
                             fn_out: str = 'Centers.txt',
                             name_col: str = 'ID',
                             im_pre: str = 'OIS-Reech_',
-                            im_ext: str = '.tif') -> None:
+                            im_ext: str = '.tif',
+                            return_gdf: bool = False) -> None:
     """
     Convert image footprints to a Centers.txt file that can be read by mm3d OriConvert.
 
@@ -521,6 +523,7 @@ def centers_from_footprints(fn_footprints: Union[gpd.GeoDataFrame, str, Path],
         from the image filenames (i.e., without any prefix or extension).
     :param im_pre: the prefix to be appended to the camera name in {name_col}.
     :param im_ext: the suffix to be appended to the camera name in {name_col}.
+    :return: None, or the GeoDataFrame of camera centers (if return_gdf=True)
     """
 
     if isinstance(fn_footprints, (str, Path)):
@@ -545,10 +548,119 @@ def centers_from_footprints(fn_footprints: Union[gpd.GeoDataFrame, str, Path],
 
     centers = footprints[['filename', 'x', 'y', 'z']]
 
-    with open(fn_out, 'w') as f:
+    if return_gdf:
+        return centers
+    else:
+        with open(fn_out, 'w') as f:
+            print('#F= N X Y Z', file=f)
+            for row in centers.itertuples():
+                print(f"{row.filename} {row.x} {row.y} {row.z}", file=f)
+        return None
+
+
+def transform_orientation(fn_footprints: Union[gpd.GeoDataFrame, str, Path],
+                          ori_in: str,
+                          ori_out: str,
+                          elevation: Union[int, float],
+                          imlist: Union[list[str], None] = None,
+                          crs: Union[CRS, str, int, None] = None,
+                          name_col: str = 'ID',
+                          im_pre: str = 'OIS-Reech_',
+                          im_ext: str = '.tif',
+                          fn_cam: Union[str, Path, None] = None,
+                          img_pattern: str = 'OIS.*tif') -> None:
+    """
+    Convert between two orientations, using camera centers estimated from footprints. Output is two directories:
+
+        - Ori-TerrainCentroid, output created by mm3d OriConvert
+        - Ori-{ori_out}, output created by mm3d CenterBascule
+
+    Ori-{ori_out} will have both the camera orientation and camera calibration information, and can be passed
+    directly to mm3d Malt for DEM/orthoimage processing.
+
+    :param fn_footprints: The filename of the Footprints geopackage to read, or a GeoDataFrame of Footprints.
+    :param elevation: the (approximate) elevation of the camera(s).
+    :param imlist: an optional list of image names to use. If None, uses list found with glob(f"{im_pre}*{im_ext}").
+    :param crs: the (projected) CRS to use for the output camera centers. If None, uses the CRS embedded in the
+        Footprints, but this must be a projected (i.e., non-geographic) CRS.
+    :param name_col: the column in the Footprints file that contains the camera names. Note that these may be different
+        from the image filenames (i.e., without any prefix or extension).
+    :param im_pre: the prefix to be appended to the camera name in {name_col}.
+    :param im_ext: the suffix to be appended to the camera name in {name_col}.
+    :param fn_cam: the name of the camera specification file associated with the image(s). If not specified, takes
+       the first file with the pattern AutoCal*.xml found in ori_in.
+    :param img_pattern: the match pattern for the images being input to CenterBascule (e.g., "OIS.*tif")
+    :return:
+    """
+
+    centers = centers_from_footprints(fn_footprints=fn_footprints,
+                                      elevation=elevation,
+                                      imlist=imlist,
+                                      crs=crs,
+                                      name_col=name_col,
+                                      im_pre=im_pre,
+                                      im_ext=im_ext,
+                                      return_gdf=True)
+
+    ori_rel = load_all_orientation(f"Ori-{ori_in}", imlist=imlist)
+
+    ind1, ind2 = _find_add([Point(row.x, row.y) for row in centers.itertuples()])
+
+    tmp_rel = _get_points([Point(ori_rel.x.values[ind1], ori_rel.y.values[ind1]),
+                           Point(ori_rel.x.values[ind2], ori_rel.y.values[ind2])])[2:]
+
+    tmp_abs = _get_points([Point(centers.x.values[ind1], centers.y.values[ind1]),
+                           Point(centers.x.values[ind2], centers.y.values[ind2])])[2:]
+
+    for ind, pt in enumerate(tmp_abs):
+        centers = pd.concat((centers,
+                             pd.DataFrame(index=[0],
+                                          data={'filename': f"OIS-Reech_TmpCam{ind}.tif",
+                                                'x': pt[0], 'y': pt[1], 'z': elevation})), ignore_index=True)
+
+        # copy orientation for one of the cameras (first one)?
+        pointer = len(ori_rel)
+        mean_z = ori_rel['z'].mean()
+
+        ori_rel = pd.concat([ori_rel, ori_rel.loc[[0]]], ignore_index=True)
+
+        ori_rel.loc[pointer, 'name'] = f"OIS-Reech_TmpCam{ind}.tif"
+        ori_rel.loc[pointer, 'x'] = tmp_rel[ind, 0]
+        ori_rel.loc[pointer, 'y'] = tmp_rel[ind, 1]
+        ori_rel.loc[pointer, 'z'] = mean_z
+
+    is_temp = ori_rel['name'].str.contains('TmpCam')
+
+    if fn_cam is None:
+        fn_cams = sorted(glob('AutoCal*.xml', root_dir=f"Ori-{ori_in}")) # find the camera file for the directory, warn if more than one
+        fn_cam = fn_cams[0]
+        if len(fn_cams) > 1:
+            warnings.warn(f"More than one AutoCal XML file found in Ori-{ori_in}. Defaulting to the first one, {fn_cam}.")
+    write_orientation(ori_rel.loc[is_temp], f"Ori-{ori_in}", calfile=os.path.join(f"Ori-{ori_in}", fn_cam))
+
+    with open('TmpCenters.txt', 'w') as f:
         print('#F= N X Y Z', file=f)
         for row in centers.itertuples():
             print(f"{row.filename} {row.x} {row.y} {row.z}", file=f)
+
+    if imlist is None:
+        imlist = sorted(glob(img_pattern.replace('.*', '*.')))
+
+    for fn_tmp in ori_rel.loc[is_temp, 'name']:
+        if Path(fn_tmp).exists():
+            os.remove(fn_tmp) # if the temporary link exists, remove it to be safe.
+
+        os.symlink(imlist[0], fn_tmp)
+
+    micmac.oriconvert('TmpCenters.txt', 'TerrainCentroid')
+    micmac.centerbascule(img_pattern, ori_in, 'TerrainCentroid', ori_out)
+
+    for fn_tmp in ori_rel.loc[is_temp, 'name']:
+        os.remove(fn_tmp)
+        os.remove(Path(f"Ori-{ori_in}", f"Orientation-{fn_tmp}.xml"))
+        os.remove(Path(f"Ori-{ori_out}", f"Orientation-{fn_tmp}.xml"))
+
+    os.remove('TmpCenters.txt')
 
 
 def transform_centers(rel: gu.Raster, ref: gu.Raster, imlist: list, footprints: gpd.GeoDataFrame,
