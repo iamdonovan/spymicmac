@@ -71,7 +71,7 @@ def combine_block_measures(blocks: list, meas_out: str = 'AutoMeasures', gcp_out
     for b in blocks:
         # load dirname/AutoMeasures_block{b}-S2D.xml
         this_root = ET.parse(Path(dirname, fn_mes + f"{b}-S2D.xml")).getroot()
-        this_gcp = gpd.read_file(Path(dirname, fn_gcp + f"{b}.shp"))
+        this_gcp = gpd.read_file(Path(dirname, fn_gcp + f"{b}.gpkg"))
 
         if share_gcps:
             this_mes_dict = dict()
@@ -103,7 +103,7 @@ def combine_block_measures(blocks: list, meas_out: str = 'AutoMeasures', gcp_out
     out_gcp.sort_values('id', ignore_index=True, inplace=True)
 
     out_gcp.set_crs(gcp_shps[0].crs, inplace=True)
-    out_gcp.to_file(Path(dirname, gcp_out + '.shp'))
+    out_gcp.to_file(Path(dirname, gcp_out + '.gpkg'))
 
     micmac.write_auto_gcps(out_gcp, '', dirname, register._get_utm_str(out_gcp.crs.to_epsg), outname=gcp_out)
 
@@ -165,7 +165,7 @@ def block_orientation(blocks: list, meas_out: str = 'AutoMeasures', gcp_out: str
     combine_block_measures(blocks, meas_out=meas_out, gcp_out=gcp_out,
                            fn_mes=fn_mes, fn_gcp=fn_gcp, dirname=dirname, share_gcps=share_gcps)
 
-    gcps = gpd.read_file(Path(dirname, gcp_out + '.shp'))
+    gcps = gpd.read_file(Path(dirname, gcp_out + '.gpkg'))
 
     gcps = micmac.iterate_campari(gcps, dirname, "OIS.*tif", '', ref_dx, ortho_res, fn_gcp=gcp_out,
                                   fn_meas=meas_out, rel_ori=rel_ori, outori=outori, homol=homol,
