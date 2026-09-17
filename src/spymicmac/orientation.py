@@ -509,7 +509,7 @@ def centers_from_footprints(fn_footprints: Union[gpd.GeoDataFrame, str, Path],
                             name_col: str = 'ID',
                             im_pre: str = 'OIS-Reech_',
                             im_ext: str = '.tif',
-                            return_gdf: bool = False) -> None:
+                            return_gdf: bool = False) -> Union[None, gpd.GeoDataFrame]:
     """
     Convert image footprints to a Centers.txt file that can be read by mm3d OriConvert.
 
@@ -523,6 +523,7 @@ def centers_from_footprints(fn_footprints: Union[gpd.GeoDataFrame, str, Path],
         from the image filenames (i.e., without any prefix or extension).
     :param im_pre: the prefix to be appended to the camera name in {name_col}.
     :param im_ext: the suffix to be appended to the camera name in {name_col}.
+    :param return_gdf: return a GeoDataFrame of camera centers instead of writing to a file.
     :return: None, or the GeoDataFrame of camera centers (if return_gdf=True)
     """
 
