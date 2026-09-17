@@ -167,12 +167,17 @@ def _get_imlist(im_subset: Union[list, str, None], globstr: str = 'OIS*.tif') ->
         - **imlist** -- the list of filenames matching the provided pattern.
         - **match_pattern** -- the match pattern to be provided to MicMac.
     """
+
+    # check if we're being given a normal glob wildcard, not a regexp
+    if re.search(r"\w+\*\.\w+", globstr) is not None:
+        globstr = globstr.replace('*.', '.*')
+
+    filtered_glob = sorted(list(filter(re.compile(globstr).match, glob('*'))))
+
     if im_subset is None:
-        imlist = glob(globstr)
-        if '*.' in globstr:
-            match_pattern = globstr.replace('*.', '.*')
-        else:
-            match_pattern = globstr
+        imlist = filtered_glob
+        match_pattern = globstr
+
     else:
         if len(im_subset) > 1:
             imlist = im_subset
@@ -180,7 +185,7 @@ def _get_imlist(im_subset: Union[list, str, None], globstr: str = 'OIS*.tif') ->
             # match_pattern = '|'.join(imlist)
         else:
             match_pattern = im_subset[0] + '.*tif'
-            imlist = [f for f in glob(globstr) if re.search(match_pattern, f)]
+            imlist = [f for f in filtered_glob if re.search(match_pattern, f)]
 
     imlist.sort()
 
