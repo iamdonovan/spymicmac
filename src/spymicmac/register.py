@@ -837,9 +837,12 @@ def register_relative(dirmec: str, fn_dem: Union[str, Path], fn_ref: Union[str, 
 
     elif blur_sigma is not None:
         print(f"Smoothing relative image with a Gaussian blur of {blur_sigma}.")
-        rough_tfm = gaussian(rough_tfm, blur_sigma)
+        if same_crs:
+            rough_tfm.data = gaussian(rough_tfm.data, blur_sigma)
+        else:
+            rough_tfm = gaussian(rough_tfm, blur_sigma)
 
-    if not use_hillshade:
+    if not use_hillshade and not same_crs:
         rough_geo = ref_img.copy(new_array=rough_tfm)
     else:
         rough_geo = rough_tfm
