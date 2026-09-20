@@ -1426,6 +1426,38 @@ def tapioca(img_pattern: str = 'OIS.*tif', res_low: int = 400, res_high: int = 1
     return p.returncode
 
 
+def homol_filter_masq(img_patt: str = 'OIS.*tif',
+                      mask_patt: str = 'Masq',
+                      fn_mask: Union[str, Path, None] = None) -> int:
+    """
+    Filter tie points with an image mask using mm3d HomolFilterMasq.
+
+    :param img_pattern: The image pattern to pass to HomolFilterMasq (default: OIS.*tif)
+    :param mask_patt: the pattern appended to the image names for the mask (e.g., fn_img.tif -> fn_img_{mask_patt}.tif),
+        if each image has a separate mask.
+    :param fn_mask: the name of the optional global mask used. If this is set, the global mask is used instead of the
+        individual image masks.
+    :return:
+    """
+
+    if os.name == 'nt':
+        echo = subprocess.Popen('echo', stdout=subprocess.PIPE, shell=True)
+    else:
+        echo = subprocess.Popen('echo', stdout=subprocess.PIPE)
+
+    args = ['mm3d', 'HomolFilterMasq', img_patt]
+
+    if fn_mask is not None:
+        args.append(f"GlobalMasq={fn_mask}")
+    else:
+        args.append(f"PostPlan={mask_patt}")
+
+    p = subprocess.Popen(args, stdin=echo.stdout)
+    p.wait()
+
+    return p.returncode
+
+
 def schnaps(img_pattern: str = 'OIS.*tif',
             nb_win: Union[None, int] = None,
             min_pct_coverage: Union[None, float, int] = None,
@@ -1631,7 +1663,8 @@ def malt(imlist: Union[str, list], ori: str, zoomf: int = 1, zoomi: Union[None, 
          dirmec: str = 'MEC-Malt', seed_img: Union[str, Path, None] = None, seed_xml: Union[str, Path, None] = None,
          resol_terr: Union[float, int, None] = None, resol_ort: Union[float, int, None] = None,
          cost_trans: Union[float, int, None] = None, szw: Union[int, None] = None,
-         regul: Union[float, None] = None, do_ortho: bool = True, do_mec: bool = True, clean: bool = False) -> int:
+         regul: Union[float, None] = None, do_ortho: bool = True, do_mec: bool = True, clean: bool = False,
+         mask_patt: Union[str, None] = None, fn_mask: Union[str, Path, None] = None) -> int:
     """
     Run mm3d Malt Ortho.
 
@@ -1654,6 +1687,9 @@ def malt(imlist: Union[str, list], ori: str, zoomf: int = 1, zoomi: Union[None, 
     :param do_ortho: whether to generate the orthoimages
     :param do_mec: whether to generate an output DEM
     :param clean: remove temporary/intermediate files after finishing.
+    :param mask_patt: the pattern appended to the image names for the mask (e.g., fn_img.tif -> fn_img_{mask_patt}.tif),
+        if each image has a separate mask.
+    :param fn_mask: the name of the optional global mask used.
     """
     if os.name == 'nt':
         echo = subprocess.Popen('echo', stdout=subprocess.PIPE, shell=True)
@@ -1699,6 +1735,14 @@ def malt(imlist: Union[str, list], ori: str, zoomf: int = 1, zoomi: Union[None, 
 
     if regul is not None:
         args.append(f'Regul={regul}')
+
+    assert not all([mask_patt is not None, fn_mask is not None]), "only one of mask_patt or fn_mask should be set."
+
+    if mask_patt is not None:
+        args.append(f'MasqIm={mask_patt}')
+
+    if fn_mask is not None:
+        args.append(f'MasqImGlob={fn_mask}')
 
     p = subprocess.Popen(args, stdin=echo.stdout)
     p.wait()
