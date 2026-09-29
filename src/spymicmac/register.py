@@ -169,7 +169,7 @@ def _get_imlist(im_subset: Union[list, str, None], globstr: str = 'OIS*.tif') ->
     """
 
     # check if we're being given a normal glob wildcard, not a regexp
-    if re.search(r"\w+\*\.\w+", globstr) is not None:
+    if re.search(r"[^.]*\*\.\w+", globstr) is not None:
         globstr = globstr.replace('*.', '.*')
 
     filtered_glob = sorted(list(filter(re.compile(globstr).match, glob('*'))))
@@ -353,11 +353,12 @@ def _get_footprint_mask(shpfile: Union[gpd.GeoDataFrame, str], rast: gu.Raster,
         - **fprint** -- the footprint polygon, if requested.
     """
     imlist = [im.split('OIS-Reech_')[-1].split('.tif')[0] for im in filelist]
+
     if isinstance(shpfile, str):
         footprints_shp = gpd.read_file(shpfile)
-        fp = footprints_shp[footprints_shp.ID.isin(imlist)].copy()
+        fp = footprints_shp[footprints_shp.ID.str.contains('|'.join(imlist))].copy()
     else:
-        fp = shpfile[shpfile.ID.isin(imlist)].copy()
+        fp = shpfile[shpfile.ID.str.contains('|'.join(imlist))].copy()
 
     fprint = _get_footprint_overlap(fp.to_crs(rast.crs))
 
