@@ -623,15 +623,14 @@ def _prepare_hillshades(dem, tfm_img, **hillshade_kwargs):
     max_el = dem[np.isfinite(tfm_img)].max()
 
     stretched = image.stretch_image(tfm_img, (0.005, 0.995), 1, 0, np.float32)
+    stretched *= (max_el - min_el)
+    stretched += min_el
 
     dem_hs = xdem.DEM(dem).hillshade(**hillshade_kwargs)
-
-    if 'z_factor' in hillshade_kwargs.keys():
-        hillshade_kwargs.update({'z_factor': hillshade_kwargs['z_factor'] * (max_el - min_el)})
-    else:
-        hillshade_kwargs.update({'z_factor': 4 * (max_el - min_el)})
+    dem_hs[dem_hs == 0] = 1
 
     tfm_hs = xdem.DEM(dem_hs.copy(new_array=stretched)).hillshade(**hillshade_kwargs)
+    tfm_hs[tfm_hs == 0] = 1
 
     return dem_hs, tfm_hs
 
@@ -920,7 +919,7 @@ def register_relative(dirmec: str, fn_dem: Union[str, Path], fn_ref: Union[str, 
         dstwin = _search_size(rough_tfm.shape)
 
     gcps = matching.find_matches(rough_tfm, ref_img, mask_full.data.data, points=gcps, initM=model, strategy=strategy,
-                                 spacing=density, srcwin=100, dstwin=dstwin, use_highpass=use_highpass)
+                                 spacing=density, srcwin=50, dstwin=dstwin, use_highpass=use_highpass)
 
     x, y = ref_img.ij2xy(gcps['search_i'], gcps['search_j'])
     gcps = gpd.GeoDataFrame(gcps, geometry=gpd.points_from_xy(x, y, crs=ref_img.crs))

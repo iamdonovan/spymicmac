@@ -1554,11 +1554,11 @@ def do_match(dest_img: NDArray, ref_img: NDArray, mask: NDArray, pt: tuple[int, 
             test = testchip
             dest = dst_chip
 
-        testmask = binary_dilation(testchip == 0, footprint=disk(8))
-        destmask = binary_dilation(dst_chip == 0, footprint=disk(8))
+        testmask = binary_dilation(testchip == 0, footprint=disk(2))
+        destmask = binary_dilation(dst_chip == 0, footprint=disk(2))
 
-        test[testmask] = np.random.uniform(low=test.min(), high=test.max(), size=test.shape)[testmask]
-        dest[destmask] = np.random.uniform(low=dest.min(), high=dest.max(), size=dest.shape)[destmask]
+        test[testmask] = np.random.uniform(low=-1, high=1, size=test.shape)[testmask]
+        dest[destmask] = np.random.uniform(low=-1, high=1, size=dest.shape)[destmask]
 
         corr_res, this_i, this_j, radius = find_gcp_match(dest.astype(np.float32), test.astype(np.float32), peak_frac=peak_frac)
         peak_corr = cv2.minMaxLoc(corr_res)[1]
