@@ -14,6 +14,7 @@ from glob import glob
 import pyproj
 from osgeo import gdal
 from rasterio.crs import CRS
+from rasterio.coords import BoundingBox
 from shapely.geometry.polygon import Polygon
 from usgs import api, USGSAuthExpiredError
 import geoutils as gu
@@ -155,24 +156,27 @@ def _clean_imlist(imlist: list, globstr: str) -> list:
 
 
 def download_cop30_vrt(imlist: Union[list, None] = None,
-                       footprints: Union[str, Path, gpd.GeoDataFrame, Polygon, None] = None,
+                       footprints: Union[str, Path, gpd.GeoDataFrame, Polygon, list, BoundingBox, None] = None,
                        imgsource: str = 'DECLASSII',
                        globstr: str = 'OIS*.tif',
                        crs: Union[CRS, str, int, None] = None,
-                       to_ellipsoid: bool = True) -> None:
+                       to_ellipsoid: bool = True,
+                       return_urls: bool = False) -> Union[list, None]:
     """
     Create a VRT using Copernicus 30m DSM tiles that intersect image footprints. Creates Copernicus_DSM.vrt using files
     downloaded to cop30_dem/ within the current directory.
 
     :param imlist: a list of image filenames. If None, uses globstr to search for images in the current directory.
     :param footprints: a filename for a vector dataset of image footprints, a GeoDataFrame of image footprints,
-        or a Polygon of an image footprint in WGS84 lat/lon. If None, uses spymicmac.data.get_usgs_footprints to
-        download footprints based on imlist.
+        a Polygon in WGS84 lat/lon, a rasterio BoundingBox or a list of WGS84 lat/lon coordinates. If a list of
+        coordinates, should be provided as [lon_min, lat_min, lon_max, lat_max].
+        If None, uses spymicmac.data.get_usgs_footprints to download footprints based on imlist.
     :param imgsource: the EarthExplorer Dataset name for the images
     :param globstr: the search string to use to find images in the current directory.
     :param crs: a CRS representation recognized by geoutils.Raster.reproject to re-project the raster to. If
         None, CRS remains WGS84 Lat/Lon (EPSG:4326).
     :param to_ellipsoid: convert the elevations from height above EGM2008 Geoid to height above WGS84 Ellipsoid.
+    :param return_urls: return a list of URLs to download, rather than downloading.
     """
     fn_out = 'Copernicus_DSM.vrt'
 
@@ -187,9 +191,14 @@ def download_cop30_vrt(imlist: Union[list, None] = None,
         fprint = footprints
     elif isinstance(footprints, gpd.GeoDataFrame):
         fprint = footprints.to_crs(crs='epsg:4326').union_all()
+    else:
+        fprint = footprints
 
     # now, get the envelope
-    xmin, ymin, xmax, ymax = fprint.bounds
+    if hasattr(fprint, 'bounds'):
+        xmin, ymin, xmax, ymax = fprint.bounds
+    else:
+        xmin, ymin, xmax, ymax = fprint
 
     lat_min = int(np.floor(ymin))
     lat_max = int(np.ceil(ymax))
@@ -212,28 +221,36 @@ def download_cop30_vrt(imlist: Union[list, None] = None,
     # now, download the tiles using boto3
     os.makedirs('cop30_dem', exist_ok=True)
 
+    url_list = []
     for tile in tiles:
-        this_url = '/'.join(['https://copernicus-dem-30m.s3.amazonaws.com', tile, tile + '.tif'])
-        if not os.path.exists(Path('cop30_dem', tile + '.tif')):
-            try:
-                urllib.request.urlretrieve(this_url, Path('cop30_dem', tile + '.tif'))
-            except urllib.error.HTTPError:
-                print(f'No tile found for {tile}')
-        else:
-            print(f"{tile} already downloaded, skipping.")
+        url_list.append('/'.join(['https://copernicus-dem-30m.s3.amazonaws.com', tile, tile + '.tif']))
 
-    filelist = glob(str(Path('cop30_dem', '*DEM.tif')))
-    out_vrt = gdal.BuildVRT(fn_out, filelist, srcNodata=0)
-    out_vrt = None
+    if return_urls:
+        return url_list
+    else:
+        for this_url, tile in zip(url_list, tiles):
+            if not os.path.exists(Path('cop30_dem', tile + '.tif')):
+                try:
+                    urllib.request.urlretrieve(this_url, Path('cop30_dem', tile + '.tif'))
+                except urllib.error.HTTPError:
+                    print(f'No tile found for {tile}')
+            else:
+                print(f"{tile} already downloaded, skipping.")
 
-    if crs is not None:
-        tmp = gu.Raster(fn_out)
+        filelist = glob(str(Path('cop30_dem', '*DEM.tif')))
+        out_vrt = gdal.BuildVRT(fn_out, filelist, srcNodata=0)
+        out_vrt = None
 
-        fn_out = 'Copernicus_DSM.tif'
-        tmp.reproject(crs = crs).save(fn_out)
+        if crs is not None:
+            tmp = gu.Raster(fn_out)
 
-    if to_ellipsoid:
-        to_wgs84_ellipsoid(fn_out)
+            fn_out = 'Copernicus_DSM.tif'
+            tmp.reproject(crs = crs).save(fn_out)
+
+        if to_ellipsoid:
+            to_wgs84_ellipsoid(fn_out)
+
+        return None
 
 
 def _lon_prefix(lon: Union[float, int]) -> str:
