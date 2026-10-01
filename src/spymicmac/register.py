@@ -726,6 +726,8 @@ def register_relative(dirmec: str, fn_dem: Union[str, Path], fn_ref: Union[str, 
     ort_dir = 'Ortho-' + dirmec
 
     imlist, match_pattern = _get_imlist(im_subset, globstr)
+    if len(imlist) == 0:
+        raise ValueError(f"No images found in the current directory matching: {globstr}.")
 
     # if we're using the ortho image, load the reference ortho
     if useortho:
