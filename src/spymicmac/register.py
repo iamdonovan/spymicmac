@@ -978,7 +978,7 @@ def register_relative(dirmec: str, fn_dem: Union[str, Path], fn_ref: Union[str, 
 
     Mref, inliers, _ = _iter_ransac(gcps[['search_j', 'search_i']].values,
                                     gcps[['orig_j', 'orig_i']].values,
-                                    nmad(gcps['offset']), niter=10)
+                                    max(20, nmad(gcps['offset'])), niter=10)
 
     gcps['aff_resid'] = Mref.residuals(gcps[['search_j', 'search_i']].values,
                                        gcps[['orig_j', 'orig_i']].values)
