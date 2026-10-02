@@ -25,7 +25,10 @@ from . import image, micmac, resample, register
 from numpy.typing import NDArray
 from typing import Union
 
-mp.set_start_method('fork', force=True)
+if os.name == 'nt':
+    pass
+else:
+    mp.set_start_method('fork', force=True)
 
 ######################################################################################################################
 # tools for matching fiducial markers (or things like fiducial markers)
