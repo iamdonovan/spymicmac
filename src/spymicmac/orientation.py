@@ -946,7 +946,7 @@ def standard_distortion(params: dict, spacing: int) -> tuple[NDArray, NDArray, N
     return xdist, ydist, xx, yy
 
 
-def plot_lens_distortion(fn_cam: Union[str, Path],
+def plot_lens_distortion(fn_cam: Union[str, Path, dict],
                          spacing: int, scale: float = 1.0,
                          ax: Union[None, matplotlib.axes.Axes] = None,
                          normalize: bool = True,
@@ -999,3 +999,67 @@ def plot_lens_distortion(fn_cam: Union[str, Path],
     fig = plt.gcf()
 
     return fig, ax
+
+
+def lens_distortion_grid(fn_cam: Union[str, Path, dict],
+                         spacing: int = 10,
+                         pixel_pitch: Union[int, float] = 1,
+                         normalize: bool = True) -> NDArray:
+    """
+    Create a grid of lens distortion values for a camera model by applying the "standard distortion model" of the form:
+
+        Dx = Dr,x + (2(x - Cx)**2 + r**2) * P1 + (2(x - Cx)(y - Cy)) * P2 + (x - Cx) * b1 + (y - Cy) * b2
+        Dy = Dr,y + (2(x - Cx)(y - Cy)) * P1 + (2(y - Cy)**2 + r**2) * P2
+
+    Where Dr are the x,y components of radial distortion, x, y are the coordinates in the image space, and r is the
+    distance from the center of distortion. Dx, Dy are the un-distorted locations that would be produced by an ideal
+    (pinhole) camera.
+
+    The resulting grid, Drad, is calculated as:
+
+    Delta_r = sqrt((Dx - Cx)**2 + (Dy - Cy)**2) - Rad,
+
+    where Rad is the locations's distance from the center of distortion. If normalize=True, the output is divided by the
+    radius to get the % distortion.
+
+    :param fn_cam: the path to the camera model XML, or a dict-like object with items K1, K2, K3 (or higher) representing
+        the coefficients of radial distortion; 'cdist', a tuple representing the center of distortion, (Cx, Cy);
+        'pp', a tuple representing the principal point, (PPx, PPy); 'P1', 'P2', representing the decentric distortion
+        parameters; and 'b1', 'b2', representing the affine distortion parameters.
+    :param spacing: the pixel spacing (or distance) to use between grid points.
+    :param pixel_pitch: the pixel pitch to use to convert units (default is to use pixels)
+    :param normalize: calculate the normalized distortion (delta_r / radius) for each pixel, rather than the absolute
+        distortion.
+    :returns: a grid of distortion values
+    """
+
+    if isinstance(fn_cam, (str, Path)):
+        cam_params = micmac.load_cam_xml(fn_cam)
+    else:
+        cam_params = fn_cam
+
+    for pp in ['P1', 'P2', 'b1', 'b2']:
+        if pp not in cam_params.keys():
+            cam_params[pp] = 0.
+
+    xdist, ydist, xx, yy = standard_distortion(cam_params, spacing)
+
+    # now, scale everything by the pixel pitch
+    cx, cy = cam_params['cdist']
+
+    xdist *= pixel_pitch
+    ydist *= pixel_pitch
+    cx *= pixel_pitch
+    cy *= pixel_pitch
+    xx *= pixel_pitch
+    yy *= pixel_pitch
+
+    rdist = np.sqrt((xdist - cx)**2 + (ydist - cy)**2)
+    rr = np.sqrt((xx - cx)**2 + (yy - cy)**2)
+
+    delta_r = (rdist - rr)
+
+    if normalize:
+        delta_r /= rr
+
+    return delta_r
