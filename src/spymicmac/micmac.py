@@ -2137,7 +2137,7 @@ def iterate_campari(gcps: pd.DataFrame, out_dir: str, match_pattern: str, subscr
 
     gcps['camp_xy'] = np.sqrt(gcps.camp_xres ** 2 + gcps.camp_yres ** 2)
 
-    fact_list = [20, 12, 6, 4, 3, 2]
+    fact_list = [20, 12, 8, 6, 4, 3]
     if niter > len(fact_list):
         fact_list = [20] * (niter - len(fact_list)) + fact_list
 
